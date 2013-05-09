@@ -1370,6 +1370,7 @@ static int try_to_unmap_nonlinear(struct page *page,
 	unsigned long max_nl_cursor = 0;
 	unsigned long max_nl_size = 0;
 	unsigned int mapcount;
+	unsigned long address;
 
 	list_for_each_entry(vma,
 		&mapping->i_mmap_nonlinear, shared.nonlinear) {
@@ -1463,9 +1464,12 @@ static int page_not_mapped(struct page *page)
  * try_to_unmap - try to remove all page table mappings to a page
  * @page: the page to get unmapped
  * @flags: action and flags
+ * @vma : target vma for reclaim
  *
  * Tries to remove all the page table entries which are mapping this
  * page, used in the pageout path.  Caller must hold the page lock.
+ * If @vma is not NULL, this function try to remove @page from only @vma
+ * without peeking all mapped vma for @page.
  * Return values are:
  *
  * SWAP_SUCCESS	- we succeeded in removing all mappings
@@ -1473,7 +1477,8 @@ static int page_not_mapped(struct page *page)
  * SWAP_FAIL	- the page is unswappable
  * SWAP_MLOCK	- page is mlocked.
  */
-int try_to_unmap(struct page *page, enum ttu_flags flags)
+int try_to_unmap(struct page *page, enum ttu_flags flags,
+				struct vm_area_struct *vma)
 {
 	int ret;
 	struct rmap_walk_control rwc = {

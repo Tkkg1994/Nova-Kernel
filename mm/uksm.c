@@ -5635,7 +5635,7 @@ out_free2:
 }
 
 #ifdef MODULE
-subsys_initcall(ksm_init);
+module_init(uksm_init)
 #else
 late_initcall(uksm_init);
 #endif
