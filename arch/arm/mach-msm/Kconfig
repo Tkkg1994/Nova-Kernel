@@ -1807,4 +1807,10 @@ config SAMSUNG_PRODUCT_SHIP
         bool "set up for product shipping"
         default n
 
+config MMI_UNIT_INFO
+	depends on ARCH_MSM
+	default n
+	bool "Motorola Mobility Unit Info"
+	help
+	Provide mechanism to expose unit information to other cpu via smem.
 endif
