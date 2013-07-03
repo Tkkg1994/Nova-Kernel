@@ -819,8 +819,7 @@ void free_initrd_mem(unsigned long start, unsigned long end)
 
 	if (!keep_initrd) {
 		poison_init_mem((void *)start, PAGE_ALIGN(end) - start);
-		reclaimed_initrd_mem = free_reserved_area(start, end, 0,
-				"initrd");
+		reclaimed_initrd_mem = free_reserved_area((void *)start, (void *)end, 0, "initrd");
 		totalram_pages += reclaimed_initrd_mem;
 	}
 }
