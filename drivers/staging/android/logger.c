@@ -105,6 +105,8 @@ struct logger_reader {
 	int			r_ver;
 };
 
+static void update_log_from_bottom_locked(struct logger_log *log_dst);
+
 /* logger_offset - returns index 'n' into the log via (optimized) modulus */
 static size_t logger_offset(struct logger_log *log, size_t n)
 {
@@ -332,6 +334,8 @@ start:
 		return ret;
 
 	mutex_lock(&log->mutex);
+
+	update_log_from_bottom_locked(log);
 
 	if (!reader->r_all)
 		reader->r_off = get_next_entry_by_uid(log,
@@ -1130,14 +1134,23 @@ static __u32 get_entry_len(struct logger_log *log, size_t off)
 /*
  * update_log_from_bottom - copy bottom log buffer into a log buffer
  */
-static void update_log_from_bottom(struct logger_log *log_dst,
-					struct logger_log *log)
+static void update_log_from_bottom(struct logger_log *log_dst)
 {
+	mutex_lock(&log_dst->mutex);
+	update_log_from_bottom_locked(log_dst);
+	mutex_unlock(&log_dst->mutex);
+}
+
+static void update_log_from_bottom_locked(struct logger_log *log_dst)
+{
+	struct logger_log *log = log_dst->log_bottom;
 	struct logger_reader *reader;
 	size_t len, ret;
 	unsigned long flags;
 
-	mutex_lock(&log_dst->mutex);
+	if (!log)
+		return;
+
 	spin_lock_irqsave(&log_lock, flags);
 
 	list_for_each_entry(reader, &log->readers, list)
@@ -1166,7 +1179,6 @@ static void update_log_from_bottom(struct logger_log *log_dst,
 			reader->r_off = logger_offset(log, reader->r_off + ret);
 		}
 	spin_unlock_irqrestore(&log_lock, flags);
-	mutex_unlock(&log_dst->mutex);
 
 	/* wake up any blocked readers */
 	wake_up_interruptible(&log_dst->wq);
@@ -1177,7 +1189,7 @@ static void update_log_from_bottom(struct logger_log *log_dst,
  */
 static void write_console(struct work_struct *work)
 {
-	update_log_from_bottom(log_kernel, log_kernel_bottom);
+	update_log_from_bottom(log_kernel);
 }
 
 static void schedule_work_tasklet_func(unsigned long data)
