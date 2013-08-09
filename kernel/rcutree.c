@@ -1587,8 +1587,12 @@ static void rcu_gp_cleanup(struct rcu_state *rsp)
 	rdp = this_cpu_ptr(rsp->rda);
 	/* Advance CBs to reduce false positives below. */
 	needgp = rcu_advance_cbs(rsp, rnp, rdp) || needgp;
-	if (needgp || cpu_needs_another_gp(rsp, rdp))
-		ACCESS_ONCE(rsp->gp_flags) = RCU_GP_FLAG_INIT;
+	if (needgp || cpu_needs_another_gp(rsp, rdp)) {
+		ACCESS_ONCE(rsp->gp_flags) = 1;
+		trace_rcu_grace_period(rsp->name,
+				       ACCESS_ONCE(rsp->gpnum),
+				       TPS("newreq"));
+	}
 	raw_spin_unlock_irq(&rnp->lock);
 }
 
@@ -1709,6 +1713,9 @@ rcu_start_gp_advanced(struct rcu_state *rsp, struct rcu_node *rnp,
 		return false;
 	}
 	ACCESS_ONCE(rsp->gp_flags) = RCU_GP_FLAG_INIT;
+	trace_rcu_grace_period(rsp->name, ACCESS_ONCE(rsp->gpnum),
+			       TPS("newreq"));
+
 	/*
 	 * We can't do wakeups while holding the rnp->lock, as that
 	 * could cause possible deadlocks with the rq->lock. Defer
