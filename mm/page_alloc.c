@@ -837,7 +837,7 @@ bool is_cma_pageblock(struct page *page)
 	return get_pageblock_migratetype(page) == MIGRATE_CMA;
 }
 
-/* Free whole pageblock and set it's migration type to MIGRATE_CMA. */
+/* Free whole pageblock and set its migration type to MIGRATE_CMA. */
 void __init init_cma_reserved_pageblock(struct page *page)
 {
 	unsigned i = pageblock_nr_pages;
