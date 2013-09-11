@@ -1434,7 +1434,7 @@ void mark_free_pages(struct zone *zone)
 	unsigned int order, t;
 	struct list_head *curr;
 
-	if (!zone->spanned_pages)
+	if (zone_is_empty(zone))
 		return;
 
 	spin_lock_irqsave(&zone->lock, flags);
