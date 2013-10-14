@@ -331,6 +331,13 @@ static inline void set_pte_ext(pte_t *ptep,pte_t pte,unsigned int ext)
 
 #endif
 
+/*
+ * We don't have huge page support for short descriptors, for the moment
+ * define empty stubs for use by pin_page_for_write.
+ */
+#define pmd_hugewillfault(pmd)	(0)
+#define pmd_thp_or_huge(pmd)	(0)
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_PGTABLE_2LEVEL_H */
