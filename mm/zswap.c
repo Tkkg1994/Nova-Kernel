@@ -166,7 +166,6 @@ static void __init zswap_comp_exit(void)
 /*********************************
 * data structures
 **********************************/
-
 /*
  * struct zswap_entry
  *
@@ -959,4 +958,3 @@ late_initcall(init_zswap);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Seth Jennings <sjennings@variantweb.net>");
 MODULE_DESCRIPTION("Compressed cache for swap pages");
-
