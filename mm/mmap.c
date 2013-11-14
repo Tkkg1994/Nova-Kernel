@@ -2815,7 +2815,8 @@ void exit_mmap(struct mm_struct *mm)
 	vmacache_invalidate(mm);
 	up_write(&mm->mmap_sem);
 
-	WARN_ON(mm->nr_ptes > (FIRST_USER_ADDRESS+PMD_SIZE-1)>>PMD_SHIFT);
+	WARN_ON(atomic_long_read(&mm->nr_ptes) >
+			(FIRST_USER_ADDRESS+PMD_SIZE-1)>>PMD_SHIFT);
 }
 
 /* Insert vm structure into process list sorted by address
