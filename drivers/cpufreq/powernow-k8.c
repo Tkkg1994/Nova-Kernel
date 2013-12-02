@@ -964,14 +964,13 @@ static int transition_frequency_fidvid(struct powernow_k8_data *data,
 	cpufreq_cpu_put(policy);
 
 	cpufreq_notify_transition(policy, &freqs, CPUFREQ_PRECHANGE);
-
 	res = transition_fid_vid(data, fid, vid);
 	if (res)
 		return res;
 
 	freqs.new = find_khz_freq_from_fid(data->currfid);
+	cpufreq_notify_post_transition(policy, &freqs, res);
 
-	cpufreq_notify_transition(policy, &freqs, CPUFREQ_POSTCHANGE);
 	return res;
 }
 
