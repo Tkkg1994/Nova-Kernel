@@ -511,9 +511,10 @@ static struct freq_attr *s3c2416_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver s3c2416_cpufreq_driver = {
+	.flags		= CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.flags          = 0,
 	.verify		= s3c2416_cpufreq_verify_speed,
-	.target		= s3c2416_cpufreq_set_target,
+	.target		= s3c2416_cpufreq_set_target,<<<
 	.get		= s3c2416_cpufreq_get_speed,
 	.init		= s3c2416_cpufreq_driver_init,
 	.name		= "s3c2416",

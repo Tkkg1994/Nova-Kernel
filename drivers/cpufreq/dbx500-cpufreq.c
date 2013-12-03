@@ -114,7 +114,8 @@ static int dbx500_cpufreq_init(struct cpufreq_policy *policy)
 }
 
 static struct cpufreq_driver dbx500_cpufreq_driver = {
-	.flags  = CPUFREQ_STICKY | CPUFREQ_CONST_LOOPS,
+	.flags  = CPUFREQ_STICKY | CPUFREQ_CONST_LOOPS |
+			CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify = dbx500_cpufreq_verify_speed,
 	.target = dbx500_cpufreq_target,
 	.get    = dbx500_cpufreq_getspeed,

@@ -234,7 +234,7 @@ static struct freq_attr *omap_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver omap_driver = {
-	.flags		= CPUFREQ_STICKY,
+	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify		= omap_verify_speed,
 	.target		= omap_target,
 	.get		= omap_getspeed,

@@ -198,6 +198,7 @@ static struct freq_attr *imx6q_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver imx6q_cpufreq_driver = {
+	.flags = CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify = imx6q_verify_speed,
 	.target = imx6q_set_target,
 	.get = imx6q_get_speed,

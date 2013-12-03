@@ -265,9 +265,15 @@ static struct freq_attr *exynos_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver exynos_driver = {
+<<<<<<< HEAD
 	.flags		= CPUFREQ_STICKY,
 	.verify		= exynos_verify_speed,
 	.target		= exynos_target,
+=======
+	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK,
+	.verify		= cpufreq_generic_frequency_table_verify,
+	.target_index	= exynos_target,
+>>>>>>> ae6b427... cpufreq: Mark ARM drivers with CPUFREQ_NEED_INITIAL_FREQ_CHECK flag
 	.get		= exynos_getspeed,
 	.init		= exynos_cpufreq_cpu_init,
 	.exit		= exynos_cpufreq_cpu_exit,
