@@ -339,7 +339,8 @@ static int exynos_cpufreq_cpu_init(struct cpufreq_policy *policy)
 }
 
 static struct cpufreq_driver exynos_driver = {
-	.flags		= CPUFREQ_STICKY | CPUFREQ_ASYNC_NOTIFICATION,
+	.flags		= CPUFREQ_STICKY | CPUFREQ_ASYNC_NOTIFICATION |
+				CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify		= exynos_verify_speed,
 	.target		= exynos_target,
 	.get		= exynos_getspeed,

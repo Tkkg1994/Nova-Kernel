@@ -156,7 +156,7 @@ static struct freq_attr *davinci_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver davinci_driver = {
-	.flags		= CPUFREQ_STICKY,
+	.flags		= CPUFREQ_STICKY | CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify		= davinci_verify_speed,
 	.target_index	= davinci_target,
 	.get		= davinci_getspeed,

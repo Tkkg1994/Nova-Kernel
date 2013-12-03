@@ -245,6 +245,7 @@ static struct freq_attr *tegra_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver tegra_cpufreq_driver = {
+	.flags		= CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify		= tegra_verify_speed,
 	.target		= tegra_target,
 	.get		= tegra_getspeed,
