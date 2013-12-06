@@ -768,6 +768,7 @@ void kset_unregister(struct kset *k)
 {
 	if (!k)
 		return;
+	kobject_del(&k->kobj);
 	kobject_put(&k->kobj);
 }
 
