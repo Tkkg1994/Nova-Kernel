@@ -2508,7 +2508,7 @@ static int ext4_remove_blocks(handle_t *handle, struct inode *inode,
 		 * extent, we have to mark the cluster as used (store negative
 		 * cluster number in partial_cluster).
 		 */
-		unaligned = pblk & (sbi->s_cluster_ratio - 1);
+		unaligned = EXT4_PBLK_COFF(sbi, pblk);
 		if (unaligned && (ee_len == num) &&
 		    (*partial_cluster != -((long long)EXT4_B2C(sbi, pblk))))
 			*partial_cluster = EXT4_B2C(sbi, pblk);
@@ -2623,7 +2623,7 @@ ext4_ext_rm_leaf(handle_t *handle, struct inode *inode,
 			 * accidentally freeing it later on
 			 */
 			pblk = ext4_ext_pblock(ex);
-			if (pblk & (sbi->s_cluster_ratio - 1))
+			if (EXT4_PBLK_COFF(sbi, pblk))
 				*partial_cluster =
 					-((long long)EXT4_B2C(sbi, pblk));
 			ex--;
