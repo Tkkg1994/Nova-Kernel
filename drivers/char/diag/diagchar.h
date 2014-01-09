@@ -22,7 +22,7 @@
 #include <linux/workqueue.h>
 #include <linux/sched.h>
 #include <linux/wakelock.h>
-#include <mach/msm_smd.h>
+#include <soc/qcom/smd.h>
 #include <asm/atomic.h>
 #include <linux/ipc_logging.h>
 
