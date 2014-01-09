@@ -40,8 +40,6 @@
 #include <asm/setup.h>
 #include <asm-generic/io-64-nonatomic-lo-hi.h>
 
-#include <mach/msm_iomap.h>
-
 #include "peripheral-loader.h"
 
 #ifdef CONFIG_SEC_PERIPHERAL_SECURE_CHK
