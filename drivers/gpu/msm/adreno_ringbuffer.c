@@ -1119,7 +1119,7 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 	struct kgsl_memobj_node *ib;
 	int ret;
 
-	if (drawctxt->state == ADRENO_CONTEXT_STATE_INVALID)
+	if (kgsl_context_invalid(context))
 		return -EDEADLK;
 
 	/* Verify the IBs before they get queued */
@@ -1145,7 +1145,7 @@ adreno_ringbuffer_issueibcmds(struct kgsl_device_private *dev_priv,
 	 * Return -EPROTO if the device has faulted since the last time we
 	 * checked - userspace uses this to perform post-fault activities
 	 */
-	if (!ret && test_and_clear_bit(ADRENO_CONTEXT_FAULT, &drawctxt->priv))
+	if (!ret && test_and_clear_bit(ADRENO_CONTEXT_FAULT, &context->priv))
 		ret = -EPROTO;
 
 	return ret;
@@ -1257,7 +1257,7 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 	 *    fault_policy
 	 * c) force preamble for commandbatch
 	 */
-	if (test_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->priv) &&
+	if (test_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv) &&
 		(!test_bit(CMDBATCH_FLAG_SKIP, &cmdbatch->priv))) {
 
 		set_bit(KGSL_FT_SKIPCMD, &cmdbatch->fault_recovery);
@@ -1268,7 +1268,7 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 		adreno_fault_skipcmd_detached(device, drawctxt, cmdbatch);
 
 		/* clear the drawctxt flags */
-		clear_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->priv);
+		clear_bit(ADRENO_CONTEXT_SKIP_CMD, &drawctxt->base.priv);
 		drawctxt->fault_policy = 0;
 	}
 
