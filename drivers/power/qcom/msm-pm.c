@@ -254,7 +254,7 @@ static bool msm_pm_pc_hotplug(void)
 	return 0;
 }
 
-static int msm_pm_collapse(unsigned long unused)
+int msm_pm_collapse(unsigned long unused)
 {
 	uint32_t cpu = smp_processor_id();
 	enum msm_pm_l2_scm_flag flag = MSM_SCM_L2_ON;
@@ -300,6 +300,7 @@ static int msm_pm_collapse(unsigned long unused)
 
 	return 0;
 }
+EXPORT_SYMBOL(msm_pm_collapse);
 
 static bool __ref msm_pm_spm_power_collapse(
 	unsigned int cpu, bool from_idle, bool notify_rpm)
@@ -334,8 +335,13 @@ static bool __ref msm_pm_spm_power_collapse(
 	secdbg_sched_msg("+pc(I:%d,R:%d)", from_idle, notify_rpm);
 #endif
 
+#ifdef CONFIG_CPU_V7
 	collapsed = save_cpu_regs ?
 		!cpu_suspend(0, msm_pm_collapse) : msm_pm_pc_hotplug();
+#else
+	collapsed = save_cpu_regs ?
+		!cpu_suspend(0) : msm_pm_pc_hotplug();
+#endif
 
 #ifdef CONFIG_SEC_DEBUG
 	secdbg_sched_msg("-pc(%d)", collapsed);
