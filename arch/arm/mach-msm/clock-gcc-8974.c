@@ -1222,6 +1222,7 @@ static struct rcg_clk tsif_ref_clk_src = {
 };
 
 static struct clk_freq_tbl ftbl_gcc_usb30_mock_utmi_clk[] = {
+	F(48000000,  gpll0, 12.5,   0,   0),
 	F(60000000,  gpll0,   10,   0,   0),
 	F_END
 };
@@ -2503,6 +2504,7 @@ static struct clk_lookup msm_clocks_gcc_8974[] = {
 	CLK_LOOKUP_OF("core_clk", gcc_usb30_master_clk,    "f92f8800.hsphy"),
 	CLK_LOOKUP_OF("core_clk", gcc_usb30_master_clk,    "f92f8800.ssphy"),
 	CLK_LOOKUP_OF("core_clk", gcc_usb30_master_clk,    "msm_dwc3"),
+	CLK_LOOKUP_OF("utmi_clk_src", usb30_mock_utmi_clk_src, "msm_dwc3"),
 	CLK_LOOKUP_OF("utmi_clk", gcc_usb30_mock_utmi_clk, "msm_dwc3"),
 	CLK_LOOKUP_OF("iface_clk", gcc_sys_noc_usb3_axi_clk, "msm_dwc3"),
 	CLK_LOOKUP_OF("iface_clk", gcc_sys_noc_usb3_axi_clk, "msm_usb3"),
@@ -2652,6 +2654,7 @@ static int msm_gcc_8974_probe(struct platform_device *pdev)
 				GCC_REG_BASE(APCS_CLOCK_BRANCH_ENA_VOTE));
 		writel_relaxed(regval | BIT(26) | BIT(25),
 				GCC_REG_BASE(APCS_CLOCK_BRANCH_ENA_VOTE));
+		gcc_usb30_mock_utmi_clk.max_div = 3;
 		msm8974_v2_clock_override();
 	}
 
