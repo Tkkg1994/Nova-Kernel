@@ -22,10 +22,12 @@
 #include <linux/sysrq.h>
 #include <linux/init.h>
 #include <linux/nmi.h>
-#include <linux/coresight.h>
 #ifdef CONFIG_SEC_DEBUG
 #include <mach/sec_debug.h>
 #endif
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/exception.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -87,7 +89,7 @@ void panic(const char *fmt, ...)
 	emerg_pet_watchdog(); /*To prevent watchdog reset during panic handling. */
 #endif
 
-	coresight_abort();
+	trace_kernel_panic(0);
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
 	 * from deadlocking the first cpu that invokes the panic, since
