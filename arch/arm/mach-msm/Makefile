@@ -31,8 +31,6 @@ ifdef CONFIG_BCM4358
 obj-$(CONFIG_ARCH_APQ8084) += board-8084-wifi.o
 endif
 
-obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
-
 obj-$(CONFIG_MSM_DMA_TEST) += dma_test.o
 obj-$(CONFIG_SURF_FFA_GPIO_KEYPAD) += keypad-surf-ffa.o
 
