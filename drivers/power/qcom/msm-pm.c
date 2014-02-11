@@ -40,9 +40,9 @@
 #endif
 #include <linux/msm-bus.h>
 #include <soc/qcom/jtag.h>
-#include "../../../arch/arm/mach-msm/idle.h"
+#include "idle.h"
+#include "pm-boot.h"
 #include "../../../arch/arm/mach-msm/clock.h"
-#include "../../../arch/arm/mach-msm/pm-boot.h"
 #ifdef CONFIG_SEC_DEBUG
 #include <mach/sec_debug.h>
 #endif
