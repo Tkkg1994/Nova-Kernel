@@ -3301,7 +3301,9 @@ void __init apq8084_init_gpiomux(void)
 
 	msm_gpiomux_install(msm_pcie_configs, ARRAY_SIZE(msm_pcie_configs));
 #if !defined(CONFIG_SND_SOC_MAX98504) && !defined(CONFIG_SND_SOC_MAX98504A)
-	msm_gpiomux_install(msm_epm_configs, ARRAY_SIZE(msm_epm_configs));
+		if (of_board_is_liquid())
+		msm_gpiomux_install(msm_epm_configs,
+						ARRAY_SIZE(msm_epm_configs));
 #endif
 #if defined(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI_G)
 	msm_gpiomux_install(apq8084_tsp_configs,
