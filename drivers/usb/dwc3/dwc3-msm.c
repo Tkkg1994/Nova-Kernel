@@ -51,7 +51,7 @@
 #include <soc/qcom/scm.h>
 
 #include <mach/rpm-regulator.h>
-#include <mach/msm_bus.h>
+#include <linux/msm-bus.h>
 
 #include "dwc3_otg.h"
 #include "core.h"
