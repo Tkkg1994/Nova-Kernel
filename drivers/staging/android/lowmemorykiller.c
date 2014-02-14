@@ -451,10 +451,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			dump_tasks(NULL, NULL);
 			show_mem_call_notifiers();
 		}
-
 		lowmem_deathpending_timeout = jiffies + HZ;
-		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
+		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 		rcu_read_unlock();
 #ifdef LMK_COUNT_READ
