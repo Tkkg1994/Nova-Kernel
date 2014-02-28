@@ -151,6 +151,7 @@ struct mdss_panel_recovery {
  * @MDSS_EVENT_DSI_CMDLIST_KOFF: acquire dsi_mdp_busy lock before kickoff.
  * @MDSS_EVENT_ENABLE_PARTIAL_ROI: Event to update ROI of the panel.
  * @MDSS_EVENT_DSI_STREAM_SIZE: Event to update DSI controller's stream size
+ * @MDSS_EVENT_ENABLE_TE: Change TE state, used for factory testing only
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -172,6 +173,7 @@ enum mdss_intf_events {
 	MDSS_EVENT_MDNIE_DEFAULT_UPDATE,
 	MDSS_EVENT_ENABLE_PARTIAL_ROI,
 	MDSS_EVENT_DSI_STREAM_SIZE,
+	MDSS_EVENT_ENABLE_TE,
 #if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OCTA_CMD_FHD_FA2_PT_PANEL)
 	MDSS_EVENT_TE_UPDATE,
 	MDSS_EVENT_TE_UPDATE2,
