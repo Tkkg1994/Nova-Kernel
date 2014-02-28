@@ -34,7 +34,7 @@ struct secure_meta {
 };
 
 struct cp2_mem_chunks {
-	unsigned int *chunk_list;
+	unsigned int chunk_list;
 	unsigned int chunk_list_size;
 	unsigned int chunk_size;
 } __attribute__ ((__packed__));
@@ -113,7 +113,7 @@ static int secure_buffer_change_chunk(unsigned long chunks,
 	request.lock = lock;
 	request.flag = 0;
 
-	request.chunks.chunk_list = (unsigned int *)chunks;
+	request.chunks.chunk_list = (unsigned int)chunks;
 	request.chunks.chunk_list_size = nchunks;
 	request.chunks.chunk_size = chunk_size;
 
