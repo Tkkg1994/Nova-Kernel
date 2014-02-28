@@ -113,4 +113,10 @@ config OF_SUBCMDLINE_PARSE
 	  openFirmware subcmdline parsing, it is add to meet
 	  many cutomized bootargs.
 
+config OF_RESERVED_MEM
+	depends on OF_EARLY_FLATTREE
+	bool
+	help
+	  Helpers to allow for reservation of memory regions
+
 endmenu # OF
