@@ -1781,7 +1781,6 @@ static void msm_spi_process_message(struct msm_spi *dd)
 	return;
 error:
 	msm_spi_free_cs_gpio(dd);
-	return;
 }
 
 /**
