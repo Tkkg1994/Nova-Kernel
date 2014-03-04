@@ -856,6 +856,7 @@ err_usb_add_function:
 	while (i-- > 0)
 		usb_remove_function(c, config->f_acm[i]);
 
+	config->instances_on = 0;
 	return err;
 
 err_usb_get_function_instance:
@@ -866,6 +867,7 @@ err_usb_get_function:
 	}
 
 out:
+	config->instances_on = 0;
 	return err;
 }
 
@@ -873,11 +875,8 @@ out:
 static void acm_function_unbind_config(struct android_usb_function *f,
 				       struct usb_configuration *c)
 {
-	int i;
 	struct acm_function_config *config = f->config;
-
-	for (i = 0; i < config->instances_on; i++)
-		usb_remove_function(c, config->f_acm[i]);
+	config->instances_on = 0;
 }
 #endif
 
