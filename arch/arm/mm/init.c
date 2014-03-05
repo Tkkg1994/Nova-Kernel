@@ -24,6 +24,7 @@
 #include <linux/dma-contiguous.h>
 #include <linux/sizes.h>
 #include <linux/sort.h>
+#include <linux/bitops.h>
 
 #include <asm/mach-types.h>
 #include <asm/memblock.h>
@@ -573,8 +574,20 @@ static void __init free_unused_memmap(void)
 #ifdef CONFIG_HIGHMEM
 static inline void free_area_high(unsigned long pfn, unsigned long end)
 {
-	for (; pfn < end; pfn++)
-		free_highmem_page(pfn_to_page(pfn));
+	while (pfn < end) {
+		struct page *page = pfn_to_page(pfn);
+		unsigned long order = min(__ffs(pfn), MAX_ORDER - 1);
+		unsigned long nr_pages = 1 << order;
+		unsigned long rem = end - pfn;
+
+		if (nr_pages > rem) {
+			order = __fls(rem);
+			nr_pages = 1 << order;
+		}
+
+		__free_pages_bootmem(page, order);
+		pfn += nr_pages;
+	}
 }
 #endif
 
