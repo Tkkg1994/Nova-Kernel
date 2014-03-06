@@ -964,9 +964,9 @@ static void print_other_cpu_stall(struct rcu_state *rsp, unsigned long gpnum)
 	print_cpu_stall_info_end();
 	for_each_possible_cpu(cpu)
 		totqlen += per_cpu_ptr(rsp->rda, cpu)->qlen;
-	pr_cont("(detected by %d, t=%ld jiffies, g=%lu, c=%lu, q=%lu)\n",
+	pr_cont("(detected by %d, t=%ld jiffies, g=%ld, c=%ld, q=%lu)\n",
 	       smp_processor_id(), (long)(jiffies - rsp->gp_start),
-	       rsp->gpnum, rsp->completed, totqlen);
+	       (long)rsp->gpnum, (long)rsp->completed, totqlen);
 	if (ndetected) {
 		rcu_dump_cpu_stacks(rsp);
 	} else {
@@ -1010,11 +1010,17 @@ static void print_cpu_stall(struct rcu_state *rsp)
 	print_cpu_stall_info_end();
 	for_each_possible_cpu(cpu)
 		totqlen += per_cpu_ptr(rsp->rda, cpu)->qlen;
+<<<<<<< HEAD
 	pr_cont(" (t=%lu jiffies g=%lu c=%lu q=%lu)\n",
 		jiffies - rsp->gp_start, rsp->gpnum, rsp->completed, totqlen);
 
 	rcu_check_gp_kthread_starvation(rsp);
 
+=======
+	pr_cont(" (t=%lu jiffies g=%ld c=%ld q=%lu)\n",
+		jiffies - rsp->gp_start,
+		(long)rsp->gpnum, (long)rsp->completed, totqlen);
+>>>>>>> 83ebe63... rcu: Print negatives for stall-warning counter wraparound
 	if (!trigger_all_cpu_backtrace())
 		dump_stack();
 
