@@ -37,7 +37,6 @@ obj-$(CONFIG_MSM_WATCHDOG_CTX_PRINT) += watchdog_cpu_ctx.o
 obj-$(CONFIG_MEM_SHARE_QMI_SERVICE)		+= memshare/
 obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
 obj-y		+= socinfo.o
-obj-$(CONFIG_QCOM_EARLY_RANDOM)	+= early_random.o
 
 obj-$(CONFIG_MSM_PIL) += peripheral-loader.o
 obj-$(CONFIG_MSM_PIL_SSR_GENERIC) += subsys-pil-tz.o
@@ -56,6 +55,7 @@ endif
 obj-$(CONFIG_MSM_SYSMON_COMM) += sysmon.o
 
 obj-$(CONFIG_QCOM_EARLY_RANDOM)	+= early_random.o
+obj-$(CONFIG_BOOTINFO)		+= bootinfo.o
 obj-$(CONFIG_MMI_SOC_INFO) += mmi_soc_info.o
 obj-$(CONFIG_MMI_RAM_INFO) += mmi-ram-info.o
 obj-$(CONFIG_MMI_UNIT_INFO) += mmi-unit-info.o

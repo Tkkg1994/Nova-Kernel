@@ -18,8 +18,7 @@
 #define MAX_NUM_CLUSTER	4
 
 #ifndef __ASSEMBLY__
-
-#ifdef CONFIG_CPU_V7
+#if defined(CONFIG_CPU_V7) || defined(CONFIG_ARM64)
 extern unsigned long msm_pm_boot_vector[MAX_NUM_CLUSTER * MAX_CPUS_PER_CLUSTER];
 void msm_pm_boot_entry(void);
 #else
@@ -27,6 +26,7 @@ static inline void msm_pm_boot_entry(void)
 {
 	/* empty */
 }
+#endif
 #endif
 #endif
 #endif
