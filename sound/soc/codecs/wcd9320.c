@@ -34,6 +34,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/kernel.h>
 #include <linux/gpio.h>
+#include <linux/pm_qos.h>
+#include <soc/qcom/pm.h>
 #include "wcd9320.h"
 #include "wcd9xxx-resmgr.h"
 #include "wcd9xxx-common.h"
@@ -472,6 +474,7 @@ struct taiko_priv {
 	 * end of impedance measurement
 	 */
 	struct list_head reg_save_restore;
+	struct pm_qos_request pm_qos_req;
 };
 
 static const u32 comp_shift[] = {
@@ -2767,7 +2770,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	size_t cal_size;
 
 	pr_debug("%s: enter\n", __func__);
-
+	/* wakeup for codec calibration access */
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      msm_cpuidle_get_deep_idle_latency());
 	if (!taiko->fw_data) {
 		dev_err(codec->dev, "%s: invalid cal data\n",
 				__func__);
@@ -2858,8 +2863,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	snd_soc_write(codec, TAIKO_A_CDC_MAD_ULTR_CTL_6,
 		      mad_cal->ultrasound_info.rms_threshold_msb);
 
-
 	pr_debug("%s: leave ret %d\n", __func__, ret);
+	pm_qos_update_request(&taiko->pm_qos_req,
+			      PM_QOS_DEFAULT_VALUE);
 err:
 	if (!hwdep_cal)
 		release_firmware(fw);
