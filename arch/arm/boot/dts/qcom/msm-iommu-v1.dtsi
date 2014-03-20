@@ -1075,7 +1075,7 @@
 			compatible = "qcom,msm-smmu-v1-ctx";
 			reg = <0xfe06c000 0x1000>;
 			interrupts = <0 267 0>, <0 180 0>;
-			qcom,iommu-ctx-sids = <0>;
+			qcom,iommu-ctx-sids = <11>;
 			label = "lpass_core_image";
 			qcom,secure-context;
 		};
@@ -1084,7 +1084,7 @@
 			compatible = "qcom,msm-smmu-v1-ctx";
 			reg = <0xfe06d000 0x1000>;
 			interrupts = <0 267 0>;
-			qcom,iommu-ctx-sids = <1>;
+			qcom,iommu-ctx-sids = <12>;
 			label = "lpass_core_audio";
 		};
 
@@ -1092,7 +1092,7 @@
 			compatible = "qcom,msm-smmu-v1-ctx";
 			reg = <0xfe06e000 0x1000>;
 			interrupts = <0 267 0>;
-			qcom,iommu-ctx-sids = <2>;
+			qcom,iommu-ctx-sids = <13>;
 			label = "lpass_core_slimbus";
 		};
 	};
