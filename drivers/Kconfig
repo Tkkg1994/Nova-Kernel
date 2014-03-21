@@ -197,4 +197,7 @@ source "drivers/sensorhub/Kconfig"
 source "drivers/secfilter/Kconfig"
 
 source "drivers/irled/Kconfig"
+
+source "drivers/firmware/Kconfig"
+
 endmenu

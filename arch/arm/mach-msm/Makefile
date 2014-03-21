@@ -59,7 +59,6 @@ obj-$(CONFIG_ARCH_MDM9630) += clock-9630.o
 CFLAGS_msm_vibrator.o += -Idrivers/staging/android
 
 obj-$(CONFIG_MSM_LPM_TEST) += test-lpm.o
-obj-$(CONFIG_MSM_TZ_LOG) += tz_log.o
 
 obj-$(CONFIG_MSM_EVENT_TIMER)		+= event_timer.o
 
