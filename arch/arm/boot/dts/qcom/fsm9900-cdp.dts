@@ -15,7 +15,7 @@
 #include "fsm9900.dtsi"
 
 / {
-	model = "Qualcomm FSM9900 CDP";
+	model = "Qualcomm Technologies, Inc. FSM9900 CDP";
 	compatible = "qcom,fsm9900-cdp", "qcom,fsm9900", "qcom,cdp";
 	qcom,msm-id = <188 1 0>,
 		      <189 1 0>,
