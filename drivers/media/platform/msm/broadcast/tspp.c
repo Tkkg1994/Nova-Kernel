@@ -464,7 +464,6 @@ struct tspp_device {
 	struct dentry *debugfs_regs[ARRAY_SIZE(debugfs_tspp_regs)];
 };
 
-
 static int tspp_key_entry;
 static u32 channel_id;  /* next channel id number to assign */
 
