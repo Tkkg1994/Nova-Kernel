@@ -2458,6 +2458,14 @@ static int mass_storage_function_init(struct android_usb_function *f,
 	config->fsg.luns[0].removable = 1;
 #endif
 
+	if (dev->pdata && dev->pdata->cdrom) {
+		config->fsg.luns[config->fsg.nluns].cdrom = 1;
+		config->fsg.luns[config->fsg.nluns].ro = 1;
+		config->fsg.luns[config->fsg.nluns].removable = 0;
+		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "rom");
+		config->fsg.nluns++;
+	}
+
 	if (uicc_nluns > FSG_MAX_LUNS - config->fsg.nluns) {
 		uicc_nluns = FSG_MAX_LUNS - config->fsg.nluns;
 		pr_debug("limiting uicc luns to %d\n", uicc_nluns);
@@ -4311,6 +4319,8 @@ static int android_probe(struct platform_device *pdev)
 
 		pdata->streaming_func_count = len;
 
+		pdata->cdrom = of_property_read_bool(pdev->dev.of_node,
+			"qcom,android-usb-cdrom");
 		ret = of_property_read_u8(pdev->dev.of_node,
 				"qcom,android-usb-uicc-nluns",
 				&pdata->uicc_nluns);
