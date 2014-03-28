@@ -1064,7 +1064,7 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		mdss_mdp_cmd_stop_sub(ctl, panel_power_state);
 		if (sctl)
 			mdss_mdp_cmd_stop_sub(sctl, panel_power_state);
-
+		mutex_lock(&ctl->offlock);
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK,
 				(void *) (long int) panel_power_state);
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
@@ -1072,6 +1072,7 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_OFF,
 				(void *) (long int) panel_power_state);
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
+		mutex_unlock(&ctl->offlock);
 	}
 
 	if (mdss_panel_is_power_on(panel_power_state)) {

@@ -314,11 +314,13 @@ static int mdss_mdp_video_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		return -ENODEV;
 	}
 	MDSS_XLOG(ctl->num, ctl->vsync_cnt);
+	mutex_lock(&ctl->offlock);
 	if (ctx->timegen_en) {
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK, NULL);
 		if (rc == -EBUSY) {
 			pr_debug("intf #%d busy don't turn off\n",
 				 ctl->intf_num);
+			mutex_unlock(&ctl->offlock);
 			return rc;
 		}
 		WARN(rc, "intf %d blank error (%d)\n", ctl->intf_num, rc);
@@ -360,6 +362,7 @@ static int mdss_mdp_video_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 				   NULL, NULL);
 
 	mdss_mdp_ctl_reset(ctl);
+	mutex_unlock(&ctl->offlock);
 	ctx->ref_cnt--;
 	ctl->priv_data = NULL;
 
