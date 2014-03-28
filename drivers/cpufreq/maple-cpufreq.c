@@ -59,9 +59,9 @@
 #define CPUFREQ_LOW                   1
 
 static struct cpufreq_frequency_table maple_cpu_freqs[] = {
-	{CPUFREQ_HIGH,		0},
-	{CPUFREQ_LOW,		0},
-	{0,			CPUFREQ_TABLE_END},
+	{0, CPUFREQ_HIGH,		0},
+	{0, CPUFREQ_LOW,		0},
+	{0, 0,				CPUFREQ_TABLE_END},
 };
 
 static struct freq_attr *maple_cpu_freqs_attr[] = {
