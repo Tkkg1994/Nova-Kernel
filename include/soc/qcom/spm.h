@@ -104,20 +104,19 @@ void msm_spm_dump_regs(unsigned int cpu);
 #if defined(CONFIG_MSM_L2_SPM)
 
 /* Public functions */
-
-int msm_spm_apcs_set_phase(unsigned int phase_cnt);
-int msm_spm_enable_fts_lpm(uint32_t mode);
+int msm_spm_apcs_set_phase(int cpu, unsigned int phase_cnt);
+int msm_spm_enable_fts_lpm(int cpu, uint32_t mode);
 
 /* Internal low power management specific functions */
 
 #else
 
-static inline int msm_spm_apcs_set_phase(unsigned int phase_cnt)
+static inline int msm_spm_apcs_set_phase(int cpu, unsigned int phase_cnt)
 {
 	return -ENOSYS;
 }
 
-static inline int msm_spm_enable_fts_lpm(uint32_t mode)
+static inline int msm_spm_enable_fts_lpm(int cpu, uint32_t mode)
 {
 	return -ENOSYS;
 }
