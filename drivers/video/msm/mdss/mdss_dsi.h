@@ -276,10 +276,10 @@ struct mdss_dsi_ctrl_pdata {
 	int (*panel_extra_power) (struct mdss_panel_data *pdata, int enable);
 	void (*bl_fnc) (struct mdss_panel_data *pdata, u32 level);
 	int (*cmdlist_commit)(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp);
+	int (*set_hbm)(struct mdss_dsi_ctrl_pdata *ctrl, int state);
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	int (*event_handler) (struct mdss_panel_data *pdata, int event, void *arg);
 #endif
-
 	struct mdss_panel_data panel_data;
 	unsigned char *ctrl_base;
 	struct dss_io_data ctrl_io;
@@ -356,6 +356,9 @@ struct mdss_dsi_ctrl_pdata {
 	int horizontal_idle_cnt;
 	struct panel_horizontal_idle *line_idle;
 	bool check_status_disabled;
+
+	struct dsi_panel_cmds hbm_on_cmds;
+	struct dsi_panel_cmds hbm_off_cmds;
 };
 
 int dsi_panel_device_register(struct device_node *pan_node,
