@@ -931,7 +931,6 @@ skip_save_imem:
 		}
 	}
 
-	msm_pm_mode_sysfs_add(KBUILD_MODNAME);
 	if (pdev->dev.of_node)
 		of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
 
