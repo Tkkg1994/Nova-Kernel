@@ -1641,7 +1641,7 @@ adreno_probe(struct platform_device *pdev)
 
 	device = (struct kgsl_device *)pdev->id_entry->driver_data;
 	adreno_dev = ADRENO_DEVICE(device);
-	device->parentdev = &pdev->dev;
+	device->pdev = pdev;
 
 	status = kgsl_device_platform_probe(device);
 	if (status)
@@ -1679,7 +1679,7 @@ error_close_rb:
 error_close_device:
 	kgsl_device_platform_remove(device);
 error:
-	device->parentdev = NULL;
+	device->pdev = NULL;
 error_return:
 	return status;
 }
