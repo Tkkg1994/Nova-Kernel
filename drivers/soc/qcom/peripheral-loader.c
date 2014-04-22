@@ -748,13 +748,13 @@ int pil_boot(struct pil_desc *desc)
 				priv->region_end - priv->region_start);
 	if (ret) {
 		pil_err(desc, "Memory setup error\n");
-		goto err_boot;
+		goto err_deinit_image;
 	}
 
 	list_for_each_entry(seg, &desc->priv->segs, list) {
 		ret = pil_load_seg(desc, seg);
 		if (ret)
-			goto err_boot;
+			goto err_deinit_image;
 	}
 
 	ret = desc->ops->auth_and_reset(desc);
@@ -774,9 +774,12 @@ int pil_boot(struct pil_desc *desc)
 			sec_peripheral_secure_check_fail();
 		}
 #endif
-		goto err_boot;
+		goto err_deinit_image;
 	}
 	pil_info(desc, "Brought out of reset\n");
+err_deinit_image:
+	if (ret && desc->ops->deinit_image)
+		desc->ops->deinit_image(desc);
 err_boot:
 	pil_proxy_unvote(desc, ret);
 release_fw:
