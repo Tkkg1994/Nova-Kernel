@@ -480,7 +480,7 @@ config PREEMPT_RCU
 	def_bool TREE_PREEMPT_RCU
 	help
 	  This option enables preemptible-RCU code that is common between
-	  the TREE_PREEMPT_RCU and TINY_PREEMPT_RCU implementations.
+	  TREE_PREEMPT_RCU and, in the old days, TINY_PREEMPT_RCU.
 
 config TASKS_RCU
 	bool "Task_based RCU implementation using voluntary context switch"
