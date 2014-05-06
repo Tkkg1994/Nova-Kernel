@@ -5281,6 +5281,7 @@
 	qcom,wdt@f9017000 {
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
+		reg-names = "wdt-base";
 		qcom,memblock-reserve = <0x0 0x4000>; /*reserved 16kb for WA for Secure Storage TZ app */
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
