@@ -445,6 +445,8 @@ static inline const char *__mdss_dsi_pm_supply_node_name(
 int mdss_dsi_panel_ioctl_handler(struct mdss_panel_data *pdata,
 							u32 cmd, void *arg);
 
+bool mdss_dsi_is_panel_dead(struct mdss_panel_data *pdata);
+
 static inline bool mdss_dsi_split_display_enabled(void)
 {
 	/*
