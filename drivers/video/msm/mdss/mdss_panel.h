@@ -389,16 +389,13 @@ struct mdss_panel_info {
 	u32 dcs_cmd_by_left;
 	u32 partial_update_roi_merge;
 	struct ion_handle *splash_ihdl;
-<<<<<<< HEAD
 	int panel_power_state;
 	int blank_state;
 
 	int dsi_on_status;
-=======
-	u32 panel_power_on;
+
 	bool hbm_feature_enabled;
 	bool hbm_state;
->>>>>>> 02bc9df... msm: mdss: Allow user space control of HBM
 
 	uint32_t panel_dead;
 
@@ -436,6 +433,7 @@ struct mdss_panel_data {
 	int (*event_handler) (struct mdss_panel_data *pdata, int e, void *arg);
 
 	struct mdss_panel_data *next;
+	struct mdss_panel_data *prev;
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	void *panel_private;
