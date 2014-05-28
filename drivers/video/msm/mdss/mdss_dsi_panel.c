@@ -964,19 +964,8 @@ static int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 
 	}
 
-<<<<<<< HEAD
 	/*Set default link state to LP Mode*/
 	pcmds->link_state = DSI_LP_MODE;
-=======
-	if (link_key) {
-		data = of_get_property(np, link_key, NULL);
-		if (data && !strcmp(data, "dsi_hs_mode"))
-			pcmds->link_state = DSI_HS_MODE;
-		else
-			pcmds->link_state = DSI_LP_MODE;
-	} else
-		pcmds->link_state = DSI_HS_MODE;
->>>>>>> 02bc9df... msm: mdss: Allow user space control of HBM
 
 	if (link_key) {
 		data = of_get_property(np, link_key, NULL);
@@ -1661,14 +1650,12 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_panel_horizintal_line_idle(np, ctrl_pdata);
 
-<<<<<<< HEAD
 //	mdss_dsi_parse_dfps_config(np, ctrl_pdata);
-=======
+
 	if (mdss_panel_parse_hbm(np, pinfo, ctrl_pdata)) {
 		pr_err("Error parsing HBM\n");
 		goto error;
 	}
->>>>>>> 02bc9df... msm: mdss: Allow user space control of HBM
 
 	return 0;
 
@@ -1856,6 +1843,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 
 	if (!cmd_cfg_cont_splash)
 		pinfo->cont_splash_enabled = false;
+	pinfo->cont_splash_esd_rdy = false;
+
 	pr_info("%s: Continuous splash %s\n", __func__,
 		pinfo->cont_splash_enabled ? "enabled" : "disabled");
 
@@ -1863,11 +1852,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 	ctrl_pdata->off = mdss_dsi_panel_off;
 	ctrl_pdata->low_power_config = mdss_dsi_panel_low_power_config;
 	ctrl_pdata->panel_data.set_backlight = mdss_dsi_panel_bl_ctrl;
-<<<<<<< HEAD
-	ctrl_pdata->registered = mdss_dsi_panel_registered;
-=======
 	ctrl_pdata->set_hbm = mdss_dsi_panel_set_hbm;
->>>>>>> 02bc9df... msm: mdss: Allow user space control of HBM
+	ctrl_pdata->registered = mdss_dsi_panel_registered;
 
 	return 0;
 }
