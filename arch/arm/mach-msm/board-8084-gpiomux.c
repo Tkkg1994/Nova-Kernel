@@ -1306,44 +1306,6 @@ static struct msm_gpiomux_config apq8084_pri_ter_auxpcm_configs[] __initdata = {
 	},
 };
 
-#if !defined(CONFIG_SEC_TRLTE_PROJECT) && !defined(CONFIG_SEC_TBLTE_PROJECT)
-static struct gpiomux_setting wlan_en_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_16MA,
-	.pull = GPIOMUX_PULL_DOWN,
-	.dir = GPIOMUX_OUT_HIGH,
-};
-
-static struct msm_gpiomux_config msm_wlan_configs[] __initdata = {
-	{
-		.gpio = 82,			/* WLAN ENABLE */
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &wlan_en_cfg,
-			[GPIOMUX_SUSPENDED] = &wlan_en_cfg,
-		},
-	},
-};
-#endif
-
-#if defined(CONFIG_SEC_TRLTE_PROJECT) || defined(CONFIG_SEC_TBLTE_PROJECT)
-static struct gpiomux_setting wlan_en_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_16MA,
-	.pull = GPIOMUX_PULL_DOWN,
-	.dir = GPIOMUX_OUT_LOW,
-};
-
-static struct msm_gpiomux_config msm_wlan_configs[] __initdata = {
-	{
-		.gpio = 117,			/* WLAN ENABLE */
-		.settings = {
-			[GPIOMUX_ACTIVE]    = &wlan_en_cfg,
-			[GPIOMUX_SUSPENDED] = &wlan_en_cfg,
-		},
-	},
-};
-#endif
-
 static struct gpiomux_setting eth_pwr_sleep_config = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_2MA,
@@ -3261,14 +3223,6 @@ void __init apq8084_init_gpiomux(void)
 	msm_gpiomux_install(es705_config, ARRAY_SIZE(es705_config));
 #endif
 	msm_gpiomux_install(msm_taiko_config, ARRAY_SIZE(msm_taiko_config));
-
-#if !defined(CONFIG_SEC_TRLTE_PROJECT) && !defined(CONFIG_SEC_TBLTE_PROJECT)
-	msm_gpiomux_install(msm_wlan_configs, ARRAY_SIZE(msm_wlan_configs));
-#endif
-#if defined(CONFIG_SEC_TRLTE_PROJECT) || defined(CONFIG_SEC_TBLTE_PROJECT)
-	if (system_rev > 7)
-		msm_gpiomux_install(msm_wlan_configs, ARRAY_SIZE(msm_wlan_configs));
-#endif
 
 	if (of_board_is_cdp() || of_board_is_sbc())
 		msm_gpiomux_install(eth_pwr, ARRAY_SIZE(eth_pwr));
