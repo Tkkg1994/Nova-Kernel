@@ -5863,6 +5863,8 @@
 		vdd-wlan-supply = <&wlan_vreg>;
 		qcom,notify-modem-status;
 		wlan-soc-swreg-supply = <&pma8084_l27>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cnss_default>;
 
 		qcom,msm-bus,name = "msm-cnss";
 		qcom,msm-bus,num-cases = <4>;
