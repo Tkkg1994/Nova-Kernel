@@ -35,7 +35,11 @@
 #include <linux/spinlock.h>
 #include <linux/suspend.h>
 #include <linux/rwsem.h>
+#ifdef CONFIG_PCI_MSM
+#include <linux/msm_pcie.h>
+#else
 #include <mach/msm_pcie.h>
+#endif
 #include <net/cnss.h>
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
