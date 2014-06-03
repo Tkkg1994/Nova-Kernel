@@ -324,6 +324,10 @@ static int cnss_wlan_get_resources(struct platform_device *pdev)
 		goto err_reg_enable;
 	}
 
+	if (of_find_property((&pdev->dev)->of_node,
+				"qcom,wlan-uart-access", NULL))
+		penv->cap.cap_flag |= CNSS_HAS_UART_ACCESS;
+
 	pr_err("%s: system_rev=%d\n", __func__, system_rev);
 	if (of_get_property(pdev->dev.of_node, WLAN_SWREG_NAME"-supply", NULL)
 #ifdef CONFIG_SEC_LENTIS_PROJECT
@@ -333,6 +337,7 @@ static int cnss_wlan_get_resources(struct platform_device *pdev)
 		&& (system_rev > 3)
 #endif
 	) {
+
 		vreg_info->soc_swreg = regulator_get(&pdev->dev,
 			WLAN_SWREG_NAME);
 		if (IS_ERR(vreg_info->soc_swreg)) {
