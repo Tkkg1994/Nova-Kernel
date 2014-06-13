@@ -107,6 +107,33 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 	return rc;
 }
 
+static int mdss_dsi_panel_power_panel_on(struct mdss_panel_data *pdata,
+								int enable)
+{
+	int ret = 0;
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		ret = -EINVAL;
+		goto error;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+								panel_data);
+	pr_debug("%s: enable=%d\n", __func__, enable);
+
+	ret = msm_dss_enable_vreg(
+			ctrl_pdata->power_data[DSI_PANEL_PM].vreg_config,
+			ctrl_pdata->power_data[DSI_PANEL_PM].num_vreg, enable);
+	if (ret)
+		pr_err("%s: failed to %s vregs for %s\n",
+				__func__, enable ? "enable" : "disable",
+				__mdss_dsi_pm_name(DSI_PANEL_PM));
+error:
+	return ret;
+}
+
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -179,10 +206,12 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata->panel_reset(pdata, 0);
 #endif
 */
-	ret = mdss_dsi_panel_reset(pdata, 0);
-	if (ret) {
-		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
-		ret = 0;
+	if (!pdata->panel_info.mipi.lp11_init) {
+		ret = mdss_dsi_panel_reset(pdata, 0);
+		if (ret) {
+			pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+			ret = 0;
+		}
 	}
 
 	for (i = DSI_MAX_PM - 1; i >= 0; i--) {
@@ -190,7 +219,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 		 * Core power module will be disabled when the
 		 * clocks are disabled
 		 */
-		if (DSI_CORE_PM == i)
+		if ((DSI_CORE_PM == i) || ((DSI_PANEL_PM == i) &&
+					pdata->panel_info.mipi.lp11_init))
 			continue;
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		if ((DSI_PANEL_PM == i) && !dsi_panel_pm_ctrl)
@@ -237,7 +267,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		 * Core power module will be enabled when the
 		 * clocks are enabled
 		 */
-		if (DSI_CORE_PM == i)
+		if ((DSI_CORE_PM == i) || (DSI_PANEL_PM == i))
 			continue;
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		if ((DSI_PANEL_PM == i) && !dsi_panel_pm_ctrl)
@@ -637,6 +667,15 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 	if (pdata->panel_info.type == MIPI_CMD_PANEL)
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 
+	if (pdata->panel_info.mipi.lp11_init) {
+		mdss_dsi_panel_reset(pdata, 0);
+		ret = mdss_dsi_panel_power_panel_on(pdata, 0);
+		if (ret) {
+			pr_err("%s: Panel power off failed\n", __func__);
+			return ret;
+		}
+	}
+
 	/* disable DSI controller */
 	mdss_dsi_controller_cfg(0, pdata);
 
@@ -737,7 +776,9 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 				usleep(mipi->init_delay);
 		}
 #endif
+		mdss_dsi_panel_power_panel_on(pdata, 1);
 		mdss_dsi_panel_reset(pdata, 1);
+	}
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		/* LP11 Restore */
@@ -1773,9 +1814,26 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		rc = mdss_dsi_panel_power_ctrl(&(ctrl_pdata->panel_data),
 			MDSS_PANEL_POWER_ON);
 		if (rc) {
-			pr_err("%s: Panel power on failed\n", __func__);
+			pr_err("%s: DSI power on failed\n", __func__);
 			return rc;
 		}
+
+		if (pinfo->mipi.lp11_init) {
+			rc = mdss_dsi_panel_reset(&(ctrl_pdata->panel_data), 1);
+			if (rc) {
+				pr_err("%s: Panel reset failed. rc=%d\n",
+								__func__, rc);
+				return rc;
+			}
+
+			rc = mdss_dsi_panel_power_panel_on(
+						&(ctrl_pdata->panel_data), 1);
+			if (rc) {
+				pr_err("%s: Panel power on failed\n", __func__);
+				return rc;
+			}
+		}
+
 		pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 		ctrl_pdata->ctrl_state |=
