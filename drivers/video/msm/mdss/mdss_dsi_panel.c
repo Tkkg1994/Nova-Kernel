@@ -155,7 +155,7 @@ int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	pinfo = &(ctrl->panel_data.panel_info);
 	if (pinfo->dcs_cmd_by_left) {
 		if (ctrl->ndx != DSI_CTRL_LEFT)
-			return -EINVAL;
+			return 0;
 	}
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
@@ -790,7 +790,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	pinfo->panel_state = true;
 #else
 	if (ctrl->on_cmds.cmd_cnt)
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
+		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #endif
 
 	end:
@@ -801,7 +801,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (!ctrl->ndx && (pwr_mode & 0x04) != 0x04)
 		pr_err("%s: Display failure: DISON (0x04) bit not set\n",
 								__func__);
-	pr_info("%s-. Pwr_mode(0x0A) = 0x%x\n", __func__, pwr_mode);
+	if (!ctrl->ndx)
+		pr_info("%s-. Pwr_mode(0x0A) = 0x%x\n", __func__, pwr_mode);
+
 	return 0;
 }
 
