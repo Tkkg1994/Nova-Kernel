@@ -790,7 +790,7 @@ end:
 	return 0;
 }
 
-static int mdss_dsi_pinctrl_set_state(
+int mdss_dsi_pinctrl_set_state(
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	bool active)
 {
@@ -857,8 +857,6 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 	mipi  = &pdata->panel_info.mipi;
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
-		pr_debug("dsi unblank: pinctrl not enabled\n");
 
 	pr_err("%s+: ctrl=%p ndx=%d cur_blank_state=%d\n", __func__,
 		ctrl_pdata, ctrl_pdata->ndx, pdata->panel_info.blank_state);
@@ -949,9 +947,6 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 		}
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
 	}
-
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("dsi blank: pinctrl not enabled\n");
 
 error:
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
