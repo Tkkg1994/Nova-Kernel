@@ -339,6 +339,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 #endif
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
 	if (enable) {
+		rc = mdss_dsi_pinctrl_set_state(ctrl_pdata, true);
+		if (rc) {
+			pr_err("pinctrl set state active failed %d\n", rc);
+			return rc;
+		}
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		if (ctrl_pdata->cmd_sync_wait_broadcast && !ctrl_pdata->cmd_sync_wait_trigger)
 			return 0;/*on reset: have to controlled on dsi 1 on broadcast*/
@@ -399,6 +404,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
+		rc = mdss_dsi_pinctrl_set_state(ctrl_pdata, false);
+		if (rc) {
+			pr_err("pinctrl set suspend state failed %d\n", rc);
+			return rc;
+		}
 
 		usleep_range(4000, 4000);
 	}
