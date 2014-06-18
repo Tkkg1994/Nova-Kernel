@@ -1029,10 +1029,7 @@ static void rcu_check_gp_kthread_starvation(struct rcu_state *rsp)
 }
 
 /*
- * Dump stacks of all tasks running on stalled CPUs.  This is a fallback
- * for architectures that do not implement trigger_all_cpu_backtrace().
- * The NMI-triggered stack traces are more accurate because they are
- * printed by the target CPU.
+ * Dump stacks of all tasks running on stalled CPUs.
  */
 static void rcu_dump_cpu_stacks(struct rcu_state *rsp)
 {
@@ -1159,8 +1156,7 @@ static void print_cpu_stall(struct rcu_state *rsp)
 
 	rcu_check_gp_kthread_starvation(rsp);
 
-	if (!trigger_all_cpu_backtrace())
-		dump_stack();
+	rcu_dump_cpu_stacks(rsp);
 
 	raw_spin_lock_irqsave(&rnp->lock, flags);
 	if (ULONG_CMP_GE(jiffies, ACCESS_ONCE(rsp->jiffies_stall)))
