@@ -1083,8 +1083,8 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 				goto error_link_clk_start;
 			}
 			/* Disable ULPS, if enabled */
-			if (ctrl->ulps) {
-				rc = mdss_dsi_ulps_config(ctrl, 0);
+			if (mdss_dsi_ulps_feature_enabled(pdata) && ctrl->ulps) {
+				rc = mdss_dsi_ulps_config(ctrl, 0, 0);
 				if (rc) {
 					pr_err("%s: Failed to exit ulps. rc=%d\n",
 						__func__, rc);
@@ -1102,7 +1102,7 @@ static int mdss_dsi_clk_ctrl_sub(struct mdss_dsi_ctrl_pdata *ctrl,
 			if ((mdss_dsi_ulps_feature_enabled(pdata)) &&
 				(pdata->panel_info.blank_state !=
 				 MDSS_PANEL_BLANK_BLANK))
-				mdss_dsi_ulps_config(ctrl, 1);
+				mdss_dsi_ulps_config(ctrl, 1, 0);
 			mdss_dsi_link_clk_stop(ctrl);
 		}
 		if (clk_type & DSI_BUS_CLKS) {

@@ -670,8 +670,13 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 	if (pdata->panel_info.mipi.lp11_init) {
 		if (ctrl_pdata->partial_mode_enabled &&
 				!mdss_dsi_is_panel_dead(pdata)) {
-			if (gpio_is_valid(ctrl_pdata->mipi_d0_sel))
+			if (gpio_is_valid(ctrl_pdata->mipi_d0_sel)) {
 				gpio_set_value(ctrl_pdata->mipi_d0_sel, 1);
+				udelay(10);
+			}
+
+			mdss_dsi_ulps_config(ctrl_pdata, 1, 1);
+			mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 		} else {
 			mdss_dsi_panel_reset(pdata, 0);
 			ret = mdss_dsi_panel_power_panel_on(pdata, 0);
@@ -683,13 +688,15 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 		}
 	}
 
-	/* disable DSI controller */
-	mdss_dsi_controller_cfg(0, pdata);
+	if (!ctrl_pdata->partial_mode_enabled ||
+					mdss_dsi_is_panel_dead(pdata)) {
+		/* disable DSI controller */
+		mdss_dsi_controller_cfg(0, pdata);
 
-	/* disable DSI phy */
-	mdss_dsi_phy_disable(ctrl_pdata);
+		/* disable DSI phy */
+		mdss_dsi_phy_disable(ctrl_pdata);
 
-	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
+		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 0);
 
 panel_power_ctrl:
 	ret = mdss_dsi_panel_power_ctrl(pdata, power_state);
