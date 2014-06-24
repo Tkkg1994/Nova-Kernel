@@ -1228,6 +1228,20 @@ void cnss_pm_wake_lock_destroy(struct wakeup_source *ws)
 }
 EXPORT_SYMBOL(cnss_pm_wake_lock_destroy);
 
+#ifdef CONFIG_PCI_MSM
+int cnss_wlan_pm_control(bool vote)
+{
+	if (!penv || !penv->pdev)
+		return -ENODEV;
+
+	return msm_pcie_pm_control(
+		vote ? MSM_PCIE_DISABLE_PC : MSM_PCIE_ENABLE_PC,
+		cnss_get_pci_dev_bus_number(penv->pdev),
+		penv->pdev, NULL, PM_OPTIONS);
+}
+EXPORT_SYMBOL(cnss_wlan_pm_control);
+#endif
+
 void cnss_lock_pm_sem(void)
 {
 	down_read(&cnss_pm_sem);
