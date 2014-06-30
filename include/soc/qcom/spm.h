@@ -36,9 +36,12 @@ int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 		unsigned int mode, bool notify_rpm);
 int msm_spm_device_init(void);
 void msm_spm_dump_regs(unsigned int cpu);
+bool msm_spm_is_mode_avail(unsigned int mode);
+
 #if defined(CONFIG_MSM_L2_SPM)
 
 /* Public functions */
+
 int msm_spm_apcs_set_phase(int cpu, unsigned int phase_cnt);
 int msm_spm_enable_fts_lpm(int cpu, uint32_t mode);
 
@@ -98,6 +101,11 @@ int msm_spm_config_low_power_mode(struct msm_spm_device *dev,
 struct msm_spm_device *msm_spm_get_device_by_name(const char *name)
 {
 	return NULL;
+}
+
+bool msm_spm_is_mode_avail(unsigned int mode)
+{
+	return false;
 }
 
 #endif  /* defined (CONFIG_MSM_SPM_V2) */
