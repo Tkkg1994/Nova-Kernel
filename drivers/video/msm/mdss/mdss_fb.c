@@ -657,7 +657,6 @@ static int mdss_fb_probe(struct platform_device *pdev)
 #else
 	mfd->bl_level = 0;
 #endif
-	mfd->bl_level_prev_scaled = 0;
 	mfd->bl_scale = 1024;
 	mfd->bl_min_lvl = 30;
 	mfd->fb_imgType = MDP_RGBA_8888;
@@ -1025,7 +1024,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 				pr_err("Failed to attenuate BL\n");
 		}
 
-		mfd->bl_level_prev_scaled = mfd->bl_level_scaled;
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 		/*
