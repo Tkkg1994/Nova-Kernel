@@ -31,6 +31,7 @@
                 qcom,vddmin-drive-strength = <8>;
 		qcom,sfr-query;
 		qcom,support-shutdown;
+		qcom,sysmon-id = <20>;
 		status = "disabled";
 	};
 
@@ -54,6 +55,7 @@
                 qcom,vddmin-drive-strength = <8>;
 		qcom,sfr-query;
 		qcom,support-shutdown;
+		qcom,sysmon-id = <20>;
 		status = "disabled";
 	};
 };
