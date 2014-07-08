@@ -25,8 +25,7 @@
 #include <linux/dma-mapping.h>
 #include <soc/qcom/scm.h>
 #include <asm/cacheflush.h>
-#include <mach/msm_cache_dump.h>
-#include <mach/msm_iomap.h>
+#include <soc/qcom/cache_dump.h>
 #include <soc/qcom/memory_dump.h>
 
 #define L2_DUMP_OFFSET 0x14
