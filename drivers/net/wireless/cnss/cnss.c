@@ -253,7 +253,6 @@ static struct cnss_data {
 	void *subsys_handle;
 	struct esoc_desc *esoc_desc;
 	struct cnss_platform_cap cap;
-	bool notify_modem_status;
 	struct msm_pcie_register_event event_reg;
 	struct wakeup_source ws;
 	uint32_t recovery_count;
