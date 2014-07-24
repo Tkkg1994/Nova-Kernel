@@ -5897,6 +5897,11 @@
 		interrupts = <0 1 0>;
 	};
 
+	qcom,perfmap@fc340000 {
+		compatible = "qcom,perfmap";
+		reg = <0xfc340000 0x3000>;
+	};
+
 	cnss: qcom,cnss@0d000000 {
 		compatible = "qcom,cnss";
 		reg = <0x0d000000 0x200000>;
