@@ -133,6 +133,7 @@ struct mdss_data_type {
 	u32 irq_mask;
 	u32 irq_ena;
 	u32 irq_buzy;
+	bool irq_wakeup_en;
 	u32 has_bwc;
 	u32 has_decimation;
 	u32 wfd_mode;
@@ -243,6 +244,7 @@ void mdss_disable_irq_nosync(struct mdss_hw *hw);
 void mdss_bus_bandwidth_ctrl(int enable);
 int mdss_iommu_ctrl(int enable);
 int mdss_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota);
+void mdss_enable_irq_wake(bool enable);
 
 #if defined (CONFIG_FB_MSM_MDSS_DSI_DBG)
 int mdss_mdp_debug_bus(void);
