@@ -2768,6 +2768,7 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 	const char *filename = TAIKO_MAD_AUDIO_FIRMWARE_PATH;
 	struct taiko_priv *taiko = snd_soc_codec_get_drvdata(codec);
 	size_t cal_size;
+	int i = 0;
 
 	pr_debug("%s: enter\n", __func__);
 	/* wakeup for codec calibration access */
@@ -2775,10 +2776,9 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 			      msm_cpuidle_get_deep_idle_latency());
 	if (!taiko->fw_data) {
 		dev_err(codec->dev, "%s: invalid cal data\n",
-				__func__);
+				 __func__);
 		return -ENODEV;
 	}
-
 	hwdep_cal = wcdcal_get_fw_cal(taiko->fw_data, WCD9XXX_MAD_CAL);
 	if (hwdep_cal) {
 		data = hwdep_cal->data;
@@ -2835,7 +2835,15 @@ static int taiko_codec_config_mad(struct snd_soc_codec *codec)
 		      mad_cal->audio_info.rms_threshold_lsb);
 	snd_soc_write(codec, TAIKO_A_CDC_MAD_AUDIO_CTL_6,
 		      mad_cal->audio_info.rms_threshold_msb);
-
+	for (i = 0; i < ARRAY_SIZE(mad_cal->audio_info.iir_coefficients);
+	     i++) {
+		snd_soc_update_bits(codec, TAIKO_A_CDC_MAD_AUDIO_IIR_CTL_PTR,
+				    0x3F, i);
+		snd_soc_write(codec, TAIKO_A_CDC_MAD_AUDIO_IIR_CTL_VAL,
+			      mad_cal->audio_info.iir_coefficients[i]);
+		dev_dbg(codec->dev, "%s:MAD Audio IIR Coef[%d] = 0X%x",
+			__func__, i, mad_cal->audio_info.iir_coefficients[i]);
+	}
 
 	/* Beacon */
 	snd_soc_write(codec, TAIKO_A_CDC_MAD_BEACON_CTL_8,
