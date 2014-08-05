@@ -2387,31 +2387,6 @@ static struct kernel_param_ops module_ops = {
 module_param_cb(enabled, &module_ops, &enabled, 0644);
 MODULE_PARM_DESC(enabled, "enforce thermal limit on cpu");
 
-static int set_gfx_enabled(const char *val, const struct kernel_param *kp)
-{
-        int ret = 0;
-
-        if (*val == '0' || *val == 'n' || *val == 'N') {
-                gfx_phase_ctrl_enabled = 0;
-        } else {
-                if (!gfx_phase_ctrl_enabled) {
-                        gfx_phase_ctrl_enabled = 1;
-                }
-        }
-        pr_info("gfx enabled = %d\n", gfx_phase_ctrl_enabled);
-
-        return ret;
-}
-
-static struct kernel_param_ops gfx_module_ops = {
-        .set = set_gfx_enabled,
-        .get = param_get_bool,
-};
-
-module_param_cb(gfx_cond_enabled, &gfx_module_ops,
-		&gfx_phase_ctrl_enabled, 0644);
-MODULE_PARM_DESC(gfx_cond_enabled, "gfx phase cond enabled");
-
 static int set_cx_enabled(const char *val, const struct kernel_param *kp)
 {
         int ret = 0;
