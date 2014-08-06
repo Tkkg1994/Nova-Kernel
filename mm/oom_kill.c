@@ -261,13 +261,11 @@ enum oom_scan_t oom_scan_process_thread(struct task_struct *task,
 		unsigned long totalpages, const nodemask_t *nodemask,
 		bool force_kill)
 {
-	if (task->exit_state) {
 #ifdef CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH
-		if (task->pid == task->tgid)
+		if ((task->exit_state || task->pid) == task->tgid)
 			return OOM_SCAN_SKIP_SEARCH_THREAD;
 #endif
-		return OOM_SCAN_CONTINUE;
-	}
+
 	if (oom_unkillable_task(task, NULL, nodemask))
 		return OOM_SCAN_CONTINUE;
 
