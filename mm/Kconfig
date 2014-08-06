@@ -635,6 +635,13 @@ config SDP_CACHE_CLEANUP
 	depends on SDP
 	default n
 
+config ZPOOL
+	tristate "Common API for compressed memory storage"
+	default n
+	help
+	  Compressed memory storage API.  This allows using either zbud or
+	  zsmalloc.
+
 config BALANCE_ANON_FILE_RECLAIM
 	bool "During reclaim treat anon and file backed pages equally"
 	depends on SWAP
