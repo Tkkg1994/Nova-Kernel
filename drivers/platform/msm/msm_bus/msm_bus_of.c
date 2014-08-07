@@ -252,8 +252,13 @@ static int *get_arr(struct platform_device *pdev,
 		return NULL;
 	}
 
+	if (!size) {
+		*nports = 0;
+		return NULL;
+	}
+
 	arr = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
-	if ((size > 0) && ZERO_OR_NULL_PTR(arr)) {
+	if (ZERO_OR_NULL_PTR(arr)) {
 		pr_err("Error: Failed to alloc mem for %s\n", prop);
 		return NULL;
 	}
@@ -287,16 +292,26 @@ static u64 *get_th_params(struct platform_device *pdev,
 		return NULL;
 	}
 
+	if (!size) {
+		*nports = 0;
+		return NULL;
+	}
+
 	ret_arr = devm_kzalloc(&pdev->dev, (*nports * sizeof(u64)),
 							GFP_KERNEL);
+	if (ZERO_OR_NULL_PTR(ret_arr)) {
+		pr_err("Error: Failed to alloc mem for ret arr %s\n", prop);
+		return NULL;
+	}
+
 	arr = kzalloc(size, GFP_KERNEL);
-	if ((size > 0) && (ZERO_OR_NULL_PTR(arr)
-			|| ZERO_OR_NULL_PTR(ret_arr))) {
+	if ((ZERO_OR_NULL_PTR(arr))) {
 		if (arr)
 			kfree(arr);
 		else if (ret_arr)
 			devm_kfree(&pdev->dev, ret_arr);
-		pr_err("Error: Failed to alloc mem for %s\n", prop);
+		pr_err("Error: Failed to alloc temp mem for %s\n", prop);
+
 		return NULL;
 	}
 
