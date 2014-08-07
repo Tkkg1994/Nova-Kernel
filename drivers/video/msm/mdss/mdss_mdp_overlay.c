@@ -2244,7 +2244,6 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 	buf_l->p[0].addr += offset;
 	buf_l->p[0].len = fbi->fix.smem_len - offset;
 	buf_l->num_planes = 1;
-	pipe->has_buf = 1;
 
 >>>>>>> 288a260... msm: mdss: refactor pipe buffer handling
 	mdss_mdp_pipe_unmap(pipe);
@@ -2272,7 +2271,6 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 
 		buf_r->p[0] = buf_l->p[0];
 		buf_r->num_planes = 1;
-		pipe->has_buf = 1;
 
 >>>>>>> 288a260... msm: mdss: refactor pipe buffer handling
 		mdss_mdp_pipe_unmap(pipe);
