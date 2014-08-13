@@ -224,6 +224,14 @@ config MAXIMUM_CURRENT_THROTTLING
 	  turn on/off CPU based current throttling by setting the
 	  credit/upper limit in the CPU registers.
 
+config QCOM_EARLY_RANDOM
+	bool "Initialize random pool very early"
+	help
+	  The standard random pool may not initialize until late in the boot
+	  process which means that any calls to get random numbers before then
+	  may not be truly random. Select this option to make an early call
+	  to get some random data to put in the pool. If unsure, say N.
+
 config MSM_SUBSYSTEM_RESTART
 	bool "MSM Subsystem Restart"
 	help
@@ -355,6 +363,7 @@ config MSM_OCMEM_POWER_DISABLE
 config MSM_SCM
 	bool "Secure Channel Manager (SCM) support"
 	default n
+
 
 source "drivers/soc/qcom/memshare/Kconfig"
 
