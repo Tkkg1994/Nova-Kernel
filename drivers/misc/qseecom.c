@@ -1457,7 +1457,7 @@ static int __validate_send_cmd_inputs(struct qseecom_dev_handle *data,
 	}
 	return 0;
 }
- 
+
 static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 				struct qseecom_send_cmd_req *req)
 {
