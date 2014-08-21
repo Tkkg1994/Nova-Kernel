@@ -30,6 +30,8 @@
 #include <linux/wakelock.h>
 #include <linux/pm.h>
 #include <linux/jiffies.h>
+#include <linux/timer.h>
+#include <linux/gpio.h>
 
 #include <trace/events/mmc.h>
 
@@ -46,6 +48,7 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 #include "sdio_ops.h"
+#include "mmc_user_control.h"
 
 #ifdef CONFIG_MMC_SUPPORT_STLOG
 #include <linux/stlog.h>
@@ -366,12 +369,42 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 
 EXPORT_SYMBOL(mmc_request_done);
 
+#ifdef CONFIG_ENABLE_MMC_USER_CONTROL
+extern struct mmc_shutdown_data mmc_shutdown_config;
+static struct timer_list shutdown_mmc_timer;
+
+static void shutdown_mmc_timer_callback(unsigned long data)
+{
+	gpio_set_value(CONFIG_MMC_SHUTDOWN_GPIO, 1);
+	pr_info("MMC was shutdown after encountering shutdown pattern.\n");
+}
+#endif
+
 static void
 mmc_start_request(struct mmc_host *host, struct mmc_request *mrq)
 {
 #ifdef CONFIG_MMC_DEBUG
 	unsigned int i, sz;
 	struct scatterlist *sg;
+#endif
+
+#ifdef CONFIG_ENABLE_MMC_USER_CONTROL
+	char *data_head;
+
+	read_lock(&mmc_shutdown_config.root_lock);
+	if (mmc_shutdown_config.enabled && mrq->data) {
+		data_head = (char *)(sg_virt(mrq->data->sg));
+		if (!strncmp(data_head,
+					 mmc_shutdown_config.pattern_buff,
+					 mmc_shutdown_config.pattern_len)) {
+			if (mod_timer(&shutdown_mmc_timer,
+						jiffies + msecs_to_jiffies(
+						mmc_shutdown_config.delay_ms))) {
+				pr_info("Failed to set MMC shutdown timer.\n");
+			}
+		}
+	}
+	read_unlock(&mmc_shutdown_config.root_lock);
 #endif
 
 	if (mrq->sbc) {
@@ -4162,6 +4195,10 @@ static int __init mmc_init(void)
 {
 	int ret;
 
+#ifdef CONFIG_ENABLE_MMC_USER_CONTROL
+	rwlock_init(&mmc_shutdown_config.root_lock);
+	setup_timer(&shutdown_mmc_timer, shutdown_mmc_timer_callback, 0);
+#endif
 	workqueue = alloc_ordered_workqueue("kmmcd", 0);
 	if (!workqueue)
 		return -ENOMEM;
