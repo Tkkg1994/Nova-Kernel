@@ -49,7 +49,7 @@ obj-$(CONFIG_MSM_DCC) += dcc.o
 obj-$(CONFIG_MSM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_MSM_WATCHDOG_CTX_PRINT) += watchdog_cpu_ctx.o
 obj-$(CONFIG_MEM_SHARE_QMI_SERVICE)		+= memshare/
-obj-$(CONFIG_MSM_SPM_V2) += spm-v2.o spm_devices.o
+obj-$(CONFIG_MSM_SPM) += spm.o spm_devices.o
 obj-y		+= socinfo.o
 
 obj-$(CONFIG_MSM_PIL) += peripheral-loader.o
