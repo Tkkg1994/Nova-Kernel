@@ -103,6 +103,8 @@ struct hdmi_tx_ctrl {
         int is_power_enabled[HDMI_TX_MAX_PM];
 #endif
 
+	void *codec_data;
+	u32 (*play_short_silent_audio) (void *codec_data);
 };
 
 #if defined(CONFIG_SEC_MHL_SUPPORT)
