@@ -123,10 +123,16 @@ struct msm_compr_audio {
 	uint32_t sample_rate;
 	uint32_t num_channels;
 
+	/*
+	 * convention - commands coming from the same thread
+	 * can use the common cmd_ack var. Others (e.g drain/EOS)
+	 * must use separate vars to track command status.
+	 */
 	uint32_t cmd_ack;
 	uint32_t cmd_interrupt;
 	uint32_t drain_ready;
 	uint32_t eos_ack;
+
 	uint32_t stream_available;
 	uint32_t next_stream;
 
@@ -1413,7 +1419,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 
 		/* Wait indefinitely for  DRAIN. Flush can also signal this*/
 		rc = wait_event_interruptible(prtd->eos_wait,
-						(prtd->eos_ack || prtd->cmd_interrupt));
+				      (prtd->eos_ack || prtd->cmd_interrupt));
 
 		if (rc < 0)
 			pr_err("%s: EOS wait failed\n", __func__);
