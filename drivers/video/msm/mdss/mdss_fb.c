@@ -1000,7 +1000,8 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	}
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
-		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) {
+		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd) &&
+		mfd->panel_info->cont_splash_enabled) {
 		mfd->need_to_update_unset_bl_level = true;
 		mfd->unset_bl_level = bkl_lvl;
 		return;
@@ -1010,7 +1011,8 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	}
 #else
 	if (((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
-		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd)) {
+		|| !mfd->bl_updated) && !IS_CALIB_MODE_BL(mfd) &&
+		mfd->panel_info->cont_splash_enabled) {
 		mfd->unset_bl_level = bkl_lvl;
 		return;
 	} else {
