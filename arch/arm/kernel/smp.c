@@ -752,7 +752,7 @@ void smp_send_stop(void)
 		udelay(1);
 
 	if (num_active_cpus() > 1)
-		pr_warning("SMP: failed to stop secondary CPUs\n");
+		pr_warn("SMP: failed to stop secondary CPUs\n");
 }
 
 /*

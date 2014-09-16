@@ -202,7 +202,7 @@ void migrate_irqs(void)
 
 /*
 		if (affinity_broken && printk_ratelimit())
-			pr_warning("IRQ%u no longer affine to CPU%u\n", i,
+			pr_warn("IRQ%u no longer affine to CPU%u\n", i,
 				smp_processor_id());
 */
 	}
