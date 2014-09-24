@@ -355,6 +355,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 				"   Total reserve is %ldkB\n" \
 				"   Total free pages is %ldkB\n" \
 				"   Total file cache is %ldkB\n" \
+				"   Slab Reclaimable is %ldkB\n" \
+				"   Slab UnReclaimable is %ldkB\n" \
+				"   Total Slab is %ldkB\n" \
 				"   GFP mask is 0x%x\n" \
 				"   is_kswapd %d cma_free %lu priority %d\n",
 			     selected->comm, selected->pid,
@@ -372,10 +375,17 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 				(long)(PAGE_SIZE / 1024),
 			     global_page_state(NR_FILE_PAGES) *
 				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_RECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
+			     global_page_state(NR_SLAB_RECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024) +
+			     global_page_state(NR_SLAB_UNRECLAIMABLE) *
+				(long)(PAGE_SIZE / 1024),
 			     sc->gfp_mask,
 			     !!current_is_kswapd(),
 			     nr_cma_free, sc->priority);
-
 #endif
 		if (lowmem_debug_level >= 2 && selected_oom_score_adj == 0) {
 			show_mem(SHOW_MEM_FILTER_NODES);
