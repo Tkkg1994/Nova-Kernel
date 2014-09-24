@@ -215,6 +215,9 @@ struct log {
 	u8 facility;		/* syslog facility */
 	u8 flags:5;		/* internal record flags */
 	u8 level:3;		/* syslog level */
+#if defined(CONFIG_LOG_BUF_MAGIC)
+	u32 magic;		/* handle for ramdump analysis tools */
+#endif
 	char process[16];	/* process Name CONFIG_PRINTK_PROCESS */
 	u16 pid;			/* process id CONFIG_PRINTK_PROCESS */
 	u16 cpu;			/* cpu core number CONFIG_PRINTK_PROCESS */
@@ -286,6 +289,13 @@ static u32 log_oops_next_idx;
 static u32 syslog_oops_buf_idx;
 
 static const char log_oops_end[] = "---end of oops log buffer---";
+#endif
+
+#if defined(CONFIG_LOG_BUF_MAGIC)
+static u32 __log_align __used = LOG_ALIGN;
+#define LOG_MAGIC(msg) ((msg)->magic = 0x5d7aefca)
+#else
+#define LOG_MAGIC(msg)
 #endif
 
 /* cpu currently holding logbuf_lock */
@@ -453,6 +463,7 @@ static void log_store(int facility, int level,
 		 * to signify a wrap around.
 		 */
 		memset(log_buf + log_next_idx, 0, sizeof(struct log));
+		LOG_MAGIC((struct log *)(log_buf + log_next_idx));
 		log_next_idx = 0;
 	}
 
@@ -465,6 +476,7 @@ static void log_store(int facility, int level,
 	msg->facility = facility;
 	msg->level = level & 7;
 	msg->flags = flags & 0x1f;
+	LOG_MAGIC(msg);
 	if (ts_nsec > 0)
 		msg->ts_nsec = ts_nsec;
 	else
