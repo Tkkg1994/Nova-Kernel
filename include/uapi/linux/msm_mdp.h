@@ -68,6 +68,8 @@
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
 
+#define MSMFB_SECURE   _IOWR(MSMFB_IOCTL_MAGIC, 170, struct msmfb_secure_config)
+
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
@@ -1082,6 +1084,11 @@ struct msmfb_mixer_info_req {
 	int mixer_num;
 	int cnt;
 	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
+};
+
+struct msmfb_secure_config {
+	uint8_t enable;
+	uint32_t fd;
 };
 
 enum {
