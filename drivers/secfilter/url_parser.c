@@ -148,7 +148,7 @@ tcp_TrackInfo*  isURL( struct sk_buff *skb)
         for (i = 0; i<METHOD_MAX; i++)                                                                  // Check it is started with HTTP requests
         {
             int	methodLen   = strlen(http_method[i]);
-            if (strnicmp(request, http_method[i], methodLen) == 0)                                      // If it is started with HTTP request
+            if (strncasecmp(request, http_method[i], methodLen) == 0)                                      // If it is started with HTTP request
             {
                 result = make_tcp_TrackInfo(skb);                                                       // Make TCP track info based on skb
                 break;
@@ -289,7 +289,7 @@ void    getURL(char *request, tcp_TrackInfo *node)  // request is already checke
         for (i = 0 ; i<METHOD_MAX ; i++)                                                // Check HTTP method
         {
             int	methodLen   = strlen(http_method[i]);
-            if (strnicmp(request, http_method[i], methodLen) == 0)                      // Request line should be started with method name
+            if (strncasecmp(request, http_method[i], methodLen) == 0)                      // Request line should be started with method name
             {
                 node->status    = GETTING_URL;                                              // Change status as GETTING_URL
                 dataStart       = &request[methodLen];                                      // Move data position
