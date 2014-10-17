@@ -1485,6 +1485,8 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		dwc3_msm_write_reg(mdwc->base, QSCRATCH_CTRL_REG,
 			mdwc->qscratch_ctl_val);
 
+	/* Cancel block reset work and wait for it to finish */
+	cancel_work_sync(&mdwc->usb_block_reset_work);
 
 	if (host_bus_suspend) {
 		ret = dwc3_msm_prepare_suspend(mdwc);
