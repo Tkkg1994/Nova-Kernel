@@ -417,7 +417,11 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
+<<<<<<< HEAD
 		   $(MODFLAGS)
+=======
+		   -std=gnu89
+>>>>>>> 51b97e3... kernel: use the gnu89 standard explicitly
 
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
