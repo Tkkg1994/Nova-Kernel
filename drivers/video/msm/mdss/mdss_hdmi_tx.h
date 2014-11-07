@@ -86,6 +86,7 @@ struct hdmi_tx_ctrl {
 	bool hdcp_feature_on;
 	bool hpd_disabled;
 	bool ds_registered;
+	bool polarity_reset;
 	bool mhl_connect_status;
 	u32 present_hdcp;
 

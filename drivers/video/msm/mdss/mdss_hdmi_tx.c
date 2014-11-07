@@ -47,7 +47,7 @@
 #else
 #define DEFAULT_VIDEO_RESOLUTION HDMI_VFRMT_640x480p60_4_3
 #endif
-#define DEFAULT_HDMI_PRIMARY_RESOLUTION HDMI_VFRMT_1280x720p60_16_9
+#define DEFAULT_HDMI_PRIMARY_RESOLUTION HDMI_VFRMT_1920x1080p60_16_9
 
 /* HDMI PHY/PLL bit field macros */
 #define SW_RESET BIT(2)
@@ -1409,6 +1409,11 @@ static void hdmi_tx_hpd_int_work(struct work_struct *work)
 	}
 	old_jiffies = current_jiffies;
 #endif
+	if (hdmi_ctrl->polarity_reset) {
+		hdmi_ctrl->polarity_reset = false;
+		hdmi_ctrl->hpd_state = 0;
+	}
+
 	if (hdmi_ctrl->hpd_state) {
 		/*
 		 * If a down stream device or bridge chip is attached to hdmi
@@ -2595,7 +2600,7 @@ static int hdmi_tx_audio_setup(struct hdmi_tx_ctrl *hdmi_ctrl)
 		return rc;
 	}
 
-	DEV_DBG("HDMI Audio: Enabled\n");
+	DEV_INFO("HDMI Audio: Enabled\n");
 
 	return 0;
 } /* hdmi_tx_audio_setup */
@@ -2710,6 +2715,9 @@ static void hdmi_tx_hpd_polarity_setup(struct hdmi_tx_ctrl *hdmi_ctrl,
 	if (cable_sense == polarity) {
 		u32 reg_val = DSS_REG_R(io, HDMI_HPD_CTRL);
 
+		DEV_DBG("%s: reset HPD as cable sense and polarity same %d\n",
+			__func__, polarity);
+
 		/* Toggle HPD circuit to trigger HPD sense */
 		DSS_REG_W(io, HDMI_HPD_CTRL, reg_val & ~BIT(28));
 		DSS_REG_W(io, HDMI_HPD_CTRL, reg_val | BIT(28));
@@ -2791,6 +2799,7 @@ static int hdmi_tx_power_off(struct mdss_panel_data *panel_data)
 static int hdmi_tx_power_on(struct mdss_panel_data *panel_data)
 {
 	int rc = 0;
+	u32 cable_sense;
 	int res_changed = RESOLUTION_UNCHANGED;
 	struct dss_io_data *io = NULL;
 	struct mdss_panel_info *panel_info = NULL;
@@ -2824,26 +2833,6 @@ static int hdmi_tx_power_on(struct mdss_panel_data *panel_data)
 		panel_info->xres, panel_info->yres,
 		panel_info->cont_splash_enabled ? " (handoff underway)" : "");
 
-	if (hdmi_ctrl->pdata.cont_splash_enabled) {
-		hdmi_ctrl->pdata.cont_splash_enabled = false;
-		panel_data->panel_info.cont_splash_enabled = false;
-
-		if (res_changed == RESOLUTION_UNCHANGED) {
-			hdmi_ctrl->panel_power_on = true;
-
-			hdmi_cec_config(
-				hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);
-
-			hdmi_tx_set_vendor_specific_infoframe(hdmi_ctrl);
-			hdmi_tx_set_spd_infoframe(hdmi_ctrl);
-
-			if (!hdmi_tx_is_hdcp_enabled(hdmi_ctrl))
-				hdmi_tx_set_audio_switch_node(hdmi_ctrl, 1);
-
-			goto end;
-		}
-	}
-
 	rc = hdmi_tx_core_on(hdmi_ctrl);
 	if (rc) {
 		DEV_ERR("%s: hdmi_msm_core_on failed\n", __func__);
@@ -2857,6 +2846,30 @@ static int hdmi_tx_power_on(struct mdss_panel_data *panel_data)
 #ifdef MHL_CEC_SUPPORT
 	hdmi_cec_config(hdmi_ctrl->feature_data[HDMI_TX_FEAT_CEC]);
 #endif
+
+	if (hdmi_ctrl->pdata.cont_splash_enabled) {
+		hdmi_ctrl->pdata.cont_splash_enabled = false;
+		panel_data->panel_info.cont_splash_enabled = false;
+
+		if (res_changed == RESOLUTION_UNCHANGED) {
+			if (!hdmi_tx_is_hdcp_enabled(hdmi_ctrl) &&
+				!hdmi_tx_is_encryption_set(hdmi_ctrl))
+				hdmi_tx_set_audio_switch_node(hdmi_ctrl, 1);
+
+			cable_sense = (DSS_REG_R(io, HDMI_HPD_INT_STATUS) &
+					BIT(1)) >> 1;
+
+			if (!cable_sense) {
+				hdmi_ctrl->polarity_reset = true;
+				hdmi_tx_hpd_polarity_setup(hdmi_ctrl,
+					HPD_CONNECT_POLARITY);
+				return 0;
+			}
+
+			goto end;
+		}
+	}
+
 	if (hdmi_ctrl->hpd_state) {
 		rc = hdmi_tx_start(hdmi_ctrl);
 		if (rc) {
@@ -4164,7 +4177,12 @@ static int hdmi_tx_probe(struct platform_device *pdev)
 
 		hdmi_ctrl->pdata.primary = true;
 		hdmi_ctrl->pdata.cont_splash_enabled = true;
-		hdmi_ctrl->video_resolution = vic;
+
+		if (vic)
+			hdmi_ctrl->video_resolution = vic;
+		else
+			hdmi_ctrl->video_resolution =
+				DEFAULT_HDMI_PRIMARY_RESOLUTION;
 	}
 
 	rc = hdmi_tx_get_dt_data(pdev, &hdmi_ctrl->pdata);
