@@ -31,6 +31,7 @@
  * descriptors with each SAD being 3 bytes long.
  * Thus, the maximum length of the audio data block would be 30 bytes
  */
+#define MAX_NUMBER_ADB                  5
 #define MAX_AUDIO_DATA_BLOCK_SIZE	30
 #define MAX_SPKR_ALLOC_DATA_BLOCK_SIZE	3
 
@@ -82,7 +83,7 @@ struct hdmi_edid_ctrl {
 #if defined(CONFIG_SEC_MHL_SUPPORT)
 	u32 audio_channel_info;
 #endif
-	u8 audio_data_block[MAX_AUDIO_DATA_BLOCK_SIZE];
+	u8 audio_data_block[MAX_NUMBER_ADB * MAX_AUDIO_DATA_BLOCK_SIZE];
 	int adb_size;
 	u8 spkr_alloc_data_block[MAX_SPKR_ALLOC_DATA_BLOCK_SIZE];
 	int sadb_size;
@@ -585,7 +586,8 @@ static void hdmi_edid_extract_3d_present(struct hdmi_edid_ctrl *edid_ctrl,
 static void hdmi_edid_extract_audio_data_blocks(
 	struct hdmi_edid_ctrl *edid_ctrl, const u8 *in_buf)
 {
-	u8 len;
+	u8 len = 0;
+	u8 adb_max = 0;
 	const u8 *adb = NULL;
 #if defined(CONFIG_SEC_MHL_SUPPORT)
 	u16 audio_ch = 0;
@@ -606,16 +608,24 @@ static void hdmi_edid_extract_audio_data_blocks(
 #endif
 	edid_ctrl->adb_size = 0;
 
+	memset(edid_ctrl->audio_data_block, 0,
+		sizeof(edid_ctrl->audio_data_block));
+
 	do {
+		len = 0;
 		adb = hdmi_edid_find_block(in_buf, offset, AUDIO_DATA_BLOCK,
 			&len);
-		if ((adb == NULL) || (len > MAX_AUDIO_DATA_BLOCK_SIZE)) {
-			if (!edid_ctrl->adb_size)
+
+		if ((adb == NULL) || (len > MAX_AUDIO_DATA_BLOCK_SIZE ||
+			adb_max >= MAX_NUMBER_ADB)) {
+			if (!edid_ctrl->adb_size) {
 				DEV_DBG("%s: No/Invalid Audio Data Block\n",
 					__func__);
-			else
+				return;
+			} else {
 				DEV_DBG("%s: No more valid ADB found\n",
 					__func__);
+			}
 
 			continue;
 		}
@@ -625,6 +635,7 @@ static void hdmi_edid_extract_audio_data_blocks(
 		offset = (adb - in_buf) + 1 + len;
 
 		edid_ctrl->adb_size += len;
+		adb_max++;
 	} while (adb);
 
 #if defined(CONFIG_SEC_MHL_SUPPORT)
