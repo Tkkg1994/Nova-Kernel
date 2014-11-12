@@ -531,13 +531,15 @@ static int acm_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 #ifdef CONFIG_USB_DUN_SUPPORT
 		notify_control_line_state((unsigned long)w_value);
 #endif
+		pr_debug("%s: USB_CDC_REQ_SET_CONTROL_LINE_STATE: DTR:%d RST:%d\n",
+				__func__, w_value & ACM_CTRL_DTR ? 1 : 0,
+				w_value & ACM_CTRL_RTS ? 1 : 0);
 		if (acm->port.notify_modem) {
 			unsigned port_num =
 				gacm_ports[acm->port_num].client_port_num;
 
 			acm->port.notify_modem(&acm->port, port_num, w_value);
 		}
-
 		break;
 
 	default:
