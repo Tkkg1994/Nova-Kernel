@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,7 @@ struct module;
 /**
  * struct subsys_desc - subsystem descriptor
  * @name: name of subsystem
+ * @fw_name: firmware name
  * @depends_on: subsystem this subsystem depends on to operate
  * @dev: parent device
  * @owner: module the descriptor belongs to
@@ -51,6 +52,7 @@ struct module;
  */
 struct subsys_desc {
 	const char *name;
+	char fw_name[256];
 	const char *depends_on;
 	struct device *dev;
 	struct module *owner;
@@ -109,6 +111,7 @@ extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 
 extern void *subsystem_get(const char *name);
+extern void *subsystem_get_with_fwname(const char *name, const char *fw_name);
 extern void subsystem_put(void *subsystem);
 
 extern struct subsys_device *subsys_register(struct subsys_desc *desc);
@@ -143,6 +146,11 @@ static inline int subsystem_crashed(const char *name)
 
 static inline void *subsystem_get(const char *name)
 {
+	return NULL;
+}
+
+static inline void *subsystem_get_with_fwname(const char *name,
+				const char *fw_name) {
 	return NULL;
 }
 

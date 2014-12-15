@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -799,6 +799,8 @@ static int subsys_powerup(const struct subsys_desc *subsys)
 
 	if (subsys->stop_ack_irq)
 		INIT_COMPLETION(d->stop_ack);
+
+	d->desc.fw_name = subsys->fw_name;
 	ret = pil_boot(&d->desc);
 
 	return ret;
