@@ -1542,6 +1542,13 @@ config MSM_SLEEPER
 	help
 	  CPU hotplug driver
 
+config BLU_PLUG
+	bool "Dynamic hotplug driver"
+	depends on HOTPLUG_CPU
+	default n
+	help
+	  The Dynamic hotplug driver automatically online/offline CPUs proportional to system load.
+
 config FORCE_FAST_CHARGE
 	bool "Force fast charging (AC/USB) by Yank555.lu"
 	default n
