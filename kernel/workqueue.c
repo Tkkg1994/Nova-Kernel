@@ -1852,8 +1852,6 @@ static void maybe_create_worker(struct worker_pool *pool)
 __releases(&pool->lock)
 __acquires(&pool->lock)
 {
-	if (!need_to_create_worker(pool))
-		return;
 restart:
 	spin_unlock_irq(&pool->lock);
 
@@ -1879,7 +1877,6 @@ restart:
 	 */
 	if (need_to_create_worker(pool))
 		goto restart;
-	return;
 }
 
 /**
