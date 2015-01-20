@@ -1531,6 +1531,12 @@ config MSM_LIMITER
 	  The MSM Frequency Limiter Driver controls max frequency limit for each CPU
 	  to desired value on suspend/resume
 
+config MSM_SLEEPER
+	bool "CPU hotplug driver"
+	default y
+	help
+	  CPU hotplug driver
+
 config FORCE_FAST_CHARGE
 	bool "Force fast charging (AC/USB) by Yank555.lu"
 	default n
