@@ -1424,15 +1424,12 @@ static void vmstat_shepherd(struct work_struct *w)
 		if (need_update(cpu) &&
 			cpumask_test_and_clear_cpu(cpu, cpu_stat_off))
 
-			schedule_delayed_work_on(smp_processor_id(),
-					this_cpu_ptr(&vmstat_work),
-				__round_jiffies_relative(sysctl_stat_interval, cpu));
-
+			schedule_delayed_work_on(cpu,
+				&per_cpu(vmstat_work, cpu), 0);
 	put_online_cpus();
 
 	schedule_delayed_work(&shepherd,
 		round_jiffies_relative(sysctl_stat_interval));
-
 }
 
 static void __init start_shepherd_timer(void)
