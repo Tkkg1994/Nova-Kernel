@@ -508,8 +508,8 @@ static void exit_mm(struct task_struct * tsk)
 	mm_update_next_owner(mm);
 
 #ifndef CONFIG_UML
-	clear_thread_flag(TIF_MEMDIE);
 	mm_released = mmput(mm);
+	unmark_oom_victim();
 	if (mm_released)
 		set_tsk_thread_flag(tsk, TIF_MM_RELEASED);
 #endif
