@@ -39,7 +39,7 @@
 #include <linux/sec_param.h>
 #include <mach/sec_debug.h>
 #include <mach/msm_iomap.h>
-#include <mach/msm_smsm.h>
+#include <soc/qcom/smsm.h>
 #ifdef CONFIG_SEC_DEBUG_LOW_LOG
 #include <linux/seq_file.h>
 #include <linux/fcntl.h>
