@@ -20,6 +20,18 @@
 /* physical offset of RAM */
 #define PLAT_PHYS_OFFSET UL(CONFIG_PHYS_OFFSET)
 
+#if defined(CONFIG_KEXEC_HARDBOOT)
+#if defined(CONFIG_MACH_MSM8974_HAMMERHEAD)
+#define KEXEC_HB_PAGE_ADDR     UL(0x10100000)
+#define KEXEC_HB_KERNEL_LOC        UL(0x3208000)
+#elif defined(CONFIG_ARCH_APQ8084) /* shamu */
+#define KEXEC_HB_PAGE_ADDR     UL(0x3e9df000)
+#define KEXEC_HB_KERNEL_LOC    UL(0x3208000)
+#else
+#error "Adress for kexec hardboot page not defined"
+#endif
+#endif
+
 #ifndef __ASSEMBLY__
 int msm_get_memory_type_from_name(const char *memtype_name);
 
