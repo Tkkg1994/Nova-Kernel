@@ -990,6 +990,11 @@ static int mdss_mdp_overlay_set(struct msm_fb_data_type *mfd,
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	int ret;
 
+	if (req->flags & MDSS_MDP_ROT_ONLY) {
+		ret = mdss_mdp_rotator_setup(mfd, req);
+		return ret;
+	}
+
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
 	if (ret)
 		return ret;
@@ -999,9 +1004,7 @@ static int mdss_mdp_overlay_set(struct msm_fb_data_type *mfd,
 		return -EPERM;
 	}
 
-	if (req->flags & MDSS_MDP_ROT_ONLY) {
-		ret = mdss_mdp_rotator_setup(mfd, req);
-	} else if (req->src.format == MDP_RGB_BORDERFILL) {
+	if (req->src.format == MDP_RGB_BORDERFILL) {
 		req->id = BORDERFILL_NDX;
 	} else {
 		struct mdss_mdp_pipe *pipe;
@@ -1800,6 +1803,11 @@ static int mdss_mdp_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 	if (!mdp5_data || !mdp5_data->ctl)
 		return -ENODEV;
 
+	if (ndx & MDSS_MDP_ROT_SESSION_MASK) {
+		ret = mdss_mdp_rotator_unset(ndx);
+		return ret;
+	}
+
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 	/*
 	 * In case of LPM mode, the new lpmapp issues flip commands even after sleep flag is
@@ -1838,11 +1846,7 @@ static int mdss_mdp_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 
 	pr_debug("unset ndx=%x\n", ndx);
 
-	if (ndx & MDSS_MDP_ROT_SESSION_MASK) {
-		ret = mdss_mdp_rotator_unset(ndx);
-	} else {
-		ret = mdss_mdp_overlay_release(mfd, ndx);
-	}
+	ret = mdss_mdp_overlay_release(mfd, ndx);
 
 done:
 	mutex_unlock(&mdp5_data->ov_lock);
@@ -2051,6 +2055,11 @@ static int mdss_mdp_overlay_play(struct msm_fb_data_type *mfd,
 
 	pr_debug("play req id=%x\n", req->id);
 
+	if (req->id & MDSS_MDP_ROT_SESSION_MASK) {
+		ret = mdss_mdp_rotator_play(mfd, req);
+		return ret;
+	}
+
 	ret = mutex_lock_interruptible(&mdp5_data->ov_lock);
 	if (ret)
 		return ret;
@@ -2062,9 +2071,7 @@ static int mdss_mdp_overlay_play(struct msm_fb_data_type *mfd,
 
 	mdss_mdp_release_splash_pipe(mfd);
 
-	if (req->id & MDSS_MDP_ROT_SESSION_MASK) {
-		ret = mdss_mdp_rotator_play(mfd, req);
-	} else if (req->id == BORDERFILL_NDX) {
+	if (req->id == BORDERFILL_NDX) {
 		pr_debug("borderfill enable\n");
 		mdp5_data->borderfill_enable = true;
 		ret = mdss_mdp_overlay_free_fb_pipe(mfd);
@@ -2271,16 +2278,10 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 		buf_l->p[0].addr = fbi->fix.smem_start;
 	}
 
-<<<<<<< HEAD
-	buf->p[0].addr += offset;
-	buf->p[0].len = fbi->fix.smem_len - offset;
-	buf->num_planes = 1;
-=======
 	buf_l->p[0].addr += offset;
 	buf_l->p[0].len = fbi->fix.smem_len - offset;
 	buf_l->num_planes = 1;
 
->>>>>>> 288a260... msm: mdss: refactor pipe buffer handling
 	mdss_mdp_pipe_unmap(pipe);
 
 	if (fbi->var.xres > MAX_MIXER_WIDTH || mfd->split_display) {
@@ -2295,9 +2296,6 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 			goto pan_display_error;
 		}
 
-<<<<<<< HEAD
-		pipe->back_buf = *buf;
-=======
 		buf_r = mdss_mdp_overlay_buf_alloc(mfd, pipe);
 		if (!buf_r) {
 			pr_err("unable to allocate memory for fb buffer\n");
@@ -2307,7 +2305,6 @@ static void mdss_mdp_overlay_pan_display(struct msm_fb_data_type *mfd)
 		buf_r->p[0] = buf_l->p[0];
 		buf_r->num_planes = 1;
 
->>>>>>> 288a260... msm: mdss: refactor pipe buffer handling
 		mdss_mdp_pipe_unmap(pipe);
 	}
 	mutex_unlock(&mdp5_data->ov_lock);
