@@ -3126,6 +3126,12 @@ static irqreturn_t hdmi_tx_isr(int irq, void *data)
 			(DSS_REG_R(io, HDMI_HPD_INT_STATUS) & BIT(1)) >> 1;
 		spin_unlock_irqrestore(&hdmi_ctrl->hpd_state_lock, flags);
 
+		if (hdmi_tx_is_hdcp_enabled(hdmi_ctrl)) {
+			hdmi_hdcp_cancel_auth(
+				hdmi_ctrl->feature_data[HDMI_TX_FEAT_HDCP],
+				!hdmi_ctrl->hpd_state);
+		}
+
 #if defined(CONFIG_SEC_MHL_SUPPORT)
 		if (hdmi_ctrl->hpd_state == 1) {
 			/*
@@ -3142,6 +3148,7 @@ static irqreturn_t hdmi_tx_isr(int irq, void *data)
 				BIT(0) | BIT(2) | BIT(1));
 		}
 #else
+
 		/*
 		 * Ack the current hpd interrupt and stop listening to
 		 * new hpd interrupt.

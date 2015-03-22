@@ -62,6 +62,7 @@ int hdmi_hdcp_isr(void *ptr);
 int hdmi_hdcp_reauthenticate(void *input);
 int hdmi_hdcp_authenticate(void *hdcp_ctrl);
 void hdmi_hdcp_off(void *hdcp_ctrl);
+void hdmi_hdcp_cancel_auth(void *input, bool req);
 #if defined(CONFIG_SEC_MHL_AP_HDCP_PART1)
 int hdmi_hdcp_authentication_part1_start(struct hdmi_hdcp_ctrl *hdcp_ctrl);
 #endif
