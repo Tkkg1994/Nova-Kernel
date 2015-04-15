@@ -14,12 +14,13 @@
 #define __ARCH_ARM_MACH_MSM_MMI_UNIT_INFO_H
 
 /* set of data provided to the modem over SMEM */
-#define MMI_UNIT_INFO_VER 2
-#define BARCODE_MAX_LEN 64
-#define MACHINE_MAX_LEN 32
-#define CARRIER_MAX_LEN 64
-#define BASEBAND_MAX_LEN 96
-#define DEVICE_MAX_LEN 32
+#define MMI_UNIT_INFO_VER 3
+#define BARCODE_MAX_LEN 65
+#define MACHINE_MAX_LEN 33
+#define CARRIER_MAX_LEN 65
+#define BASEBAND_MAX_LEN 97
+#define MSMHW_MAX_LEN 32
+#define DEVICE_MAX_LEN 33
 struct mmi_unit_info {
 	uint32_t version;
 	uint32_t system_rev;
@@ -31,5 +32,6 @@ struct mmi_unit_info {
 	char baseband[BASEBAND_MAX_LEN];
 	char device[DEVICE_MAX_LEN];
 	uint32_t radio;
+	uint32_t powerup_reason;
 };
 #endif

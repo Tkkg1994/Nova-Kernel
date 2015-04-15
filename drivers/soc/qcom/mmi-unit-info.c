@@ -12,13 +12,14 @@
  */
 
 #include <linux/module.h>
+#include <linux/seq_file.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/setup.h>
 #include <asm/system_info.h>
-#include <asm/bootinfo.h>
+#include <soc/qcom/bootinfo.h>
 
-#include <soc/qcom/smsm.h>
+#include <soc/qcom/smem.h>
 #include "mmi-unit-info.h"
 
 #include <linux/of.h>
@@ -72,14 +73,28 @@ int __init setup_androidboot_radio_init(char *s)
 }
 __setup("androidboot.radio=", setup_androidboot_radio_init);
 
+static char msm_hw[MSMHW_MAX_LEN+1];
+
+void mach_cpuinfo_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "Device\t\t: %s\n", androidboot_device);
+	/* Zero is not a valid "Radio" value.      */
+	/* Lack of "Radio" entry in cpuinfo means: */
+	/*	look for radio in "Revision"       */
+	if (androidboot_radio)
+		seq_printf(m, "Radio\t\t: %x\n", androidboot_radio);
+
+	seq_printf(m, "MSM Hardware\t: %s\n", msm_hw);
+}
+
 static char extended_baseband[BASEBAND_MAX_LEN+1] = "\0";
 
-struct comp_value {
-	char compatible[128];
-	void *data;
+struct mmi_of_lookup {
+	const char *compatible;
+	unsigned int *data;
 };
 
-static struct comp_value mmi_of_setup[] __initdata = {
+static struct mmi_of_lookup mmi_of_setup[] __initdata = {
 	{ .compatible = "linux,seriallow", .data = &system_serial_low },
 	{ .compatible = "linux,serialhigh", .data = &system_serial_high },
 	{ .compatible = "linux,hwrev", .data = &system_rev },
@@ -90,8 +105,9 @@ static struct comp_value mmi_of_setup[] __initdata = {
 static void __init mmi_of_populate_setup(void)
 {
 	struct device_node *n = of_find_node_by_path("/chosen");
-	struct comp_value *tbl = mmi_of_setup;
+	struct mmi_of_lookup *tbl = mmi_of_setup;
 	const char *baseband;
+	const char *temp;
 
 	while (tbl->data) {
 		of_property_read_u32(n, tbl->compatible, tbl->data);
@@ -101,15 +117,55 @@ static void __init mmi_of_populate_setup(void)
 	if (0 == of_property_read_string(n, "mmi,baseband", &baseband))
 		strlcpy(extended_baseband, baseband, sizeof(extended_baseband));
 
+	if (0 == of_property_read_string(n, "mmi,msm_hw", &temp))
+		strlcpy(msm_hw, temp, sizeof(msm_hw));
+
 	of_node_put(n);
 }
 
 static int __init mmi_unit_info_init(void)
 {
+	struct mmi_unit_info *mui;
+
 	mmi_of_populate_setup();
+
+	#define SMEM_KERNEL_RESERVE_SIZE 1024
+	mui = (struct mmi_unit_info *) smem_alloc(SMEM_KERNEL_RESERVE,
+		SMEM_KERNEL_RESERVE_SIZE, 0, SMEM_ANY_HOST_FLAG);
+
+	if (!mui) {
+		pr_err("%s: failed to allocate mmi_unit_info in SMEM\n",
+			__func__);
+		return 1;
+	} else if (PTR_ERR(mui) == -EPROBE_DEFER) {
+		pr_err("%s: SMEM not yet initialized\n", __func__);
+	}
+
+	mui->version = MMI_UNIT_INFO_VER;
+	mui->system_rev = system_rev;
+	mui->system_serial_low = system_serial_low;
+	mui->system_serial_high = system_serial_high;
+	strlcpy(mui->machine, machine_desc->name, MACHINE_MAX_LEN);
+	strlcpy(mui->barcode, serialno, BARCODE_MAX_LEN);
+	strlcpy(mui->baseband, extended_baseband, BASEBAND_MAX_LEN);
+	strlcpy(mui->carrier, carrier, CARRIER_MAX_LEN);
+	strlcpy(mui->device, androidboot_device, DEVICE_MAX_LEN);
+	mui->radio = androidboot_radio;
+	mui->powerup_reason = bi_powerup_reason();
+
+	pr_info("mmi_unit_info (SMEM) for modem: version = 0x%02x,"
+		" device = '%s', radio = %d, system_rev = 0x%04x,"
+		" system_serial = 0x%08x%08x, machine = '%s',"
+		" barcode = '%s', baseband = '%s', carrier = '%s'\n",
+		mui->version,
+		mui->device, mui->radio, mui->system_rev,
+		mui->system_serial_high, mui->system_serial_low,
+		mui->machine, mui->barcode,
+		mui->baseband, mui->carrier);
+
 	return 0;
 }
 
-module_init(mmi_unit_info_init);
+early_initcall(mmi_unit_info_init);
 MODULE_DESCRIPTION("Motorola Mobility LLC. Unit Info");
 MODULE_LICENSE("GPL v2");

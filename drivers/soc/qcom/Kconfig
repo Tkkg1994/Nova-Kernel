@@ -281,6 +281,8 @@ config MSM_WATCHDOG_CTX_PRINT
 	bool "Print context dump saved by secure mode watchdog handler"
 	default n
 	depends on MSM_WATCHDOG_V2
+	depends on MSM_MEMORY_DUMP_V2
+	depends on PSTORE_RAM_ANNOTATION_APPEND
 	help
 	  After enabling this option, kernel will reserve bigger buffer
 	  for secure mode watchdog handler to save info. And kernel will
@@ -434,7 +436,6 @@ config MSM_OCMEM_POWER_DISABLE
 config MSM_SCM
 	bool "Secure Channel Manager (SCM) support"
 	default n
-
 
 config MMI_SOC_INFO
 	depends on ARCH_MSM
