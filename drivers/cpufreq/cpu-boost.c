@@ -30,6 +30,10 @@
 #include <linux/state_notifier.h>
 #endif
 
+#ifdef CONFIG_CPUFREQ_HARDLIMIT
+#include <linux/cpufreq_hardlimit.h>
+#endif
+
 struct cpu_sync {
 	struct delayed_work boost_rem;
 	int cpu;
@@ -287,6 +291,9 @@ static void run_boost_migration(unsigned int cpu)
 	if (ret)
 		return;
 
+		if (s->task_load < migration_load_threshold)
+			continue;
+
 	req_freq = load_based_syncs ?
 		(dest_policy.max * s->task_load) / 100 :
 						src_policy.cur;
@@ -301,7 +308,11 @@ static void run_boost_migration(unsigned int cpu)
 
 	cancel_delayed_work_sync(&s->boost_rem);
 
-	s->boost_min = req_freq;
+#ifdef CONFIG_CPUFREQ_HARDLIMIT
+        s->boost_min = check_cpufreq_hardlimit(req_freq);
+#else
+		s->boost_min = req_freq;
+#endif
 
 	/* Force policy re-evaluation to trigger adjust notifier. */
 	get_online_cpus();
@@ -392,7 +403,7 @@ static int boost_migration_notify(struct notifier_block *nb,
 	spin_lock_irqsave(&s->lock, flags);
 	s->pending = true;
 	s->src_cpu = mnd->src_cpu;
-	s->task_load = load_based_syncs ? mnd->load : 0;
+	s->task_load = mnd->load;
 	spin_unlock_irqrestore(&s->lock, flags);
 
 	return NOTIFY_OK;
