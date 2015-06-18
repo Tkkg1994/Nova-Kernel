@@ -556,9 +556,6 @@ extern struct cpufreq_governor cpufreq_gov_bioshock;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_RACCOON_CITY)
 extern struct cpufreq_governor cpufreq_gov_raccoon_city;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_raccoon_city)
-#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_BLUACTIVE)
-extern struct cpufreq_governor cpufreq_gov_bluactive;
-#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_bluactive)
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_LIONHEART)
 extern struct cpufreq_governor cpufreq_gov_lionheart;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_lionheart)
@@ -580,6 +577,9 @@ extern struct cpufreq_governor cpufreq_gov_alucard;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ELEMENTALX)
 extern struct cpufreq_governor cpufreq_gov_elementalx;
 #define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_elementalx)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_BLU_ACTIVE)
+extern struct cpufreq_governor cpufreq_gov_blu_active;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_blu_active)
 #endif
 
 /*********************************************************************
