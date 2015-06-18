@@ -35,6 +35,7 @@
 #include <linux/kernel_stat.h>
 #include <asm/cputime.h>
 #include <linux/touchboost.h>
+#include <linux/sched/rt.h>
 
 static int active_count;
 
@@ -117,7 +118,7 @@ static int nabove_hispeed_delay = ARRAY_SIZE(default_above_hispeed_delay);
 #define DEFAULT_BOOSTPULSE_DURATION 1000000
 static int boostpulse_duration_val = DEFAULT_BOOSTPULSE_DURATION;
 #define DEFAULT_INPUT_BOOST_FREQ 1036800
-int input_boost_freq = DEFAULT_INPUT_BOOST_FREQ;
+unsigned int hells_input_boost_freq = DEFAULT_INPUT_BOOST_FREQ;
 
 /*
  * Making sure cpufreq stays low when it needs to stay low
@@ -463,8 +464,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 	}
 
 	if (boosted) {
-		if (new_freq < input_boost_freq)
-			new_freq = input_boost_freq;
+		if (new_freq < hells_input_boost_freq)
+			new_freq = hells_input_boost_freq;
  	}
 
 	if (counter > 0) {
@@ -1134,13 +1135,13 @@ timer_rate = val_round;
 static struct global_attr timer_rate_attr = __ATTR(timer_rate, 0644,
 		show_timer_rate, store_timer_rate);
 
-static ssize_t show_input_boost_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t show_hells_input_boost_freq(struct kobject *kobj, struct attribute *attr,
                                      char *buf)
 {
-	return sprintf(buf, "%d\n", input_boost_freq);
+	return sprintf(buf, "%d\n", hells_input_boost_freq);
 }
 
-static ssize_t store_input_boost_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_hells_input_boost_freq(struct kobject *kobj, struct attribute *attr,
                                       const char *buf, size_t count)
 {
 	int ret;
@@ -1150,13 +1151,13 @@ static ssize_t store_input_boost_freq(struct kobject *kobj, struct attribute *at
 	if (ret < 0)
 		return ret;
 
-	input_boost_freq = val;
+	hells_input_boost_freq = val;
 	return count;
 
 }
 
-static struct global_attr input_boost_freq_attr = __ATTR(input_boost_freq, 0644,
-		show_input_boost_freq, store_input_boost_freq);
+static struct global_attr hells_input_boost_freq_attr = __ATTR(hells_input_boost_freq, 0644,
+		show_hells_input_boost_freq, store_hells_input_boost_freq);
 
 static ssize_t show_timer_slack(
 	struct kobject *kobj, struct attribute *attr, char *buf)
@@ -1278,7 +1279,7 @@ static struct attribute *interactive_attributes[] = {
 	&go_hispeed_load_attr.attr,
 	&min_sample_time_attr.attr,
 	&timer_rate_attr.attr,
-	&input_boost_freq_attr.attr,
+	&hells_input_boost_freq_attr.attr,
 	&timer_slack.attr,
 	&io_is_busy_attr.attr,
 	&boostpulse_duration.attr,
@@ -1374,10 +1375,10 @@ static int cpufreq_governor_hellsactive(struct cpufreq_policy *policy,
 			mutex_unlock(&gov_lock);
 			return rc;
 		}
-
+		
 		atomic_notifier_chain_register(&migration_notifier_head,
 					&thread_migration_nb);
-
+		
 		idle_notifier_register(&cpufreq_interactive_idle_nb);
 		cpufreq_register_notifier(
 			&cpufreq_notifier_block, CPUFREQ_TRANSITION_NOTIFIER);
