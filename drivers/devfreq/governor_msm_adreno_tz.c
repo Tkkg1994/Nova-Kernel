@@ -30,6 +30,8 @@
 #include "adreno_idler.h"
 #endif
 
+extern bool mdss_screen_on;
+
 static DEFINE_SPINLOCK(tz_lock);
 
 /*
@@ -193,7 +195,7 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 #ifdef CONFIG_STATE_NOTIFIER
 	if (suspended || state_suspended) {
 #else
-	if (suspended || power_suspended) {
+	if (!mdss_screen_on) {
 #endif
 		*freq = devfreq->profile->freq_table[devfreq->profile->max_state - 1];
 		return 0;
