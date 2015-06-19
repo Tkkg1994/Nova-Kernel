@@ -1099,13 +1099,14 @@ static void trace_rcu_future_gp(struct rcu_node *rnp, struct rcu_data *rdp,
 /*
  * Start some future grace period, as needed to handle newly arrived
  * callbacks.  The required future grace periods are recorded in each
- * rcu_node structure's ->need_future_gp field.
+ * rcu_node structure's ->need_future_gp field.  Returns true if there
+ * is reason to awaken the grace-period kthread.
  *
  * The caller must hold the specified rcu_node structure's ->lock.
  */
 static bool __maybe_unused
 rcu_start_future_gp(struct rcu_node *rnp, struct rcu_data *rdp,
-				unsigned long *c_out)
+		    unsigned long *c_out)
 {
 	unsigned long c;
 	int i;
@@ -1182,6 +1183,7 @@ out:
 	if (c_out != NULL)
 		*c_out = c;
 	return ret;
+
 }
 
 /*
@@ -1213,9 +1215,9 @@ static int rcu_future_gp_cleanup(struct rcu_state *rsp, struct rcu_node *rnp)
 static void rcu_gp_kthread_wake(struct rcu_state *rsp)
 {
 	if (current == rsp->gp_kthread ||
-		!ACCESS_ONCE(rsp->gp_flags) ||
-		!rsp->gp_kthread)
-			return;
+	    !ACCESS_ONCE(rsp->gp_flags) ||
+	    !rsp->gp_kthread)
+		return;
 	wake_up(&rsp->gp_wq);
 }
 
@@ -1297,6 +1299,7 @@ static bool rcu_accelerate_cbs(struct rcu_state *rsp, struct rcu_node *rnp,
  * assign ->completed numbers to any callbacks in the RCU_NEXT_TAIL
  * sublist.  This function is idempotent, so it does not hurt to
  * invoke it repeatedly.  As long as it is not invoked -too- often...
+ * Returns true if the RCU grace-period kthread needs to be awakened.
  *
  * The caller must hold rnp->lock with interrupts disabled.
  */
@@ -1338,19 +1341,23 @@ static bool rcu_advance_cbs(struct rcu_state *rsp, struct rcu_node *rnp,
  * Update CPU-local rcu_data state to record the beginnings and ends of
  * grace periods.  The caller must hold the ->lock of the leaf rcu_node
  * structure corresponding to the current CPU, and must have irqs disabled.
+ * Returns true if the grace-period kthread needs to be awakened.
  */
-static void __note_gp_changes(struct rcu_state *rsp, struct rcu_node *rnp, struct rcu_data *rdp)
+static bool __note_gp_changes(struct rcu_state *rsp, struct rcu_node *rnp,
+			      struct rcu_data *rdp)
 {
+	bool ret;
+
 	/* Handle the ends of any preceding grace periods first. */
 	if (rdp->completed == rnp->completed) {
 
 		/* No grace period end, so just accelerate recent callbacks. */
-		rcu_accelerate_cbs(rsp, rnp, rdp);
+		ret = rcu_accelerate_cbs(rsp, rnp, rdp);
 
 	} else {
 
 		/* Advance callbacks. */
-		rcu_advance_cbs(rsp, rnp, rdp);
+		ret = rcu_advance_cbs(rsp, rnp, rdp);
 
 		/* Remember that we saw this grace-period completion. */
 		rdp->completed = rnp->completed;
@@ -1369,11 +1376,13 @@ static void __note_gp_changes(struct rcu_state *rsp, struct rcu_node *rnp, struc
 		rdp->qs_pending = !!(rnp->qsmask & rdp->grpmask);
 		zero_cpu_stall_ticks(rdp);
 	}
+	return ret;
 }
 
 static void note_gp_changes(struct rcu_state *rsp, struct rcu_data *rdp)
 {
 	unsigned long flags;
+	bool needwake;
 	struct rcu_node *rnp;
 
 	local_irq_save(flags);
@@ -1384,8 +1393,10 @@ static void note_gp_changes(struct rcu_state *rsp, struct rcu_data *rdp)
 		local_irq_restore(flags);
 		return;
 	}
-	__note_gp_changes(rsp, rnp, rdp);
+	needwake = __note_gp_changes(rsp, rnp, rdp);
 	raw_spin_unlock_irqrestore(&rnp->lock, flags);
+	if (needwake)
+		rcu_gp_kthread_wake(rsp);
 }
 
 /*
@@ -1438,7 +1449,7 @@ static int rcu_gp_init(struct rcu_state *rsp)
 		WARN_ON_ONCE(rnp->completed != rsp->completed);
 		ACCESS_ONCE(rnp->completed) = rsp->completed;
 		if (rnp == rdp->mynode)
-			__note_gp_changes(rsp, rnp, rdp);
+			(void)__note_gp_changes(rsp, rnp, rdp);
 		rcu_preempt_boost_start_gp(rnp);
 		trace_rcu_grace_period_init(rsp->name, rnp->gpnum,
 					    rnp->level, rnp->grplo,
@@ -1525,7 +1536,7 @@ static void rcu_gp_cleanup(struct rcu_state *rsp)
 		ACCESS_ONCE(rnp->completed) = rsp->gpnum;
 		rdp = this_cpu_ptr(rsp->rda);
 		if (rnp == rdp->mynode)
-			__note_gp_changes(rsp, rnp, rdp);
+			needgp = __note_gp_changes(rsp, rnp, rdp) || needgp;
 		nocb += rcu_future_gp_cleanup(rsp, rnp);
 		raw_spin_unlock_irq(&rnp->lock);
 		cond_resched();
@@ -1539,6 +1550,7 @@ static void rcu_gp_cleanup(struct rcu_state *rsp)
 	trace_rcu_grace_period(rsp->name, rsp->completed, "end");
 	rsp->fqs_state = RCU_GP_IDLE;
 	rdp = this_cpu_ptr(rsp->rda);
+	/* Advance CBs to reduce false positives below. */
 	needgp = rcu_advance_cbs(rsp, rnp, rdp) || needgp;
 	if (needgp || cpu_needs_another_gp(rsp, rdp))
 		ACCESS_ONCE(rsp->gp_flags) = 1;
@@ -1620,16 +1632,6 @@ static int __noreturn rcu_gp_kthread(void *arg)
 	}
 }
 
-static void rsp_wakeup(struct irq_work *work)
-{
-	struct rcu_state *rsp = container_of(work, struct rcu_state, wakeup_work);
-
-	/* Wake up rcu_gp_kthread() to start the grace period. */
-	wake_up(&rsp->gp_wq);
-	trace_rcu_grace_period(rsp->name, ACCESS_ONCE(rsp->gpnum),
-			       "Workqueuewoken");
-}
-
 /*
  * Start a new RCU grace period if warranted, re-initializing the hierarchy
  * in preparation for detecting the next grace period.  The caller must hold
@@ -1638,6 +1640,8 @@ static void rsp_wakeup(struct irq_work *work)
  * Note that it is legal for a dying CPU (which is marked as offline) to
  * invoke this function.  This can happen when the dying CPU reports its
  * quiescent state.
+ *
+ * Returns true if the grace-period kthread must be awakened.
  */
 static bool
 rcu_start_gp_advanced(struct rcu_state *rsp, struct rcu_node *rnp,
@@ -1656,8 +1660,7 @@ rcu_start_gp_advanced(struct rcu_state *rsp, struct rcu_node *rnp,
 	/*
 	 * We can't do wakeups while holding the rnp->lock, as that
 	 * could cause possible deadlocks with the rq->lock. Defer
-	 * the wakeup to interrupt context.  And don't bother waking
-	 * up the running kthread.
+	 * the wakeup to our caller.
 	 */
 	return true;
 }
@@ -1668,6 +1671,8 @@ rcu_start_gp_advanced(struct rcu_state *rsp, struct rcu_node *rnp,
  * is invoked indirectly from rcu_advance_cbs(), which would result in
  * endless recursion -- or would do so if it wasn't for the self-deadlock
  * that is encountered beforehand.
+ *
+ * Returns true if the grace-period kthread needs to be awakened.
  */
 static bool rcu_start_gp(struct rcu_state *rsp)
 {
@@ -2350,6 +2355,7 @@ static void __call_rcu_core(struct rcu_state *rsp, struct rcu_data *rdp,
 			    struct rcu_head *head, unsigned long flags)
 {
 	bool needwake;
+
 	/*
 	 * If called from an extended quiescent state, invoke the RCU
 	 * core in order to force a re-evaluation of RCU's idleness.

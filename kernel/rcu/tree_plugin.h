@@ -2174,6 +2174,8 @@ static void rcu_nocb_wait_gp(struct rcu_data *rdp)
 	if (needwake)
 		rcu_gp_kthread_wake(rdp->rsp); 
 
+	if (needwake)
+		rcu_gp_kthread_wake(rdp->rsp);
 	/*
 	 * Wait for the grace period.  Do so interruptibly to avoid messing
 	 * up the load average.
