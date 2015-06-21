@@ -1629,8 +1629,9 @@ rcu_start_gp_advanced(struct rcu_state *rsp, struct rcu_node *rnp,
 
 	/*
 	 * We can't do wakeups while holding the rnp->lock, as that
-	 * could cause possible deadlocks with the rq->lock. Deter
-	 * the wakeup to interrupt context.
+	 * could cause possible deadlocks with the rq->lock. Defer
+	 * the wakeup to interrupt context.  And don't bother waking
+	 * up the running kthread.
 	 */
 	return true;
 }
