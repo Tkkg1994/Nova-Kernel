@@ -410,7 +410,7 @@ KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -Wno-unused-variable -Wno-maybe-uninitialized \
 		   -fno-strict-aliasing -fno-common -mcpu=cortex-a15 -mtune=cortex-a15 -mfpu=neon-vfpv4 \
 		   -Werror-implicit-function-declaration -fno-pic \
-		   -Wno-format-security -Wno-unused-function -Wno-array-bounds -Wno-error=date-time \
+		   -Wno-format-security -Wno-unused-function -Wno-array-bounds \
 		   -Wno-cpp -Wno-declaration-after-statement -fno-var-tracking-assignments -Wno-sizeof-pointer-memaccess -Wno-aggressive-loop-optimizations -Wno-sequence-point \
 		   -std=gnu89
 
@@ -767,9 +767,6 @@ KBUILD_CFLAGS += $(call cc-option,-Werror=implicit-int)
 
 # require functions to have arguments in prototypes, not empty 'int foo()'
 KBUILD_CFLAGS += $(call cc-option,-Werror=strict-prototypes)
-
-# Prohibit date/time macros, which would make the build non-deterministic
-KBUILD_CFLAGS += $(call cc-option,-Werror=date-time)
 
 # use the deterministic mode of AR if available
 KBUILD_ARFLAGS := $(call ar-option,D)
