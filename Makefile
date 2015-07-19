@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 10
-SUBLEVEL = 50
+SUBLEVEL = 51
 EXTRAVERSION =
 NAME = TOSSUG Baby Fish
 
@@ -716,6 +716,8 @@ endif
 endif
 
 KBUILD_CFLAGS += $(call cc-option, -fno-var-tracking-assignments)
+
+KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
 
 ifdef CONFIG_DEBUG_INFO
 KBUILD_CFLAGS += -g
