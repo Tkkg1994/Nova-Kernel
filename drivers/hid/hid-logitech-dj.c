@@ -679,7 +679,6 @@ static int logi_dj_raw_event(struct hid_device *hdev,
 	struct dj_receiver_dev *djrcv_dev = hid_get_drvdata(hdev);
 	struct dj_report *dj_report = (struct dj_report *) data;
 	unsigned long flags;
-	bool report_processed = false;
 
 	dbg_hid("%s, size:%d\n", __func__, size);
 
