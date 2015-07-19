@@ -1321,8 +1321,6 @@ static void sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
 	unsigned long timeout;
 	unsigned long flags;
 
-	present = mmc_gpio_get_cd(host->mmc);
-
 	spin_lock_irqsave(&host->lock, flags);
 	if (clock && clock == host->clock)
 		goto ret;
@@ -1701,6 +1699,8 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 			present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
 					SDHCI_CARD_PRESENT;
 	}
+
+	present = mmc_gpio_get_cd(host->mmc);
 
 	spin_lock_irqsave(&host->lock, flags);
 

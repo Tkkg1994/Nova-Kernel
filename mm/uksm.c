@@ -4653,8 +4653,8 @@ int rmap_walk_ksm(struct page *page, struct rmap_walk_control *rwc)
 	int search_new_forks = 0;
 	unsigned long address;
 
-	VM_BUG_ON_PAGE(!PageKsm(page), page);
-	VM_BUG_ON_PAGE(!PageLocked(page), page);
+	VM_BUG_ON(!PageKsm(page));
+	VM_BUG_ON(!PageLocked(page));
 
 	stable_node = page_stable_node(page);
 	if (!stable_node)
@@ -4709,8 +4709,8 @@ void ksm_migrate_page(struct page *newpage, struct page *oldpage)
 {
 	struct stable_node *stable_node;
 
-	VM_BUG_ON_PAGE(!PageLocked(oldpage), oldpage);
-	VM_BUG_ON_PAGE(!PageLocked(newpage), newpage);
+	VM_BUG_ON(!PageLocked(oldpage));
+	VM_BUG_ON(!PageLocked(newpage));
 	VM_BUG_ON(newpage->mapping != oldpage->mapping);
 
 	stable_node = page_stable_node(newpage);
