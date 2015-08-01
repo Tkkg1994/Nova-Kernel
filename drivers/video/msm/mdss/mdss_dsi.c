@@ -616,7 +616,7 @@ bool mdss_dsi_is_panel_dead(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 								panel_data);
 
-	if (ctrl_pdata->ndx == DSI_CTRL_MASTER)
+	if (ctrl_pdata->ndx == DSI_CTRL_LEFT)
 		ret = (pdata->panel_info.panel_dead) ? true : false;
 	else {
 		struct mdss_panel_data *pdata_dsi0;
@@ -778,7 +778,6 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 #endif
 		mdss_dsi_panel_power_panel_on(pdata, 1);
 		mdss_dsi_panel_reset(pdata, 1);
-	}
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 		/* LP11 Restore */
@@ -1319,7 +1318,7 @@ int mdss_dsi_ioctl_handler(struct mdss_panel_data *pdata, u32 cmd, void *arg)
 	int old_tx_mode;
 	int mode = DSI_MODE_BIT_LP;
 
-	if (!pdata->panel_info.panel_power_on) {
+	if (!mdss_dsi_is_panel_on(pdata)) {
 		pr_err("%s: Panel is off\n", __func__);
 		return -EPERM;
 	}
