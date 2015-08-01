@@ -554,7 +554,7 @@ int get_scaled_level(struct samsung_display_driver_data *vdd, int ndx);
 int mdss_samsung_create_sysfs(void *data);
 
 /* EXTERN FUNCTION */
-extern void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+extern int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_panel_cmds *pcmds);
 
 /* EXTERN VARIABLE */

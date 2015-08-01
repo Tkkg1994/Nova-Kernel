@@ -162,12 +162,12 @@ int mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (!mdss_panel_attach_get(ctrl)) {
 		pr_err("%s: mdss_panel_attach_get(%d) : %d\n",__func__, ctrl->ndx, mdss_panel_attach_get(ctrl));
-		return;
+		return 0;
 	}
 
 	if (IS_ERR_OR_NULL(pcmds)) {
 		pr_err("%s: pcmds is NULL\n",__func__);
-		return;
+		return 0;
 	}
 #endif
 
@@ -452,7 +452,7 @@ int mdss_panel_check_status(struct mdss_dsi_ctrl_pdata *ctrl)
 	u8 pwr_mode = 0;
 	struct mdss_panel_esd_pdata *esd_data = &ctrl->panel_esd_data;
 
-	if (!ctrl->panel_data.panel_info.panel_power_on) {
+	if (!mdss_dsi_is_panel_on_interactive(&ctrl->panel_data)) {
 		ret = 1;
 		goto end;
 	}
