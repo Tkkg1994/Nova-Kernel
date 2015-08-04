@@ -1138,10 +1138,12 @@ static int mdss_fb_unblank_sub(struct msm_fb_data_type *mfd)
 
 	if (!mdss_panel_is_power_on_interactive(cur_power_state) &&
 		mfd->mdp.on_fnc) {
+		int panel_dead = mfd->panel_info->panel_dead;
 		ret = mfd->mdp.on_fnc(mfd);
 		if (ret == 0) {
 			mfd->panel_power_state = MDSS_PANEL_POWER_ON;
-			mfd->panel_info->panel_dead = false;
+			if (panel_dead)
+				mfd->panel_info->panel_dead = false;
 		} else if (mfd->disp_thread) {
 			mdss_fb_stop_disp_thread(mfd);
 			goto error;
@@ -1267,7 +1269,6 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 #else
 				mdss_fb_set_backlight(mfd, 0);
 #endif
-				mfd->unset_bl_level = bl_level_old;
 				mfd->bl_updated = 0;
 			}
 			mfd->panel_power_state = req_power_state;
@@ -1300,6 +1301,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+	int panel_dead = mfd->panel_info->panel_dead;
+	int ret;
 
 	mdss_fb_pan_idle(mfd);
 	if (mfd->op_enable == 0) {
@@ -1311,7 +1314,16 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 			mfd->suspend.panel_power_state = MDSS_PANEL_POWER_OFF;
 		return 0;
 	}
-	return mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
+	ret = mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
+
+	if (blank_mode == FB_BLANK_UNBLANK && !panel_dead &&
+		mfd->panel_info->panel_dead) {
+		pr_err("%s: Panel is dead, attempt recovery\n", __func__);
+		mdss_fb_blank_sub(FB_BLANK_NORMAL, info, 1);
+		mdss_fb_blank_sub(FB_BLANK_UNBLANK, info, 1);
+	}
+
+	return ret;
 }
 
 /* Set VM page protection */

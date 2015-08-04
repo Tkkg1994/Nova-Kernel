@@ -1556,6 +1556,7 @@ static int mdss_mdp_commit_cb(enum mdp_commit_stage_type commit_stage,
 
 	return ret;
 }
+
 int mdss_mdp_overlay_kickoff(struct msm_fb_data_type *mfd,
 				struct mdp_display_commit *data)
 {
@@ -2551,7 +2552,7 @@ static ssize_t te_enable_store(struct device *dev,
 		goto end;
 	}
 
-	if (!mfd->panel_power_on) {
+	if (!mdss_fb_is_power_on(mfd)) {
 		pr_warn("panel is not powered\n");
 		r = -EPERM;
 		goto end;
@@ -2674,7 +2675,7 @@ static ssize_t hbm_store(struct device *dev,
 	}
 
 	mutex_lock(&ctl->offlock);
-	if (!mfd->panel_power_on) {
+	if (!mdss_fb_is_power_on(mfd)) {
 		pr_warning("panel is not powered\n");
 		r = -EPERM;
 		goto unlock;
@@ -3095,7 +3096,7 @@ static int mdss_mdp_pp_ioctl(struct msm_fb_data_type *mfd,
 	u32 copy_from_kernel = 0;
 
 	if (mfd->panel_info->partial_update_enabled) {
-		pr_err("Partical update feature is enabled.");
+		pr_err("Partial update feature is enabled.");
 		return -EPERM;
 	}
 
@@ -3213,7 +3214,7 @@ static int mdss_mdp_histo_ioctl(struct msm_fb_data_type *mfd, u32 cmd,
 	static int req = -1;
 
 	if (mfd->panel_info->partial_update_enabled) {
-		pr_err("Partical update feature is enabled.");
+		pr_err("Partial update feature is enabled.");
 		return -EPERM;
 	}
 
