@@ -789,11 +789,13 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	}
 }
 
+#define MAX_DISON_RECOVERY_CNT	2
 static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
 	u8 pwr_mode = 0;
+	static int dison_recovery;
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -846,24 +848,35 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 #endif
 
-	end:
-		pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
-
 	mdss_dsi_get_pwr_mode(pdata, &pwr_mode, DSI_MODE_BIT_LP);
 	/* validate screen is actually on from the master control only */
-	if (!ctrl->ndx && (pwr_mode & 0x04) != 0x04)
+	if ((pwr_mode & 0x04) != 0x04) {
 		pr_err("%s: Display failure: DISON (0x04) bit not set\n",
+								__func__);
+		if (pdata->panel_info.panel_dead) {
+			pr_err("%s: Panel recovery FAILED!!. cnt =%d\n",
+						__func__, dison_recovery);
+			if (dison_recovery >= MAX_DISON_RECOVERY_CNT) {
+				pr_err("%s: fail to recover display. cnt=%d. "
+					"Calling BUG() now !!! \n",
+					__func__, dison_recovery);
+				BUG();
+			}
+		}
+		pdata->panel_info.panel_dead = true;
+		dison_recovery++;
+	} else
+		dison_recovery = 0;
 
 	if (ctrl->set_hbm && ctrl->panel_data.panel_info.hbm_off_state) {
 		ctrl->set_hbm(ctrl, 1);
 		ctrl->panel_data.panel_info.hbm_off_state = 0;
 	}
 
-
-end:
 	if (!ctrl->ndx)
 		pr_info("%s-. Pwr_mode(0x0A) = 0x%x\n", __func__, pwr_mode);
-
+end:
+	pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 	return 0;
 }
 
