@@ -161,7 +161,9 @@ void account_user_time(struct task_struct *p, cputime_t cputime,
 	acct_account_cputime(p);
 
 	/* Account power usage for user time */
+#ifndef CONFIG_UML
 	acct_update_power(p, cputime);
+#endif
 }
 
 /*
@@ -214,7 +216,9 @@ void __account_system_time(struct task_struct *p, cputime_t cputime,
 	acct_account_cputime(p);
 
 	/* Account power usage for system time */
+#ifndef CONFIG_UML
 	acct_update_power(p, cputime);
+#endif
 }
 
 /*
