@@ -1068,7 +1068,7 @@ got_override2:
 		if (charger->is_charging) {
 			if (check_fastcharge(charger))
 				goto got_override;
-		
+
 			/* decrease the charging current according to siop level */
 			current_now = charger->charging_current * val->intval / 100;
 
