@@ -727,7 +727,7 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
 };
 
 int is_driver_dfs_capable(struct wiphy *wiphy, struct wireless_dev *wdev,
-                          void *data, int data_len)
+                          const void *data, int data_len)
 {
     u32 dfs_capability;
     struct sk_buff *temp_skbuff;
@@ -764,7 +764,7 @@ int is_driver_dfs_capable(struct wiphy *wiphy, struct wireless_dev *wdev,
 static int
 wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
                                          struct wireless_dev *wdev,
-                                         void *data, int data_len)
+                                         const void *data, int data_len)
 {
     hdd_context_t *pHddCtx      = wiphy_priv(wiphy);
     struct sk_buff *skb         = NULL;
@@ -866,7 +866,7 @@ nla_put_failure:
 static int
 wlan_hdd_cfg80211_get_concurrency_matrix(struct wiphy *wiphy,
                                          struct wireless_dev *wdev,
-                                         void *data, int data_len)
+                                         const void *data, int data_len)
 {
     uint32_t feature_set_matrix[WLAN_HDD_MAX_FEATURE_SET] = {0};
     uint8_t i, feature_sets, max_feature_sets;
@@ -948,7 +948,7 @@ max_buffer_err:
 #ifdef WLAN_FEATURE_STATS_EXT
 static int wlan_hdd_cfg80211_stats_ext_request(struct wiphy *wiphy,
                                         struct wireless_dev *wdev,
-                                        void *data, int data_len)
+                                        const void *data, int data_len)
 {
     tStatsExtRequestReq stats_ext_req;
     struct net_device *dev = wdev->netdev;
@@ -957,7 +957,7 @@ static int wlan_hdd_cfg80211_stats_ext_request(struct wiphy *wiphy,
     eHalStatus status;
 
     stats_ext_req.request_data_len = data_len;
-    stats_ext_req.request_data = data;
+    stats_ext_req.request_data = (void*)data;
 
     status = sme_StatsExtRequest(pAdapter->sessionId, &stats_ext_req);
 
@@ -8687,7 +8687,7 @@ static int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
        || (WLAN_HDD_P2P_GO == pAdapter->device_mode)
        )
     {
-        if( NULL == mac )
+        if ((NULL == mac) || (vos_is_macaddr_broadcast((v_MACADDR_t *)mac)))
         {
             v_U16_t i;
             for(i = 0; i < WLAN_MAX_STA_COUNT; i++)
