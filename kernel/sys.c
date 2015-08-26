@@ -521,7 +521,7 @@ EXPORT_SYMBOL_GPL(kernel_power_off);
 
 int reboot_in_progress(void)
 {
-	return atomic_read(&reboot_triggered);
+	return atomic_cmpxchg(&reboot_triggered, 0, 1);
 }
 EXPORT_SYMBOL_GPL(reboot_in_progress);
 
@@ -563,7 +563,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	if (ret)
 		return ret;
 
-	atomic_set(&reboot_triggered, 1);
+	/* return if reboot is already triggered */
+	if (atomic_cmpxchg(&reboot_triggered, 0, 1)) {
+		pr_err("Reboot already triggered\n");
+		return ret;
+	}
+
 	/* Instead of trying to make the power_off code look like
 	 * halt when pm_power_off is not set do it the easy way.
 	 */
