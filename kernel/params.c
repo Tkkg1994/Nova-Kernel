@@ -185,7 +185,7 @@ char *parse_args(const char *doing,
 		 s16 max_level,
 		 int (*unknown)(char *param, char *val, const char *doing))
 {
-	char *param, *val;
+	char *param, *val, *err = NULL;
 
 	/* Chew leading spaces */
 	args = skip_spaces(args);
@@ -200,7 +200,7 @@ char *parse_args(const char *doing,
 		args = next_arg(args, &param, &val);
 		/* Stop at -- */
 		if (!val && strcmp(param, "--") == 0)
-			return args;
+			return err ?: args;
 		irq_was_disabled = irqs_disabled();
 		ret = parse_one(param, val, doing, params, num,
 				min_level, max_level, unknown);
@@ -209,24 +209,25 @@ char *parse_args(const char *doing,
 				doing, param);
 
 		switch (ret) {
+		case 0:
+			continue;
 		case -ENOENT:
 			pr_err("%s: Unknown parameter `%s'\n", doing, param);
-			return ERR_PTR(ret);
+			break;
 		case -ENOSPC:
 			pr_err("%s: `%s' too large for parameter `%s'\n",
 			       doing, val ?: "", param);
-			return ERR_PTR(ret);
-		case 0:
 			break;
 		default:
 			pr_err("%s: `%s' invalid for parameter `%s'\n",
 			       doing, val ?: "", param);
-			return ERR_PTR(ret);
+			break;
 		}
+
+		err = ERR_PTR(ret);
 	}
 
-	/* All parsed OK. */
-	return NULL;
+	return err;
 }
 
 /* Lazy bastard, eh? */
