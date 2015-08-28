@@ -1926,7 +1926,7 @@
 			interrupt-names = "kgsl_3d0_irq";
 			qcom,id = <0x0>;
 			qcom,chipid = <0x4020000>;
-			qcom,initial-pwrlevel = <0x3>;
+			qcom,initial-pwrlevel = <0x4>;
 			qcom,idle-timeout = <0x8>;
 			qcom,strtstp-sleepwake;
 			qcom,clk-map = <0x6>;
@@ -4118,22 +4118,6 @@
 			gpios = <0x43 0x0 0x0>;
 		};
 
-		ramoops {
-			compatible = "ramoops";
-			status = "ok";
-			android,ramoops-buffer-start = <0x3e9e0000>;
-			android,ramoops-buffer-size = <0x100000>;
-			android,ramoops-console-size = <0x80000>;
-			android,ramoops-record-size = <0x7f800>;
-			android,ramoops-annotate-size = <0x800>;
-			android,ramoops-dump-oops = <0x1>;
-
-			android,ramoops-hole {
-				compatible = "qcom,msm-contig-mem";
-				qcom,memblock-reserve = <0x3e9e0000 0x100000>;
-			};
-		};
-
 		interrupt-controller@f9000000 {
 			compatible = "qcom,msm-qgic2";
 			interrupt-controller;
@@ -4508,7 +4492,7 @@
 					regulator-name = "8084_s6";
 					qcom,set = <0x3>;
 					status = "okay";
-					regulator-min-microvolt = <0xc6f98>;
+					regulator-min-microvolt = <0xaae60>;
 					regulator-max-microvolt = <0xdbba0>;
 				};
 

@@ -67,9 +67,6 @@
 #define MSMFB_ASYNC_BLIT              _IOW(MSMFB_IOCTL_MAGIC, 168, unsigned int)
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
-#define MSMFB_REG_READ   _IOWR(MSMFB_IOCTL_MAGIC, 64, struct msmfb_reg_access)
-#define MSMFB_REG_WRITE  _IOW(MSMFB_IOCTL_MAGIC, 65, struct msmfb_reg_access)
-#define MSMFB_SECURE   _IOWR(MSMFB_IOCTL_MAGIC, 170, struct msmfb_secure_config)
 
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
@@ -524,7 +521,6 @@ enum mdss_mdp_blend_op {
 	BLEND_OP_MAX,
 };
 
-#define DECIMATED_DIMENSION(dim, deci) (((dim) + ((1 << (deci)) - 1)) >> (deci))
 #define MAX_PLANES	4
 struct mdp_scale_data {
 	uint8_t enable_pxl_ext;
@@ -1085,18 +1081,6 @@ struct msmfb_mixer_info_req {
 	int mixer_num;
 	int cnt;
 	struct mdp_mixer_info info[MAX_PIPE_PER_MIXER];
-};
-
-struct msmfb_secure_config {
-	uint8_t enable;
-	uint32_t fd;
-};
-
-struct msmfb_reg_access {
-	uint8_t address;
-	uint8_t use_hs_mode;
-	size_t buffer_size;
-	void __user *buffer;
 };
 
 enum {
