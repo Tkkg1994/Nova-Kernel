@@ -419,7 +419,6 @@ void notrace ramoops_console_write_buf(const char *buf, size_t size)
 	persistent_ram_write(cxt->cprz, buf, size);
 }
 
-
 #ifdef CONFIG_OF
 static struct of_device_id ramoops_of_match[] = {
 	{ .compatible = "ramoops", },
