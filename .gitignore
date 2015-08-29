@@ -124,6 +124,8 @@ GSYMS
 GTAGS
 *.orig
 *~
+*.dts
+*.dtb
 \#*#
 /arch/arm/boot/compressed/ashldi3.S
 /arch/arm/boot/compressed/lib1funcs.S
