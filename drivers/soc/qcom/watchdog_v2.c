@@ -97,7 +97,6 @@ module_param(enable, int, 0);
 static long WDT_HZ = 32765;
 module_param(WDT_HZ, long, 0);
 
-
 #ifdef CONFIG_SEC_DEBUG
 static unsigned int regsave_vaddr;
 static unsigned int regsave_paddr;
@@ -487,7 +486,7 @@ unsigned int get_wdog_regsave_paddr(void)
 unsigned int get_last_pet_paddr(void)
 {
 #if 0 // MUST BE CHECK
-	return virt_to_phys(&wdog_dd->last_pet);
+	return &wdog_dd->last_pet;
 #else
 	return 0;
 #endif
@@ -1198,9 +1197,9 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 #ifdef CONFIG_SEC_DEBUG
 	printk(KERN_INFO "WDOG_V2 handled by TZ:dump @0x%08x PA:%08x\n",
 			(unsigned int) wdog_dd->scm_regsave,
-			(unsigned int) virt_to_phys(wdog_dd->scm_regsave));
+			(unsigned int) wdog_dd->scm_regsave_size);
 	regsave_vaddr = (unsigned int) wdog_dd->scm_regsave;
-	regsave_paddr = (unsigned int) virt_to_phys(wdog_dd->scm_regsave);
+	regsave_paddr = (unsigned int) wdog_dd->scm_regsave_size;
 #endif
 
 	if (wdog_dd->scm_regsave) {
