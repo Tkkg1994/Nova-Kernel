@@ -19,6 +19,7 @@
 
 #include <linux/types.h>
 #include <linux/cpuidle.h>
+#include <asm/smp_plat.h>
 
 #ifdef CONFIG_SMP
 extern void msm_secondary_startup(void);

@@ -20,8 +20,8 @@
 
 #include <mach/camera.h>
 #include <linux/msm_iommu_domains.h>
-#include <mach/msm_bus.h>
-#include <mach/msm_bus_board.h>
+#include <linux/msm-bus.h>
+#include <linux/msm-bus-board.h>
 
 #include "msm_jpeg_platform.h"
 #include "msm_jpeg_sync.h"
