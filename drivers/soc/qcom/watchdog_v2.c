@@ -530,7 +530,7 @@ unsigned int get_wdog_regsave_paddr(void)
 unsigned int get_last_pet_paddr(void)
 {
 #if 0 // MUST BE CHECK
-	return &wdog_dd->last_pet;
+	return virt_to_phys(&wdog_dd->last_pet);
 #else
 	return 0;
 #endif
@@ -552,15 +552,16 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 
 	struct scm_desc desc = {0};
 
+#ifdef CONFIG_SEC_DEBUG
+	printk(KERN_INFO "WDOG_V2 handled by TZ:dump @0x%08x PA:%08x\n",
+			(unsigned int) wdog_dd->scm_regsave,
+			(unsigned int) virt_to_phys(wdog_dd->scm_regsave));	
+	regsave_vaddr = (unsigned int) wdog_dd->scm_regsave;
+	regsave_paddr = (unsigned int) virt_to_phys(wdog_dd->scm_regsave);
+#endif
+
 	if (MSM_DUMP_MAJOR(msm_dump_table_version()) == 1) {
 		wdog_dd->scm_regsave = (void *)__get_free_page(GFP_KERNEL);
-#ifdef CONFIG_SEC_DEBUG
-		printk(KERN_INFO "WDOG_V2 handled by TZ:dump @0x%08x PA:%08x\n",
-				(unsigned int) wdog_dd->scm_regsave,
-				(unsigned int) wdog_dd->scm_regsave_size);
-		regsave_vaddr = (unsigned int) wdog_dd->scm_regsave;
-		regsave_paddr = (unsigned int) wdog_dd->scm_regsave_size;
-#endif
 		if (wdog_dd->scm_regsave) {
 			desc.args[0] = cmd_buf.addr =
 					virt_to_phys(wdog_dd->scm_regsave);
