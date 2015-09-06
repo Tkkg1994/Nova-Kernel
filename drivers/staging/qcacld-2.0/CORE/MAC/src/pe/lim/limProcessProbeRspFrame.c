@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -53,13 +53,32 @@
 #include "parserApi.h"
 
 tSirRetStatus
-limValidateIEInformationInProbeRspFrame (tANI_U8 *pRxPacketInfo)
+limValidateIEInformationInProbeRspFrame (tpAniSirGlobal pMac,
+                                         tANI_U8 *pRxPacketInfo)
 {
    tSirRetStatus       status = eSIR_SUCCESS;
+   tANI_U8             *pFrame;
+   tANI_U32            nFrame;
+   tANI_U32            nMissingRsnBytes;
 
+   /*
+    * Validate a Probe response frame for malformed frame.
+    * If the frame is malformed then do not consider as it
+    * may cause problem fetching wrong IE values
+    */
    if (WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo) < (SIR_MAC_B_PR_SSID_OFFSET + SIR_MAC_MIN_IE_LEN))
    {
-      status = eSIR_FAILURE;
+      return eSIR_FAILURE;
+   }
+
+   pFrame = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
+   nFrame = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
+   nMissingRsnBytes = 0;
+
+   status = sirvalidateandrectifyies(pMac, pFrame, nFrame, &nMissingRsnBytes);
+   if ( status == eSIR_SUCCESS )
+   {
+       WDA_GET_RX_MPDU_LEN(pRxPacketInfo) += nMissingRsnBytes;
    }
 
    return status;
@@ -100,11 +119,13 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
     tANI_U8 qosEnabled =    false;
     tANI_U8 wmeEnabled =    false;
 
-    if (psessionEntry)
+    if (!psessionEntry)
     {
-        limLog(pMac,LOG1,"SessionId:%d ProbeRsp Frame is received",
-               psessionEntry->peSessionId);
+        limLog(pMac, LOGE, FL("psessionEntry is NULL") );
+        return;
     }
+    limLog(pMac,LOG1,"SessionId:%d ProbeRsp Frame is received",
+               psessionEntry->peSessionId);
 
     pProbeRsp = vos_mem_malloc(sizeof(tSirProbeRespBeacon));
     if ( NULL == pProbeRsp )
@@ -115,8 +136,6 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
 
     pProbeRsp->ssId.length              = 0;
     pProbeRsp->wpa.length               = 0;
-    pProbeRsp->propIEinfo.apName.length = 0;
-
 
     pHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
 
@@ -136,7 +155,8 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
    }
 
    // Validate IE information before processing Probe Response Frame
-   if (limValidateIEInformationInProbeRspFrame(pRxPacketInfo) != eSIR_SUCCESS)
+   if (limValidateIEInformationInProbeRspFrame(pMac, pRxPacketInfo)
+       != eSIR_SUCCESS)
    {
        PELOG1(limLog(pMac, LOG1,
                  FL("Parse error ProbeResponse, length=%d"), frameLen);)
@@ -166,7 +186,7 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
         (pMac->lim.gLimMlmState == eLIM_MLM_LEARN_STATE) ||            //mlm state check should be global - 18th oct
         (psessionEntry->limMlmState == eLIM_MLM_WT_JOIN_BEACON_STATE) ||
         (psessionEntry->limMlmState == eLIM_MLM_LINK_ESTABLISHED_STATE) )||
-        ((GET_LIM_SYSTEM_ROLE(psessionEntry) == eLIM_STA_IN_IBSS_ROLE) &&
+        (LIM_IS_IBSS_ROLE(psessionEntry) &&
         (psessionEntry->limMlmState == eLIM_MLM_BSS_STARTED_STATE)) ||
         pMac->fScanOffload)
     {
@@ -177,7 +197,8 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                       FL("Probe Resp Frame Received: BSSID " MAC_ADDRESS_STR " (RSSI %d)"),
                       MAC_ADDR_ARRAY(pHdr->bssId),
-                      (uint)abs((tANI_S8)WDA_GET_RX_RSSI_DB(pRxPacketInfo)));
+                      (uint)abs((tANI_S8)WDA_GET_RX_RSSI_NORMALIZED(
+                                                        pRxPacketInfo)));
         }
 
         // Get pointer to Probe Response frame body
@@ -242,16 +263,6 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
             * our Probe Request sent upon reaching
             * heart beat threshold
             */
-            #if 0
-            if (wlan_cfgGetStr(pMac,
-                          WNI_CFG_BSSID,
-                          currentBssId,
-                          &cfg) != eSIR_SUCCESS)
-            {
-                /// Could not get BSSID from CFG. Log error.
-                limLog(pMac, LOGP, FL("could not retrieve BSSID"));
-            }
-            #endif //TO SUPPORT BT-AMP
             sirCopyMacAddr(currentBssId,psessionEntry->bssId);
 
             if ( !vos_mem_compare(currentBssId, pHdr->bssId, sizeof(tSirMacAddr)) )
@@ -272,10 +283,8 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
             }
 
 
-            if (psessionEntry->limSystemRole == eLIM_STA_ROLE)
-            {
-                if (pProbeRsp->channelSwitchPresent ||
-                    pProbeRsp->propIEinfo.propChannelSwitchPresent)
+            if (LIM_IS_STA_ROLE(psessionEntry)) {
+                if (pProbeRsp->channelSwitchPresent)
                 {
                     limUpdateChannelSwitch(pMac, pProbeRsp, psessionEntry);
                 }
@@ -313,10 +322,8 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
                     // If needed, downgrade the EDCA parameters
                     limSetActiveEdcaParams(pMac, psessionEntry->gLimEdcaParams, psessionEntry);
 
-                    if (pStaDs->aniPeer == eANI_BOOLEAN_TRUE)
-                        limSendEdcaParams(pMac, psessionEntry->gLimEdcaParamsActive, pStaDs->bssId, eANI_BOOLEAN_TRUE);
-                    else
-                        limSendEdcaParams(pMac, psessionEntry->gLimEdcaParamsActive, pStaDs->bssId, eANI_BOOLEAN_FALSE);
+                    limSendEdcaParams(pMac, psessionEntry->gLimEdcaParamsActive,
+                                      pStaDs->bssId);
                 }
                 else
                     PELOGE(limLog(pMac, LOGE, FL("Self Entry missing in Hash Table"));)
@@ -329,7 +336,7 @@ limProcessProbeRspFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo,tpPESession 
                limDetectChangeInApCapabilities(pMac, pProbeRsp, psessionEntry);
            }
         }
-        else if ((psessionEntry->limSystemRole == eLIM_STA_IN_IBSS_ROLE) &&
+        else if (LIM_IS_IBSS_ROLE(psessionEntry) &&
                  (psessionEntry->limMlmState == eLIM_MLM_BSS_STARTED_STATE))
                 limHandleIBSScoalescing(pMac, pProbeRsp, pRxPacketInfo,psessionEntry);
     } // if ((pMac->lim.gLimMlmState == eLIM_MLM_WT_PROBE_RESP_STATE) || ...
@@ -357,8 +364,6 @@ limProcessProbeRspFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
 
     pProbeRsp->ssId.length              = 0;
     pProbeRsp->wpa.length               = 0;
-    pProbeRsp->propIEinfo.apName.length = 0;
-
 
     pHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
 
@@ -385,7 +390,8 @@ limProcessProbeRspFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
     }
 #endif
      // Validate IE information before processing Probe Response Frame
-    if (limValidateIEInformationInProbeRspFrame(pRxPacketInfo) != eSIR_SUCCESS)
+    if (limValidateIEInformationInProbeRspFrame(pMac, pRxPacketInfo)
+        != eSIR_SUCCESS)
     {
        PELOG1(limLog(pMac, LOG1,FL("Parse error ProbeResponse, length=%d"),
               frameLen);)
@@ -412,7 +418,8 @@ limProcessProbeRspFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                       FL("Probe Resp Frame Received: BSSID " MAC_ADDRESS_STR " (RSSI %d)"),
                       MAC_ADDR_ARRAY(pHdr->bssId),
-                      (uint)abs((tANI_S8)WDA_GET_RX_RSSI_DB(pRxPacketInfo)));
+                      (uint)abs((tANI_S8)
+                                 WDA_GET_RX_RSSI_NORMALIZED(pRxPacketInfo)));
         }
 
         // Get pointer to Probe Response frame body
@@ -459,7 +466,8 @@ limProcessProbeRspFrameNoSession(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo)
             VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                       FL("Probe Resp Frame Received: BSSID " MAC_ADDRESS_STR " (RSSI %d)"),
                       MAC_ADDR_ARRAY(pHdr->bssId),
-                      (uint)abs((tANI_S8)WDA_GET_RX_RSSI_DB(pRxPacketInfo)));
+                      (uint)abs((tANI_S8)WDA_GET_RX_RSSI_NORMALIZED(
+                                                       pRxPacketInfo)));
         }
 
         // Get pointer to Probe Response frame body

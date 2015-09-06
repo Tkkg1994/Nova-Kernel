@@ -51,8 +51,6 @@
 /* internal header files relevant only for specific systems (Pronto) */
 #include <ol_txrx_encap.h>    /* OL_TX_ENCAP, etc */
 
-#define ENABLE_TX_SCHED 1
-
 #define ol_tx_prepare_ll(tx_desc, vdev, msdu, msdu_info) \
     do {                                                                      \
         struct ol_txrx_pdev_t *pdev = vdev->pdev;                             \
@@ -80,6 +78,7 @@ ol_tx_ll(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
     struct ol_txrx_msdu_info_t msdu_info;
 
     msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
+    msdu_info.htt.action.tx_comp_req = 0;
     /*
      * The msdu_list variable could be used instead of the msdu var,
      * but just to clarify which operations are done on a single MSDU
@@ -92,6 +91,7 @@ ol_tx_ll(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
 
         msdu_info.htt.info.ext_tid = adf_nbuf_get_tid(msdu);
         msdu_info.peer = NULL;
+
         ol_tx_prepare_ll(tx_desc, vdev, msdu, &msdu_info);
 
         /*
@@ -191,9 +191,13 @@ ol_tx_vdev_ll_pause_queue_send_base(struct ol_txrx_vdev_t *vdev)
         }
     }
     if (vdev->ll_pause.txq.depth) {
-		adf_os_timer_cancel(&vdev->ll_pause.timer);
+        adf_os_timer_cancel(&vdev->ll_pause.timer);
         adf_os_timer_start(
                 &vdev->ll_pause.timer, OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS);
+        vdev->ll_pause.is_q_timer_on = TRUE;
+        if (vdev->ll_pause.txq.depth >= vdev->ll_pause.max_q_depth) {
+            vdev->ll_pause.q_overflow_cnt++;
+        }
     }
 
     adf_os_spin_unlock_bh(&vdev->ll_pause.mutex);
@@ -206,6 +210,7 @@ ol_tx_vdev_pause_queue_append(
    u_int8_t start_timer)
 {
     adf_os_spin_lock_bh(&vdev->ll_pause.mutex);
+
     while (msdu_list &&
             vdev->ll_pause.txq.depth < vdev->ll_pause.max_q_depth)
     {
@@ -230,6 +235,7 @@ ol_tx_vdev_pause_queue_append(
     if (start_timer) {
         adf_os_timer_start(
                 &vdev->ll_pause.timer, OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS);
+        vdev->ll_pause.is_q_timer_on = TRUE;
     }
     adf_os_spin_unlock_bh(&vdev->ll_pause.mutex);
 
@@ -268,15 +274,15 @@ ol_tx_ll_queue(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
             msdu_list = ol_tx_vdev_pause_queue_append(vdev, msdu_list, 1);
     } else {
         if (vdev->ll_pause.txq.depth > 0 ||
-            vdev->pdev->tx_throttle_ll.current_throttle_level !=
+            vdev->pdev->tx_throttle.current_throttle_level !=
             THROTTLE_LEVEL_0) {
             /* not paused, but there is a backlog of frms from a prior pause or
                throttle off phase */
             msdu_list = ol_tx_vdev_pause_queue_append(vdev, msdu_list, 0);
             /* if throttle is disabled or phase is "on" send the frame */
-            if (vdev->pdev->tx_throttle_ll.current_throttle_level ==
+            if (vdev->pdev->tx_throttle.current_throttle_level ==
                 THROTTLE_LEVEL_0 ||
-                vdev->pdev->tx_throttle_ll.current_throttle_phase ==
+                vdev->pdev->tx_throttle.current_throttle_phase ==
                 THROTTLE_PHASE_ON) {
                 /* send as many frames as possible from the vdevs backlog */
                 ol_tx_vdev_ll_pause_queue_send_base(vdev);
@@ -304,12 +310,12 @@ ol_tx_pdev_ll_pause_queue_send_all(struct ol_txrx_pdev_t *pdev)
         return;
     }
 
-    if (pdev->tx_throttle_ll.current_throttle_phase == THROTTLE_PHASE_OFF) {
+    if (pdev->tx_throttle.current_throttle_phase == THROTTLE_PHASE_OFF) {
         return;
     }
 
     /* ensure that we send no more than tx_threshold frames at once */
-    max_to_send = pdev->tx_throttle_ll.tx_threshold;
+    max_to_send = pdev->tx_throttle.tx_threshold;
 
     /* round robin through the vdev queues for the given pdev */
 
@@ -370,8 +376,8 @@ ol_tx_pdev_ll_pause_queue_send_all(struct ol_txrx_pdev_t *pdev)
     TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {
         adf_os_spin_lock_bh(&vdev->ll_pause.mutex);
         if (vdev->ll_pause.txq.depth) {
-            adf_os_timer_cancel(&pdev->tx_throttle_ll.tx_timer);
-            adf_os_timer_start(&pdev->tx_throttle_ll.tx_timer,
+            adf_os_timer_cancel(&pdev->tx_throttle.tx_timer);
+            adf_os_timer_start(&pdev->tx_throttle.tx_timer,
                                OL_TX_VDEV_PAUSE_QUEUE_SEND_PERIOD_MS);
             adf_os_spin_unlock_bh(&vdev->ll_pause.mutex);
             return;
@@ -383,16 +389,16 @@ ol_tx_pdev_ll_pause_queue_send_all(struct ol_txrx_pdev_t *pdev)
 
 void ol_tx_vdev_ll_pause_queue_send(void *context)
 {
+#ifdef QCA_SUPPORT_TXRX_VDEV_LL_TXQ
     struct ol_txrx_vdev_t *vdev = (struct ol_txrx_vdev_t *) context;
 
-#ifdef QCA_SUPPORT_TXRX_VDEV_LL_TXQ
-    if (vdev->pdev->tx_throttle_ll.current_throttle_level != THROTTLE_LEVEL_0 &&
-        vdev->pdev->tx_throttle_ll.current_throttle_phase == THROTTLE_PHASE_OFF) {
+    if (vdev->pdev->tx_throttle.current_throttle_level != THROTTLE_LEVEL_0 &&
+        vdev->pdev->tx_throttle.current_throttle_phase == THROTTLE_PHASE_OFF) {
         return;
     }
-#endif
 
     ol_tx_vdev_ll_pause_queue_send_base(vdev);
+#endif
 }
 
 static inline int
@@ -433,6 +439,7 @@ ol_tx_non_std_ll(
     struct ol_txrx_msdu_info_t msdu_info;
 
     msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
+    msdu_info.htt.action.tx_comp_req = 0;
 
     /*
      * The msdu_list variable could be used instead of the msdu var,
@@ -502,25 +509,60 @@ ol_tx_non_std_ll(
 #define OL_TX_ENCAP_WRAPPER(pdev, vdev, tx_desc, msdu, tx_msdu_info) /* no-op */
 #endif
 
-#ifdef QCA_WIFI_ISOC
-#define TX_FILTER_CHECK(tx_msdu_info) \
-    ((tx_msdu_info)->peer && \
-     ((tx_msdu_info)->peer->tx_filter(tx_msdu_info) != A_OK))
-#else
 /* tx filtering is handled within the target FW */
 #define TX_FILTER_CHECK(tx_msdu_info) 0 /* don't filter */
-#endif
 
-#if ENABLE_TX_SCHED
+
+/**
+ * parse_ocb_tx_header() - Function to check for OCB
+ * TX control header on a packet and extract it if present
+ *
+ * @msdu:   Pointer to OS packet (adf_nbuf_t)
+ */
+#define OCB_HEADER_VERSION     1
+static bool parse_ocb_tx_header(adf_nbuf_t msdu,
+                                struct ocb_tx_ctrl_hdr_t *tx_ctrl)
+{
+    struct ether_header *eth_hdr_p;
+    struct ocb_tx_ctrl_hdr_t *tx_ctrl_hdr;
+
+    /* Check if TX control header is present */
+    eth_hdr_p = (struct ether_header *) adf_nbuf_data(msdu);
+    if (eth_hdr_p->ether_type != adf_os_htons(ETHERTYPE_OCB_TX))
+        /* TX control header is not present. Nothing to do.. */
+        return true;
+
+    /* Remove the ethernet header */
+    adf_nbuf_pull_head(msdu, sizeof(struct ether_header));
+
+    /* Parse the TX control header */
+    tx_ctrl_hdr = (struct ocb_tx_ctrl_hdr_t*) adf_nbuf_data(msdu);
+
+    if (tx_ctrl_hdr->version == OCB_HEADER_VERSION) {
+        if (tx_ctrl)
+            adf_os_mem_copy(tx_ctrl, tx_ctrl_hdr, sizeof(*tx_ctrl_hdr));
+    } else {
+        /* The TX control header is invalid. */
+        return false;
+    }
+
+    /* Remove the TX control header */
+    adf_nbuf_pull_head(msdu, tx_ctrl_hdr->length);
+    return true;
+}
+
 static inline adf_nbuf_t
 ol_tx_hl_base(
     ol_txrx_vdev_handle vdev,
     enum ol_tx_spec tx_spec,
-    adf_nbuf_t msdu_list)
+    adf_nbuf_t msdu_list,
+    int tx_comp_req)
 {
     struct ol_txrx_pdev_t *pdev = vdev->pdev;
     adf_nbuf_t msdu = msdu_list;
     struct ol_txrx_msdu_info_t tx_msdu_info;
+    struct ocb_tx_ctrl_hdr_t tx_ctrl;
+
     htt_pdev_handle htt_pdev = pdev->htt_pdev;
     tx_msdu_info.peer = NULL;
 
@@ -533,7 +575,9 @@ ol_tx_hl_base(
     while (msdu) {
         adf_nbuf_t next;
         struct ol_tx_frms_queue_t *txq;
-        struct ol_tx_desc_t *tx_desc;
+        struct ol_tx_desc_t *tx_desc = NULL;
+
+        adf_os_mem_zero(&tx_ctrl, sizeof(tx_ctrl));
 
         /*
          * The netbuf will get stored into a (peer-TID) tx queue list
@@ -542,7 +586,19 @@ ol_tx_hl_base(
          */
         next = adf_nbuf_next(msdu);
 
+#if defined(CONFIG_TX_DESC_HI_PRIO_RESERVE)
+        if (adf_os_atomic_read(&pdev->tx_queue.rsrc_cnt) >
+                                        TXRX_HL_TX_DESC_HI_PRIO_RESERVED) {
+            tx_desc = ol_tx_desc_hl(pdev, vdev, msdu, &tx_msdu_info);
+        } else if ((adf_nbuf_is_dhcp_pkt(msdu) == A_STATUS_OK)
+                          || (adf_nbuf_is_eapol_pkt(msdu) == A_STATUS_OK)) {
+            tx_desc = ol_tx_desc_hl(pdev, vdev, msdu, &tx_msdu_info);
+            TXRX_PRINT(TXRX_PRINT_LEVEL_ERR,
+                "Provided tx descriptor from reserve pool for DHCP/EAPOL\n");
+        }
+#else
         tx_desc = ol_tx_desc_hl(pdev, vdev, msdu, &tx_msdu_info);
+#endif
         if (! tx_desc) {
             /*
              * If we're out of tx descs, there's no need to try to allocate
@@ -555,7 +611,13 @@ ol_tx_hl_base(
 //        OL_TXRX_PROT_AN_LOG(pdev->prot_an_tx_sent, msdu);
 
         if (tx_spec != ol_tx_spec_std) {
+            #if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
+            if (tx_spec & ol_tx_spec_no_free) {
+                tx_desc->pkt_type = ol_tx_frm_no_free;
+            } else if (tx_spec & ol_tx_spec_tso) {
+            #else
             if (tx_spec & ol_tx_spec_tso) {
+            #endif
                 tx_desc->pkt_type = ol_tx_frm_tso;
             }
             if (OL_TXRX_TX_IS_RAW(tx_spec)) {
@@ -572,6 +634,15 @@ ol_tx_hl_base(
         tx_msdu_info.htt.info.vdev_id = vdev->vdev_id;
         tx_msdu_info.htt.info.frame_type = htt_frm_type_data;
         tx_msdu_info.htt.info.l2_hdr_type = pdev->htt_pkt_type;
+        tx_msdu_info.htt.action.tx_comp_req = tx_comp_req;
+
+        /* If the vdev is in OCB mode, parse the tx control header. */
+        if (vdev->opmode == wlan_op_mode_ocb) {
+            if (!parse_ocb_tx_header(msdu, &tx_ctrl)) {
+                /* There was an error parsing the header. Skip this packet. */
+                goto MSDU_LOOP_BOTTOM;
+            }
+        }
 
         txq = ol_tx_classify(vdev, tx_desc, msdu, &tx_msdu_info);
 
@@ -630,7 +701,7 @@ ol_tx_hl_base(
 	    tx_desc->htt_tx_desc_paddr,
             ol_tx_desc_id(pdev, tx_desc),
             msdu,
-            &tx_msdu_info.htt);
+            &tx_msdu_info.htt, &tx_ctrl, vdev->opmode == wlan_op_mode_ocb);
         /*
          * If debug display is enabled, show the meta-data being
          * downloaded to the target via the HTT tx descriptor.
@@ -651,116 +722,13 @@ MSDU_LOOP_BOTTOM:
     return NULL; /* all MSDUs were accepted */
 }
 
-#else /* ENABLE_TX_SCHED == 0 */
-
-static inline adf_nbuf_t
-ol_tx_hl_base(
-    ol_txrx_vdev_handle vdev,
-    enum ol_tx_spec tx_spec,
-    adf_nbuf_t msdu_list)
-{
-    struct ol_txrx_pdev_t *pdev = vdev->pdev;
-    adf_nbuf_t msdu = msdu_list;
-    struct ol_txrx_msdu_info_t tx_msdu_info;
-    htt_pdev_handle htt_pdev = pdev->htt_pdev;
-    tx_msdu_info.peer = NULL;
-
-    /*
-     * The msdu_list variable could be used instead of the msdu var,
-     * but just to clarify which operations are done on a single MSDU
-     * vs. a list of MSDUs, use a distinct variable for single MSDUs
-     * within the list.
-     */
-    while (msdu) {
-        adf_nbuf_t next;
-        struct ol_tx_frms_queue_t *txq;
-        struct ol_tx_desc_t *tx_desc;
-        if (adf_os_atomic_read(&vdev->pdev->target_tx_credit) <= 0) {
-            return msdu;
-        }
-        next = adf_nbuf_next(msdu);
-
-        tx_desc = ol_tx_desc_hl(pdev, vdev, msdu, &tx_msdu_info);
-        if (! tx_desc) {
-            /*
-             * If we're out of tx descs, there's no need to try to allocate
-             * tx descs for the remaining MSDUs.
-             */
-            TXRX_STATS_MSDU_LIST_INCR(pdev, tx.dropped.host_reject, msdu);
-            return msdu; /* the list of unaccepted MSDUs */
-        }
-        OL_TXRX_PROT_AN_LOG(pdev->prot_an_tx_sent, msdu);
-
-        if (tx_spec != ol_tx_spec_std) {
-            if (tx_spec & ol_tx_spec_no_free) {
-                tx_desc->pkt_type = ol_tx_frm_no_free;
-            } else if (tx_spec & ol_tx_spec_tso) {
-                tx_desc->pkt_type = ol_tx_frm_tso;
-            }
-            if (OL_TXRX_TX_IS_RAW(tx_spec)) {
-                // CHECK THIS: does this need to happen after htt_tx_desc_init?
-                /* different types of raw frames */
-                u_int8_t sub_type = OL_TXRX_TX_RAW_SUBTYPE(tx_spec);
-                htt_tx_desc_type(
-                    htt_pdev, tx_desc->htt_tx_desc,
-                    htt_pkt_type_raw, sub_type);
-            }
-        }
-
-        tx_msdu_info.htt.info.ext_tid = adf_nbuf_get_tid(msdu);
-        tx_msdu_info.htt.info.vdev_id = vdev->vdev_id;
-        tx_msdu_info.htt.info.frame_type = htt_frm_type_data;
-        tx_msdu_info.htt.info.l2_hdr_type = pdev->htt_pkt_type;
-        txq = ol_tx_classify(vdev, tx_desc, msdu, &tx_msdu_info);
-        if (!txq) {
-            adf_os_atomic_inc(&pdev->tx_queue.rsrc_cnt);
-            //TXRX_STATS_MSDU_LIST_INCR(vdev->pdev, tx.dropped.no_txq, msdu);
-            ol_tx_desc_free(vdev->pdev, tx_desc);
-            if (tx_msdu_info.peer) {
-                /* remove the peer reference added above */
-                ol_txrx_peer_unref_delete(tx_msdu_info.peer);
-            }
-            return msdu; /* the list of unaccepted MSDUs */
-        }
-
-        /* Before authentication, we'll drop packets except eapol/wai frame only */
-        if (tx_msdu_info.peer && tx_msdu_info.peer->state != ol_txrx_peer_state_auth)
-        {
-            if (tx_msdu_info.htt.info.ethertype != ETHERTYPE_PAE && tx_msdu_info.htt.info.ethertype != ETHERTYPE_WAI)
-            {
-                adf_os_atomic_inc(&pdev->tx_queue.rsrc_cnt);
-                ol_tx_desc_free(vdev->pdev, tx_desc);
-                /* remove the peer reference added above */
-                ol_txrx_peer_unref_delete(tx_msdu_info.peer);
-                return msdu; /* the list of unaccepted MSDUs */
-            }
-        }
-
-        /* initialize the HW tx descriptor */
-        htt_tx_desc_init(
-            pdev->htt_pdev, tx_desc->htt_tx_desc,
-            ol_tx_desc_id(pdev, tx_desc),
-            msdu,
-            &tx_msdu_info.htt);
-        /*
-         * If debug display is enabled, show the meta-data being
-         * downloaded to the target via the HTT tx descriptor.
-         */
-        htt_tx_desc_display(tx_desc->htt_tx_desc);
-
-        ol_tx_send(pdev, tx_desc, msdu);
-MSDU_LOOP_BOTTOM:
-        msdu = next;
-    }
-    return NULL; /* all MSDUs were accepted */
-}
-
-#endif
-
 adf_nbuf_t
 ol_tx_hl(ol_txrx_vdev_handle vdev, adf_nbuf_t msdu_list)
 {
-    return ol_tx_hl_base(vdev, ol_tx_spec_std, msdu_list);
+    struct ol_txrx_pdev_t *pdev = vdev->pdev;
+    int tx_comp_req = pdev->cfg.default_tx_comp_req;
+
+    return ol_tx_hl_base(vdev, ol_tx_spec_std, msdu_list, tx_comp_req);
 }
 
 adf_nbuf_t
@@ -769,7 +737,16 @@ ol_tx_non_std_hl(
     enum ol_tx_spec tx_spec,
     adf_nbuf_t msdu_list)
 {
-    return ol_tx_hl_base(vdev, tx_spec, msdu_list);
+    struct ol_txrx_pdev_t *pdev = vdev->pdev;
+    int tx_comp_req = pdev->cfg.default_tx_comp_req;
+
+    if (!tx_comp_req) {
+        if ((tx_spec == ol_tx_spec_no_free) &&
+            (pdev->tx_data_callback.func)) {
+            tx_comp_req = 1;
+        }
+    }
+    return ol_tx_hl_base(vdev, tx_spec, msdu_list, tx_comp_req);
 }
 
 adf_nbuf_t
@@ -870,8 +847,11 @@ ol_txrx_mgmt_send(
 
     adf_nbuf_map_single(pdev->osdev, tx_mgmt_frm, ADF_OS_DMA_TO_DEVICE);
     if (pdev->cfg.is_high_latency) {
+        tx_msdu_info.htt.action.tx_comp_req = 1;
         tx_desc = ol_tx_desc_hl(pdev, vdev, tx_mgmt_frm, &tx_msdu_info);
     } else {
+        /* For LL tx_comp_req is not used so initialized to 0 */
+        tx_msdu_info.htt.action.tx_comp_req = 0;
         tx_desc = ol_tx_desc_ll(pdev, vdev, tx_mgmt_frm, &tx_msdu_info);
         /* FIX THIS -
          * The FW currently has trouble using the host's fragments table
@@ -927,9 +907,9 @@ ol_txrx_mgmt_send(
 	    tx_desc->htt_tx_desc_paddr,
             ol_tx_desc_id(pdev, tx_desc),
             tx_mgmt_frm,
-            &tx_msdu_info.htt);
+            &tx_msdu_info.htt, NULL, 0);
         htt_tx_desc_display(tx_desc->htt_tx_desc);
-        htt_tx_desc_set_chanfreq((u_int32_t *)(tx_desc->htt_tx_desc), chanfreq);
+        htt_tx_desc_set_chanfreq(tx_desc->htt_tx_desc, chanfreq);
 
 	ol_tx_enqueue(vdev->pdev, txq, tx_desc, &tx_msdu_info);
 	if (tx_msdu_info.peer) {
@@ -938,6 +918,7 @@ ol_txrx_mgmt_send(
 	}
         ol_tx_sched(vdev->pdev);
     } else {
+	htt_tx_desc_set_chanfreq(tx_desc->htt_tx_desc, chanfreq);
         ol_tx_send_nonstd(pdev, tx_desc, tx_mgmt_frm, htt_pkt_type_mgmt);
     }
 
@@ -960,11 +941,12 @@ adf_nbuf_t ol_tx_reinject(
     msdu_info.htt.info.l2_hdr_type = vdev->pdev->htt_pkt_type;
     msdu_info.htt.info.ext_tid = HTT_TX_EXT_TID_INVALID;
     msdu_info.peer = NULL;
+    msdu_info.htt.action.tx_comp_req = 0;
 
     ol_tx_prepare_ll(tx_desc, vdev, msdu, &msdu_info);
     HTT_TX_DESC_POSTPONED_SET(*((u_int32_t *)(tx_desc->htt_tx_desc)), TRUE);
 
-    htt_tx_desc_set_peer_id((u_int32_t *)(tx_desc->htt_tx_desc), peer_id);
+    htt_tx_desc_set_peer_id(tx_desc->htt_tx_desc, peer_id);
 
     ol_tx_send(vdev->pdev, tx_desc, msdu);
 

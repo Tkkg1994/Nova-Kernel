@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -220,12 +220,15 @@ tSirRetStatus limSendBeaconParams(tpAniSirGlobal pMac,
 tSirRetStatus limSendSwitchChnlParams(tpAniSirGlobal pMac,
                                       tANI_U8 chnlNumber,
                                       ePhyChanBondState secondaryChnlOffset,
-                                      tANI_U8 localPwrConstraint, tANI_U8 peSessionId)
+                                      tANI_U8 localPwrConstraint,
+                                      tANI_U8 peSessionId,
+                                      uint8_t is_restart)
 #else
 tSirRetStatus limSendSwitchChnlParams(tpAniSirGlobal pMac,
                                       tANI_U8 chnlNumber,
                                       ePhyChanBondState secondaryChnlOffset,
-                                      tPowerdBm maxTxPower, tANI_U8 peSessionId)
+                                      tPowerdBm maxTxPower, tANI_U8 peSessionId,
+                                      uint8_t is_restart)
 #endif
 {
     tpSwitchChannelParams pChnlParams = NULL;
@@ -258,12 +261,15 @@ tSirRetStatus limSendSwitchChnlParams(tpAniSirGlobal pMac,
     vos_mem_copy(  pChnlParams->bssId, pSessionEntry->bssId, sizeof(tSirMacAddr) );
     pChnlParams->peSessionId = peSessionId;
     pChnlParams->vhtCapable = pSessionEntry->vhtCapability;
+    pChnlParams->dot11_mode = pSessionEntry->dot11mode;
 
     /*Set DFS flag for DFS channel*/
     if (vos_nv_getChannelEnabledState(chnlNumber) == NV_CHANNEL_DFS)
        pChnlParams->isDfsChannel= VOS_TRUE;
     else
        pChnlParams->isDfsChannel = VOS_FALSE;
+
+    pChnlParams->restart_on_chan_switch = is_restart;
 
     //we need to defer the message until we get the response back from WDA.
     SET_LIM_PROCESS_DEFD_MESGS(pMac, false);
@@ -311,11 +317,11 @@ returnFailure:
  * @param pMac  pointer to Global Mac structure.
  * @param tpUpdatedEdcaParams pointer to the structure which contains
  *                                       dynamically changing EDCA parameters.
- * @param highPerformance  If the peer is Airgo (taurus) then switch to highPerformance is true.
- *
  * @return success if message send is ok, else false.
  */
-tSirRetStatus limSendEdcaParams(tpAniSirGlobal pMac, tSirMacEdcaParamRecord *pUpdatedEdcaParams, tANI_U16 bssIdx, tANI_BOOLEAN highPerformance)
+tSirRetStatus limSendEdcaParams(tpAniSirGlobal pMac,
+                                tSirMacEdcaParamRecord *pUpdatedEdcaParams,
+                                tANI_U16 bssIdx)
 {
     tEdcaParams *pEdcaParams = NULL;
     tSirRetStatus   retCode = eSIR_SUCCESS;
@@ -334,7 +340,6 @@ tSirRetStatus limSendEdcaParams(tpAniSirGlobal pMac, tSirMacEdcaParamRecord *pUp
     pEdcaParams->acbk = pUpdatedEdcaParams[EDCA_AC_BK];
     pEdcaParams->acvi = pUpdatedEdcaParams[EDCA_AC_VI];
     pEdcaParams->acvo = pUpdatedEdcaParams[EDCA_AC_VO];
-    pEdcaParams->highPerformance = highPerformance;
     msgQ.type = WDA_UPDATE_EDCA_PROFILE_IND;
     msgQ.reserved = 0;
     msgQ.bodyptr = pEdcaParams;
@@ -482,22 +487,6 @@ tSirRetStatus limSendEdcaParams(tpAniSirGlobal pMac, tSirMacEdcaParamRecord *pUp
 \param   tSirLinkState      state
 \return  None
   -----------------------------------------------------------*/
- //Original code with out anu's change
-#if 0
-tSirRetStatus limSetLinkState(tpAniSirGlobal pMac, tSirLinkState state,tSirMacAddr bssId)
-{
-    tSirMsgQ msg;
-    tSirRetStatus retCode;
-    msg.type = WDA_SET_LINK_STATE;
-    msg.bodyval = (tANI_U32) state;
-    msg.bodyptr = NULL;
-    MTRACE(macTraceMsgTx(pMac, 0, msg.type));
-    retCode = wdaPostCtrlMsg(pMac, &msg);
-    if (retCode != eSIR_SUCCESS)
-        limLog(pMac, LOGP, FL("Posting link state %d failed, reason = %x "), retCode);
-    return retCode;
-}
-#endif //0
 tSirRetStatus limSetLinkState(tpAniSirGlobal pMac, tSirLinkState state,tSirMacAddr bssId,
                               tSirMacAddr selfMacAddr, tpSetLinkStateCallback callback,
                               void *callbackArg)
@@ -702,7 +691,6 @@ tSirRetStatus limSendBeaconFilterInfo(tpAniSirGlobal pMac,tpPESession psessionEn
     }
     vos_mem_set((tANI_U8 *) pBeaconFilterMsg, msgSize, 0);
     // Fill in capability Info and mask
-    //TBD-RAJESH get the BSS capability from session.
     //Don't send this message if no active Infra session is found.
     pBeaconFilterMsg->capabilityInfo = psessionEntry->limCurrentBssCaps;
     pBeaconFilterMsg->capabilityMask = CAPABILITY_FILTER_MASK;
@@ -763,8 +751,9 @@ tSirRetStatus limSendModeUpdate(tpAniSirGlobal pMac,
     msgQ.reserved = 0;
     msgQ.bodyptr = pVhtOpMode;
     msgQ.bodyval = 0;
-    PELOG3(limLog( pMac, LOG3,
-                FL( "Sending WDA_UPDATE_OP_MODE" ));)
+    limLog(pMac, LOG3, FL(
+                "Sending WDA_UPDATE_OP_MODE, opMode - %d, staId - %d"),
+                    pVhtOpMode->opMode, pVhtOpMode->staId);
     if(NULL == psessionEntry)
     {
         MTRACE(macTraceMsgTx(pMac, NO_SESSION, msgQ.type));
@@ -911,106 +900,6 @@ tSirRetStatus limSetUserPos(tpAniSirGlobal pMac,
 
 #endif
 
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-/** ---------------------------------------------------------
-\fn      limSendTdlsLinkEstablish
-\brief   LIM sends a message to HAL to set tdls direct link
-\param   tpAniSirGlobal  pMac
-\param
-\return  None
-  -----------------------------------------------------------*/
-tSirRetStatus limSendTdlsLinkEstablish(tpAniSirGlobal pMac, tANI_U8 bIsPeerResponder, tANI_U8 linkIdenOffset,
-                tANI_U8 ptiBufStatusOffset, tANI_U8 ptiFrameLen, tANI_U8 *ptiFrame, tANI_U8 *extCapability)
-{
-    tSirMsgQ msgQ;
-    tSirRetStatus retCode;
-    tpSirTdlsLinkEstablishInd pTdlsLinkEstablish = NULL;
-
-    // Allocate memory.
-    pTdlsLinkEstablish = vos_mem_malloc(sizeof(tSirTdlsLinkEstablishInd));
-    if ( NULL == pTdlsLinkEstablish )
-    {
-        limLog( pMac, LOGP,
-        FL( "Unable to allocate memory while sending Tdls Link Establish " ));
-
-        retCode = eSIR_SME_RESOURCES_UNAVAILABLE;
-        return retCode;
-    }
-
-    vos_mem_set((tANI_U8 *) pTdlsLinkEstablish, sizeof(tSirTdlsLinkEstablishInd), 0);
-
-    pTdlsLinkEstablish->bIsResponder = !!bIsPeerResponder;
-    pTdlsLinkEstablish->linkIdenOffset = linkIdenOffset;
-    pTdlsLinkEstablish->ptiBufStatusOffset = ptiBufStatusOffset;
-    pTdlsLinkEstablish->ptiTemplateLen = ptiFrameLen;
-    /* Copy ptiFrame template */
-    vos_mem_copy(pTdlsLinkEstablish->ptiTemplateBuf, ptiFrame, ptiFrameLen);
-    /* Copy extended capabilities */
-    vos_mem_copy((tANI_U8 *) pTdlsLinkEstablish->extCapability,  extCapability, sizeof(pTdlsLinkEstablish->extCapability));
-
-    msgQ.type = SIR_HAL_TDLS_LINK_ESTABLISH;
-    msgQ.reserved = 0;
-    msgQ.bodyptr = pTdlsLinkEstablish;
-    msgQ.bodyval = 0;
-
-    MTRACE(macTraceMsgTx(pMac, 0, msgQ.type));
-
-    retCode = (tANI_U32)wdaPostCtrlMsg(pMac, &msgQ);
-    if (retCode != eSIR_SUCCESS)
-    {
-        vos_mem_free(pTdlsLinkEstablish);
-        limLog(pMac, LOGP, FL("Posting tdls link establish %d failed, reason = %x "), retCode);
-    }
-
-    return retCode;
-}
-
-/** ---------------------------------------------------------
-\fn      limSendTdlsLinkTeardown
-\brief   LIM sends a message to HAL to indicate tdls direct link is teardowned
-\param   tpAniSirGlobal  pMac
-\param
-\return  None
-  -----------------------------------------------------------*/
-tSirRetStatus limSendTdlsLinkTeardown(tpAniSirGlobal pMac, tANI_U16 staId)
-{
-    tSirMsgQ msgQ;
-    tSirRetStatus retCode;
-    tpSirTdlsLinkTeardownInd pTdlsLinkTeardown = NULL;
-
-    // Allocate memory.
-    pTdlsLinkTeardown = vos_mem_malloc(sizeof(tSirTdlsLinkTeardownInd));
-    if ( NULL == pTdlsLinkTeardown )
-    {
-        limLog( pMac, LOGP,
-        FL( "Unable to allocate memory while sending Tdls Link Teardown " ));
-
-        retCode = eSIR_SME_RESOURCES_UNAVAILABLE;
-        return retCode;
-    }
-
-    vos_mem_set((tANI_U8 *) pTdlsLinkTeardown, sizeof(tSirTdlsLinkTeardownInd), 0);
-
-    pTdlsLinkTeardown->staId = staId;
-
-    msgQ.type = SIR_HAL_TDLS_LINK_TEARDOWN;
-    msgQ.reserved = 0;
-    msgQ.bodyptr = pTdlsLinkTeardown;
-    msgQ.bodyval = 0;
-
-    MTRACE(macTraceMsgTx(pMac, 0, msgQ.type));
-
-    retCode = (tANI_U32)wdaPostCtrlMsg(pMac, &msgQ);
-    if (retCode != eSIR_SUCCESS)
-    {
-        vos_mem_free(pTdlsLinkTeardown);
-        limLog(pMac, LOGP, FL("Posting tdls link teardown %d failed, reason = %x "), retCode);
-    }
-
-    return retCode;
-}
-
-#endif
 
 #ifdef WLAN_FEATURE_11W
 /** ---------------------------------------------------------

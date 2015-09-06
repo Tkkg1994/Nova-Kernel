@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -89,7 +89,7 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
 
 
-    if ((eLIM_STA_ROLE == psessionEntry->limSystemRole) &&
+    if (LIM_IS_STA_ROLE(psessionEntry) &&
         ((eLIM_SME_WT_DISASSOC_STATE == psessionEntry->limSmeState) ||
          (eLIM_SME_WT_DEAUTH_STATE == psessionEntry->limSmeState)))
     {
@@ -128,6 +128,12 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
         return;
     }
 
+    if (!lim_validate_received_frame_a1_addr(pMac, pHdr->da, psessionEntry)) {
+        limLog(pMac, LOGE,
+               FL("rx frame doesn't have valid a1 address, dropping it"));
+        return;
+    }
+
 #ifdef WLAN_FEATURE_11W
     /* PMF: If this session is a PMF session, then ensure that this frame was protected */
     if(psessionEntry->limRmfEnabled  && (WDA_GET_RX_DPU_FEEDBACK(pRxPacketInfo) & DPU_FEEDBACK_UNPROTECTED_ERROR))
@@ -150,10 +156,12 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
 
     PELOGE(limLog(pMac, LOGE,
         FL("Received Deauth frame for Addr: "MAC_ADDRESS_STR" (mlm state = %s,"
-        " sme state = %d systemrole  = %d) with reason code %d from "
+        " sme state = %d systemrole  = %d) with reason code %d [%s] from "
         MAC_ADDRESS_STR), MAC_ADDR_ARRAY(pHdr->da),
-        limMlmStateStr(psessionEntry->limMlmState), psessionEntry->limSmeState,
-        psessionEntry->limSystemRole, reasonCode,
+        limMlmStateStr(psessionEntry->limMlmState),
+        psessionEntry->limSmeState,
+        GET_LIM_SYSTEM_ROLE(psessionEntry), reasonCode,
+        limDot11ReasonStr(reasonCode),
         MAC_ADDR_ARRAY(pHdr->sa));)
 
     if (limCheckDisassocDeauthAckPending(pMac, (tANI_U8*)pHdr->sa))
@@ -166,8 +174,8 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     }
 
 
-    if ( (psessionEntry->limSystemRole == eLIM_AP_ROLE )||(psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )
-    {
+    if (LIM_IS_AP_ROLE(psessionEntry) ||
+        LIM_IS_BT_AMP_AP_ROLE(psessionEntry)) {
         switch (reasonCode)
         {
             case eSIR_MAC_UNSPEC_FAILURE_REASON:
@@ -185,8 +193,8 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
                 break;
         }
     }
-    else if (psessionEntry->limSystemRole == eLIM_STA_ROLE ||psessionEntry->limSystemRole == eLIM_BT_AMP_STA_ROLE)
-    {
+    else if (LIM_IS_STA_ROLE(psessionEntry) ||
+             LIM_IS_BT_AMP_STA_ROLE(psessionEntry)) {
         switch (reasonCode)
         {
             case eSIR_MAC_UNSPEC_FAILURE_REASON:
@@ -214,7 +222,7 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
         // or un-known role. Log and ignore it
         limLog(pMac, LOGE,
            FL("received Deauth frame with reasonCode %d in role %d from "
-           MAC_ADDRESS_STR),reasonCode, psessionEntry->limSystemRole,
+           MAC_ADDRESS_STR),reasonCode, GET_LIM_SYSTEM_ROLE(psessionEntry),
            MAC_ADDR_ARRAY(pHdr->sa));
 
         return;
@@ -269,7 +277,7 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     /* If received DeAuth from AP other than the one we're trying to join with
      * nor associated with, then ignore deauth and delete Pre-auth entry.
      */
-    if(psessionEntry->limSystemRole != eLIM_AP_ROLE ){
+    if (!LIM_IS_AP_ROLE(psessionEntry)) {
         if (!IS_CURRENT_BSSID(pMac, pHdr->bssId, psessionEntry))
         {
             PELOGE(limLog(pMac, LOGE, FL("received DeAuth from an AP other "
@@ -288,7 +296,7 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
         pStaDs = dphLookupHashEntry(pMac, pHdr->sa, &aid, &psessionEntry->dph.dphHashTable);
 
         // Check for pre-assoc states
-        switch (psessionEntry->limSystemRole)
+        switch (GET_LIM_SYSTEM_ROLE(psessionEntry))
         {
             case eLIM_STA_ROLE:
             case eLIM_BT_AMP_STA_ROLE:
@@ -402,8 +410,11 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
                         }
                         else
                         {
-
-                            limDeleteTDLSPeers(pMac, psessionEntry);
+                            /* Delete all the TDLS peers only if Deauth
+                             * is received from the AP
+                             */
+                            if (IS_CURRENT_BSSID(pMac, pHdr->sa, psessionEntry))
+                               limDeleteTDLSPeers(pMac, psessionEntry);
 #endif
                            /**
                             * This could be Deauthentication frame from
@@ -468,16 +479,16 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     }
 
     if ((pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_STA_RSP_STATE) ||
-        (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_BSS_RSP_STATE))
-    {
+        (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_BSS_RSP_STATE)) {
         /**
          * Already in the process of deleting context for the peer
          * and received Deauthentication frame. Log and Ignore.
          */
         PELOGE(limLog(pMac, LOGE,
            FL("received Deauth frame from peer that is in state %X, addr "
-           MAC_ADDRESS_STR),
-           pStaDs->mlmStaContext.mlmState,MAC_ADDR_ARRAY(pHdr->sa));)
+           MAC_ADDRESS_STR", isDisassocDeauthInProgress : %d\n"),
+           pStaDs->mlmStaContext.mlmState,MAC_ADDR_ARRAY(pHdr->sa),
+           pStaDs->isDisassocDeauthInProgress);)
         return;
     }
     pStaDs->mlmStaContext.disassocReason = (tSirMacReasonCodes)reasonCode;
@@ -529,7 +540,7 @@ limProcessDeauthFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession p
     {
         pMac->lim.deauthMsgCnt = 0;
     }
-    if (eLIM_STA_ROLE == psessionEntry->limSystemRole)
+    if (LIM_IS_STA_ROLE(psessionEntry))
         WDA_TxAbort(psessionEntry->smeSessionId);
 
     /// Deauthentication from peer MAC entity

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -47,8 +47,8 @@
 #include "ol_htt_tx_api.h"
 #include "ol_htt_rx_api.h"
 #include "wlan_qct_tl.h"
-#include <ol_ctrl_txrx_api.h>
 #include <ol_txrx_ctrl_api.h>
+
 /*
  * The target may allocate multiple IDs for a peer.
  * In particular, the target may allocate one ID to represent the
@@ -69,6 +69,8 @@
 #define OL_TX_MGMT_TID    17
 #define OL_TX_NUM_TIDS    18
 
+#define OL_RX_MCAST_TID     18  /* Mcast TID only between f/w & host */
+
 #define OL_TX_VDEV_MCAST_BCAST    0 // HTT_TX_EXT_TID_MCAST_BCAST
 #define OL_TX_VDEV_DEFAULT_MGMT   1 // HTT_TX_EXT_TID_DEFALT_MGMT
 #define OL_TX_VDEV_NUM_QUEUES     2
@@ -78,6 +80,10 @@
 
 #define OL_TX_MUTEX_TYPE adf_os_spinlock_t
 #define OL_RX_MUTEX_TYPE adf_os_spinlock_t
+
+/* TXRX Histogram defines */
+#define TXRX_DATA_HISTROGRAM_GRANULARITY      1000
+#define TXRX_DATA_HISTROGRAM_NUM_INTERVALS    100
 
 struct ol_txrx_pdev_t;
 struct ol_txrx_vdev_t;
@@ -122,6 +128,40 @@ enum ol_tx_frm_type {
     ol_tx_frm_no_free, /* frame requires special tx completion callback */
 };
 
+#if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
+#define MAX_NO_PEERS_IN_LIMIT (2*10 + 2)
+
+typedef enum _ol_tx_peer_bal_state {
+    ol_tx_peer_bal_enable = 0,
+    ol_tx_peer_bal_disable,
+} ol_tx_peer_bal_state;
+
+typedef enum _ol_tx_peer_bal_timer_state {
+    ol_tx_peer_bal_timer_disable = 0,
+    ol_tx_peer_bal_timer_active,
+    ol_tx_peer_bal_timer_inactive,
+} ol_tx_peer_bal_timer_state;
+
+typedef struct _ol_tx_limit_peer_t {
+    u_int16_t limit_flag;
+    u_int16_t peer_id;
+    u_int16_t limit;
+} ol_tx_limit_peer_t;
+
+typedef enum {
+    TXRX_IEEE11_B = 0,
+    TXRX_IEEE11_A_G,
+    TXRX_IEEE11_N,
+    TXRX_IEEE11_AC,
+    TXRX_IEEE11_MAX,
+} tx_peer_level;
+
+typedef struct _tx_peer_threshold{
+	u_int32_t tput_thresh;
+	u_int32_t tx_limit;
+} tx_peer_threshold;
+#endif
+
 struct ol_tx_desc_t {
 	adf_nbuf_t netbuf;
 	void *htt_tx_desc;
@@ -151,6 +191,10 @@ struct ol_tx_desc_t {
 	/* used by tx encap, to restore the os buf start offset after tx complete*/
 	u_int8_t orig_l2_hdr_bytes;
 #endif
+#if defined(CONFIG_HL_SUPPORT)
+	struct ol_txrx_vdev_t* vdev;
+#endif
+	void *txq;
 };
 
 typedef TAILQ_HEAD(, ol_tx_desc_t) ol_tx_desc_list;
@@ -188,6 +232,32 @@ struct ol_rx_reorder_timeout_list_elem_t
 		(((_tid) ^ ((_tid) >> 1)) & 0x1) ? TXRX_WMM_AC_BK : \
 		TXRX_WMM_AC_BE)
 
+enum {
+    OL_TX_SCHED_WRR_ADV_CAT_BE,
+    OL_TX_SCHED_WRR_ADV_CAT_BK,
+    OL_TX_SCHED_WRR_ADV_CAT_VI,
+    OL_TX_SCHED_WRR_ADV_CAT_VO,
+    OL_TX_SCHED_WRR_ADV_CAT_NON_QOS_DATA,
+    OL_TX_SCHED_WRR_ADV_CAT_UCAST_MGMT,
+    OL_TX_SCHED_WRR_ADV_CAT_MCAST_DATA,
+    OL_TX_SCHED_WRR_ADV_CAT_MCAST_MGMT,
+
+    OL_TX_SCHED_WRR_ADV_NUM_CATEGORIES /* must be last */
+};
+
+A_COMPILE_TIME_ASSERT(ol_tx_sched_htt_ac_values,
+    /* check that regular WMM AC enum values match */
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_VO == (int)HTT_AC_WMM_VO) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_VI == (int)HTT_AC_WMM_VI) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_BK == (int)HTT_AC_WMM_BK) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_BE == (int)HTT_AC_WMM_BE) &&
+
+    /* check that extension AC enum values match */
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_NON_QOS_DATA == (int)HTT_AC_EXT_NON_QOS) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_UCAST_MGMT == (int)HTT_AC_EXT_UCAST_MGMT) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_MCAST_DATA == (int)HTT_AC_EXT_MCAST_DATA) &&
+    ((int)OL_TX_SCHED_WRR_ADV_CAT_MCAST_MGMT == (int)HTT_AC_EXT_MCAST_MGMT));
+
 struct ol_tx_reorder_cat_timeout_t {
 	TAILQ_HEAD(, ol_rx_reorder_timeout_list_elem_t) virtual_timer_list;
 	adf_os_timer_t timer;
@@ -219,6 +289,19 @@ enum {
 	ol_tx_aggr_in_progress,
 };
 
+#define OL_TX_MAX_GROUPS_PER_QUEUE 1
+#define OL_TX_MAX_VDEV_ID 16
+#define OL_TXQ_GROUP_VDEV_ID_MASK_GET(_membership)           \
+	(((_membership) & 0xffff0000) >> 16)
+#define OL_TXQ_GROUP_VDEV_ID_BIT_MASK_GET(_mask, _vdev_id)   \
+	((_mask >> _vdev_id) & 0x01)
+#define OL_TXQ_GROUP_AC_MASK_GET(_membership)           \
+	((_membership) & 0x0000ffff)
+#define OL_TXQ_GROUP_AC_BIT_MASK_GET(_mask, _ac_mask)   \
+	((_mask >> _ac_mask) & 0x01)
+#define OL_TXQ_GROUP_MEMBERSHIP_GET(_vdev_mask, _ac_mask)     \
+			((_vdev_mask << 16) | _ac_mask)
+
 struct ol_tx_frms_queue_t {
 	/* list_elem -
 	 * Allow individual tx frame queues to be linked together into
@@ -236,6 +319,10 @@ struct ol_tx_frms_queue_t {
 	u_int32_t bytes;
 	ol_tx_desc_list head;
 	enum ol_tx_queue_status flag;
+	struct ol_tx_queue_group_t *group_ptrs[OL_TX_MAX_GROUPS_PER_QUEUE];
+#if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
+	struct ol_txrx_peer_t *peer;
+#endif
 };
 
 enum {
@@ -318,6 +405,28 @@ typedef enum _throttle_phase {
 
 #define THROTTLE_TX_THRESHOLD (100)
 
+#ifdef IPA_UC_OFFLOAD
+typedef void (*ipa_uc_op_cb_type)(u_int8_t *op_msg, void *osif_ctxt);
+#endif /* IPA_UC_OFFLOAD */
+
+struct ol_tx_queue_group_t {
+	adf_os_atomic_t credit;
+	u_int32_t membership;
+};
+#define OL_TX_MAX_TXQ_GROUPS 2
+
+#define OL_TX_GROUP_STATS_LOG_SIZE 128
+struct ol_tx_group_credit_stats_t {
+	struct {
+		struct {
+			u_int16_t member_vdevs;
+			u_int16_t credit;
+		} grp[OL_TX_MAX_TXQ_GROUPS];
+	}stats[OL_TX_GROUP_STATS_LOG_SIZE];
+	u_int16_t last_valid_index;
+	u_int16_t wrap_around;
+};
+
 /*
  * As depicted in the diagram below, the pdev contains an array of
  * NUM_EXT_TID ol_tx_active_queues_in_tid_t elements.
@@ -384,6 +493,7 @@ struct ol_txrx_pdev_t {
 		int is_high_latency;
 		int host_addba;
 		int ll_pause_txq_limit;
+                int default_tx_comp_req;
 	} cfg;
 
 	/* WDI subscriber's event list */
@@ -537,6 +647,7 @@ struct ol_txrx_pdev_t {
 					//u_int64_t mpdu_bad_sender; /* peer not found */
 					//u_int64_t mpdu_flushed;
 					//u_int64_t msdu_defrag_mic_err;
+					u_int64_t msdu_mc_dup_drop;
 				} err;
 			} rx;
 		} priv;
@@ -592,6 +703,7 @@ struct ol_txrx_pdev_t {
 	struct {
 		enum ol_tx_scheduler_status tx_sched_status;
 		ol_tx_sched_handle scheduler;
+		struct ol_tx_frms_queue_t *last_used_txq;
 	} tx_sched;
 	/*
 	 * tx_queue only applies for HL, but is defined unconditionally to avoid
@@ -606,8 +718,9 @@ struct ol_txrx_pdev_t {
 	        u_int16_t rsrc_threshold_hi;
 	} tx_queue;
 
-#if defined(ENABLE_TX_QUEUE_LOG) && defined(CONFIG_HL_SUPPORT)
-#define OL_TXQ_LOG_SIZE 1024
+#if defined(DEBUG_HL_LOGGING) && defined(CONFIG_HL_SUPPORT)
+#define OL_TXQ_LOG_SIZE 512
+	adf_os_spinlock_t txq_log_spinlock;
 	struct {
 		int size;
 		int oldest_record_offset;
@@ -675,7 +788,50 @@ struct ol_txrx_pdev_t {
 		u_int32_t tx_threshold;
 		/* stores time in ms of on and off phase for each throttle level*/
 		int throttle_time_ms[THROTTLE_LEVEL_MAX][THROTTLE_PHASE_MAX];
-	} tx_throttle_ll;
+		/* mark as true if traffic is paused due to thermal throttling */
+		a_bool_t is_paused;
+	} tx_throttle;
+
+#ifdef IPA_UC_OFFLOAD
+    ipa_uc_op_cb_type ipa_uc_op_cb;
+    void *osif_dev;
+#endif /* IPA_UC_OFFLOAD */
+
+#if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
+	struct {
+		ol_tx_peer_bal_state enabled;
+		adf_os_spinlock_t mutex;
+		/* timer used to trigger more frames for bad peers */
+		adf_os_timer_t peer_bal_timer;
+		/*This is the time in ms of the peer balance timer period */
+		u_int32_t peer_bal_period_ms;
+		/*This is the txq limit */
+		u_int32_t peer_bal_txq_limit;
+		/*This is the state of the peer balance timer */
+		ol_tx_peer_bal_timer_state peer_bal_timer_state;
+		/*This is the counter about active peers which are under tx flow control */
+		u_int32_t peer_num;
+		/*This is peer list which are under tx flow control */
+		ol_tx_limit_peer_t limit_list[MAX_NO_PEERS_IN_LIMIT];
+		/*This is threshold configurationl */
+		tx_peer_threshold ctl_thresh[TXRX_IEEE11_MAX];
+	} tx_peer_bal;
+#endif /* CONFIG_Hl_SUPPORT && QCA_BAD_PEER_TX_FLOW_CL */
+
+	struct ol_tx_queue_group_t txq_grps[OL_TX_MAX_TXQ_GROUPS];
+#ifdef DEBUG_HL_LOGGING
+	adf_os_spinlock_t grp_stat_spinlock;
+	struct ol_tx_group_credit_stats_t grp_stats;
+#endif
+	u_int8_t ocb_peer_valid;
+	struct ol_txrx_peer_t *ocb_peer;
+	int tid_to_ac[OL_TX_NUM_TIDS + OL_TX_VDEV_NUM_QUEUES];
+
+};
+
+struct ol_txrx_ocb_chan_info {
+	uint32_t chan_freq;
+	uint16_t disable_rx_stats_hdr:1;
 };
 
 struct ol_txrx_vdev_t {
@@ -731,12 +887,10 @@ struct ol_txrx_vdev_t {
 
 	enum wlan_op_mode opmode;
 
-#ifndef CONFIG_QCA_WIFI_ISOC
 #ifdef  QCA_IBSS_SUPPORT
         /* ibss mode related */
         int16_t ibss_peer_num;              /* the number of active peers */
         int16_t ibss_peer_heart_beat_timer; /* for detecting peer departure */
-#endif
 #endif
 
 #if defined(CONFIG_HL_SUPPORT)
@@ -753,12 +907,40 @@ struct ol_txrx_vdev_t {
 		adf_os_spinlock_t mutex;
 		adf_os_timer_t timer;
 		int max_q_depth;
+		bool is_q_paused;
+		bool is_q_timer_on;
+		u_int32_t q_pause_cnt;
+		u_int32_t q_unpause_cnt;
+		u_int32_t q_overflow_cnt;
 	} ll_pause;
 	a_bool_t disable_intrabss_fwd;
 	adf_os_atomic_t os_q_paused;
 	u_int16_t tx_fl_lwm;
 	u_int16_t tx_fl_hwm;
 	ol_txrx_tx_flow_control_fp osif_flow_control_cb;
+
+#if defined(CONFIG_HL_SUPPORT) && defined(FEATURE_WLAN_TDLS)
+        union ol_txrx_align_mac_addr_t hl_tdls_ap_mac_addr;
+        bool hlTdlsFlag;
+#endif
+#if defined(CONFIG_PER_VDEV_TX_DESC_POOL)
+	adf_os_atomic_t tx_desc_count;
+#endif
+	u_int16_t wait_on_peer_id;
+	adf_os_comp_t wait_delete_comp;
+
+	/* last channel change event recieved */
+	struct {
+		bool is_valid;  /* whether the rest of the members are valid */
+		uint16_t mhz;
+		uint16_t band_center_freq1;
+		uint16_t band_center_freq2;
+		WLAN_PHY_MODE phy_mode;
+	} ocb_channel_event;
+
+	/* Information about the schedules in the schedule */
+	struct ol_txrx_ocb_chan_info *ocb_channel_info;
+	uint32_t ocb_channel_count;
 };
 
 struct ol_rx_reorder_array_elem_t {
@@ -831,6 +1013,7 @@ struct ol_txrx_peer_t {
 	u_int8_t               tids_last_pn_valid[OL_TXRX_NUM_EXT_TIDS];
 	u_int16_t              tids_next_rel_idx[OL_TXRX_NUM_EXT_TIDS];
 	u_int16_t              tids_last_seq[OL_TXRX_NUM_EXT_TIDS];
+	uint16_t               tids_mcast_last_seq[OL_TXRX_NUM_EXT_TIDS];
 
 	struct {
 		enum htt_sec_type sec_type;
@@ -876,6 +1059,22 @@ struct ol_txrx_peer_t {
 	u_int64_t last_rmf_pn;
 	u_int32_t rmf_pn_replays;
 	u_int8_t last_rmf_pn_valid;
+#endif
+
+        /* Properties of the last received PPDU */
+	int16_t last_pkt_rssi_cmb;
+	int16_t last_pkt_rssi[4];
+	uint8_t last_pkt_legacy_rate;
+	uint8_t last_pkt_legacy_rate_sel;
+	uint32_t last_pkt_timestamp_microsec;
+	uint8_t last_pkt_timestamp_submicrosec;
+	uint32_t last_pkt_tsf;
+	uint8_t last_pkt_tid;
+	uint16_t last_pkt_center_freq;
+#if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
+	u_int16_t tx_limit;
+	u_int16_t tx_limit_flag;
+	u_int16_t tx_pause_flag;
 #endif
 };
 

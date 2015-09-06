@@ -54,6 +54,13 @@
 #define NBUF_PKT_TRAC_MAX_STRING   12
 #define NBUF_PKT_TRAC_PROTO_STRING 4
 
+#define ADF_NBUF_TRAC_IPV4_OFFSET       14
+#define ADF_NBUF_TRAC_IPV4_HEADER_SIZE  20
+#define ADF_NBUF_TRAC_DHCP_SRV_PORT     67
+#define ADF_NBUF_TRAC_DHCP_CLI_PORT     68
+#define ADF_NBUF_TRAC_ETH_TYPE_OFFSET   12
+#define ADF_NBUF_TRAC_EAPOL_ETH_TYPE    0x888E
+
 /**
  * @brief Platform indepedent packet abstraction
  */
@@ -139,7 +146,7 @@ adf_nbuf_map(adf_os_device_t        osdev,
              adf_nbuf_t             buf,
              adf_os_dma_dir_t       dir)
 {
-#if defined(HIF_PCI) || defined(QCA_WIFI_ISOC)
+#if defined(HIF_PCI)
     return __adf_nbuf_map(osdev, buf, dir);
 #else
     return 0;
@@ -160,7 +167,7 @@ adf_nbuf_unmap(adf_os_device_t      osdev,
                adf_nbuf_t           buf,
                adf_os_dma_dir_t     dir)
 {
-#if defined(HIF_PCI) || defined(QCA_WIFI_ISOC)
+#if defined(HIF_PCI)
     __adf_nbuf_unmap(osdev, buf, dir);
 #endif
 }
@@ -169,7 +176,7 @@ static inline a_status_t
 adf_nbuf_map_single(
     adf_os_device_t osdev, adf_nbuf_t buf, adf_os_dma_dir_t dir)
 {
-#if defined(HIF_PCI) || defined(QCA_WIFI_ISOC)
+#if defined(HIF_PCI)
     return __adf_nbuf_map_single(osdev, buf, dir);
 #else
     return 0;
@@ -180,7 +187,7 @@ static inline void
 adf_nbuf_unmap_single(
     adf_os_device_t osdev, adf_nbuf_t buf, adf_os_dma_dir_t dir)
 {
-#if defined(HIF_PCI) || defined(QCA_WIFI_ISOC)
+#if defined(HIF_PCI)
     __adf_nbuf_unmap_single(osdev, buf, dir);
 #endif
 }
@@ -277,6 +284,32 @@ adf_nbuf_alloc(adf_os_device_t      osdev,
     return __adf_nbuf_alloc(osdev, size, reserve,align, prio);
 }
 
+#ifdef QCA_ARP_SPOOFING_WAR
+/**
+ * adf_rx_nbuf_alloc() Allocate adf_nbuf for Rx packet
+ *
+ * The nbuf created is guarenteed to have only 1 physical segment
+ *
+ * @hdl:   platform device object
+ * @size:  data buffer size for this adf_nbuf including max header
+ *                  size
+ * @reserve:  headroom to start with.
+ * @align:    alignment for the start buffer.
+ * @prio:   Indicate if the nbuf is high priority (some OSes e.g darwin
+ *                   polls few times if allocation fails and priority is  TRUE)
+ *
+ * Return: The new adf_nbuf instance or NULL if there's not enough memory.
+ */
+static inline adf_nbuf_t
+adf_rx_nbuf_alloc(adf_os_device_t      osdev,
+               adf_os_size_t        size,
+               int                  reserve,
+               int                  align,
+               int                  prio)
+{
+    return __adf_rx_nbuf_alloc(osdev, size, reserve,align, prio);
+}
+#endif
 
 /**
  * @brief Free adf_nbuf
@@ -1104,5 +1137,58 @@ static inline void
 adf_nbuf_trace_update(adf_nbuf_t buf, char *event_string)
 {
     __adf_nbuf_trace_update(buf, event_string);
+}
+
+/**
+ * @brief This function stores a flag specifying this TX frame
+ *        is suitable for downloading though a 2nd TX data pipe
+ *        that is used for short frames for protocols that can
+ *        accept out-of-order delivery.
+ *
+ * @param[in] buf        buffer
+ * @param[in] candi      candidate of parallel download frame
+ */
+static inline void
+adf_nbuf_set_tx_parallel_dnload_frm(adf_nbuf_t buf, uint8_t candi)
+{
+   __adf_nbuf_set_tx_htt2_frm(buf, candi);
+}
+
+/**
+ * @brief This function return whether this TX frame is allow
+ *        to download though a 2nd TX data pipe or not.
+ *
+ * @param[in] buf    buffer
+ */
+static inline uint8_t
+adf_nbuf_get_tx_parallel_dnload_frm(adf_nbuf_t buf)
+{
+   return __adf_nbuf_get_tx_htt2_frm(buf);
+}
+
+/**
+ * @brief this will return if the skb data is a dhcp packet or not
+ *
+ * @param[in] buf       buffer
+ *
+ * @return A_STATUS_OK if packet is DHCP packet
+ */
+static inline a_status_t
+adf_nbuf_is_dhcp_pkt(adf_nbuf_t buf)
+{
+    return (__adf_nbuf_is_dhcp_pkt(buf));
+}
+
+/**
+ * @brief this will return if the skb data is a eapol packet or not
+ *
+ * @param[in] buf       buffer
+ *
+ * @return A_STATUS_OK if packet is EAPOL packet
+ */
+static inline a_status_t
+adf_nbuf_is_eapol_pkt(adf_nbuf_t buf)
+{
+    return (__adf_nbuf_is_eapol_pkt(buf));
 }
 #endif

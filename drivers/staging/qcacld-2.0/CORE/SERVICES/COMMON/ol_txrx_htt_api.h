@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -131,6 +131,9 @@ enum htt_tx_status {
 
     /* download_fail - the host could not deliver the tx frame to the target */
     htt_tx_status_download_fail = HTT_HOST_ONLY_STATUS_CODE_START,
+
+    /* peer_del - tx completion for alreay deleted peer used for HL case */
+    htt_tx_status_peer_del = HTT_TX_COMPL_IND_STAT_PEER_DEL,
 };
 
 /**
@@ -163,6 +166,93 @@ ol_tx_completion_handler(
     int num_msdus,
     enum htt_tx_status status,
     void *tx_msdu_id_iterator);
+
+void
+ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits);
+
+
+
+struct rate_report_t{
+    u_int16_t id;
+    u_int16_t phy : 4;
+    u_int32_t rate;
+};
+
+#if defined(CONFIG_HL_SUPPORT) && defined(QCA_BAD_PEER_TX_FLOW_CL)
+/**
+ * @brief Process a link status report for all peers.
+ * @details
+ *  The ol_txrx_peer_link_status_handler function performs basic peer link
+ *  status analysis
+ *
+ *  According to the design, there are 3 kinds of peers which will be
+ *  treated differently:
+ *  1) normal: not do any flow control for the peer
+ *  2) limited: will apply flow control for the peer, but frames are allowed to send
+ *  3) paused: will apply flow control for the peer, no frame is allowed to send
+ *
+ * @param pdev - the data physical device that sent the tx frames
+ * @param status - the number of peers need to be handled
+ * @param peer_link_report - the link status dedail message
+ */
+void
+ol_txrx_peer_link_status_handler(
+    ol_txrx_pdev_handle pdev,
+    u_int16_t peer_num,
+    struct rate_report_t* peer_link_status);
+
+
+#else
+static inline void ol_txrx_peer_link_status_handler(
+    ol_txrx_pdev_handle pdev,
+    u_int16_t peer_num,
+    struct rate_report_t* peer_link_status)
+{
+    /* no-op */
+}
+#endif
+
+
+#ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL
+void
+ol_txrx_update_tx_queue_groups(
+    ol_txrx_pdev_handle pdev,
+    u_int8_t group_id,
+    int32_t credit,
+    u_int8_t absolute,
+    u_int32_t vdev_id_mask,
+    u_int32_t ac_mask
+);
+
+void
+ol_tx_desc_update_group_credit(
+    ol_txrx_pdev_handle pdev,
+    u_int16_t tx_desc_id,
+    int credit, u_int8_t absolute, enum htt_tx_status status);
+#define OL_TX_DESC_UPDATE_GROUP_CREDIT ol_tx_desc_update_group_credit
+
+#ifdef DEBUG_HL_LOGGING
+void
+ol_tx_update_group_credit_stats(ol_txrx_pdev_handle pdev);
+
+void
+ol_tx_dump_group_credit_stats(ol_txrx_pdev_handle pdev);
+
+void
+ol_tx_clear_group_credit_stats(ol_txrx_pdev_handle pdev);
+
+#define OL_TX_UPDATE_GROUP_CREDIT_STATS ol_tx_update_group_credit_stats
+#define OL_TX_DUMP_GROUP_CREDIT_STATS ol_tx_dump_group_credit_stats
+#define OL_TX_CLEAR_GROUP_CREDIT_STATS ol_tx_clear_group_credit_stats
+#else
+#define OL_TX_UPDATE_GROUP_CREDIT_STATS(pdev) /* no -op*/
+#define OL_TX_DUMP_GROUP_CREDIT_STATS(pdev) /* no -op*/
+#define OL_TX_CLEAR_GROUP_CREDIT_STATS(pdev) /* no -op*/
+#endif
+
+#else
+#define OL_TX_DESC_UPDATE_GROUP_CREDIT(pdev, tx_desc_id, credit, absolute, status) /* no-op */
+#endif
 
 /**
  * @brief Init the total amount of target credit.
@@ -598,5 +688,40 @@ ol_txrx_peer_uapsdmask_get(struct ol_txrx_pdev_t * txrx_pdev,
 u_int8_t
 ol_txrx_peer_qoscapable_get(struct ol_txrx_pdev_t * txrx_pdev,
     u_int16_t peer_id);
+
+/**
+ * @brief Process an rx indication message sent by the target.
+ * @details
+ *  The target sends a rx indication message to the host as a
+ *  notification that there are new rx frames available for the
+ *  host to process.
+ *  The HTT host layer locates the rx descriptors and rx frames
+ *  associated with the indication, and calls this function to
+ *  invoke the rx data processing on the new frames.
+ *  All MPDUs referenced by a rx indication message belong to the
+ *  same peer-TID. The frames indicated have been re-ordered by
+ *  the target.
+ *
+ * @param pdev - the data physical device that received the frames
+ *      (registered with HTT as a context pointer during attach time)
+ * @param rx_ind_msg - the network buffer holding the rx indication message
+ * @param peer_id - which peer sent this rx data
+ * @param tid - what (extended) traffic type the rx data is
+ * @param is_offload - is this an offload indication?
+ */
+void
+ol_rx_in_order_indication_handler(
+    ol_txrx_pdev_handle pdev,
+    adf_nbuf_t rx_ind_msg,
+    u_int16_t peer_id,
+    u_int8_t tid,
+    u_int8_t is_offload );
+
+#ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL
+u_int32_t ol_tx_get_max_tx_groups_supported(struct ol_txrx_pdev_t *pdev);
+#define OL_TX_GET_MAX_GROUPS ol_tx_get_max_tx_groups_supported
+#else
+#define OL_TX_GET_MAX_GROUPS(pdev) 0
+#endif
 
 #endif /* _OL_TXRX_HTT_API__H_ */

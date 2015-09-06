@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -20,10 +20,9 @@
  */
 
 /*
- * Copyright (c) 2012-2014 Qualcomm Atheros, Inc.
- * All Rights Reserved.
- * Qualcomm Atheros Confidential and Proprietary.
- *
+ * This file was originally distributed by Qualcomm Atheros, Inc.
+ * under proprietary terms before Copyright ownership was assigned
+ * to the Linux Foundation.
  */
 
 
@@ -73,6 +72,7 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 #endif
 #include "csrSupport.h"
 #include "smeInternal.h"
+#include "sapApi.h"
 #include "ccmApi.h"
 #include "btcApi.h"
 #include "csrInternal.h"
@@ -95,10 +95,6 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 #include <limFTDefs.h>
 #endif
 
-
-#ifdef ANI_DVT_DEBUG
-#include "dvtModule.h"
-#endif
 
 // New HAL API interface defs.
 #include "logDump.h"
@@ -140,17 +136,158 @@ typedef struct sAniSirGlobal *tpAniSirGlobal;
 
 #define SPACE_ASCII_VALUE  32
 
-#ifdef FEATURE_WLAN_BATCH_SCAN
-#define EQUALS_TO_ASCII_VALUE (61)
-#endif
-
-#ifdef QCA_WIFI_2_0
 #define WLAN_HOST_SEQ_NUM_MIN				2048
 #define WLAN_HOST_SEQ_NUM_MAX				4095
 #define LOW_SEQ_NUM_MASK				0x000F
 #define HIGH_SEQ_NUM_MASK				0x0FF0
 #define HIGH_SEQ_NUM_OFFSET				4
-#endif /* QCA_WIFI_2_0 */
+
+/*
+ * NSS cfg bit definition.
+ * STA          BIT[0:1]
+ * SAP          BIT[2:3]
+ * P2P_GO       BIT[4:5]
+ * P2P_CLIENT   BIT[6:7]
+ * IBSS         BIT[8:9]
+ * TDLS         BIT[10:11]
+ * P2P_DEVICE   BIT[12:13]
+ * OCB          BIT[14:15]
+ */
+
+#define CFG_STA_NSS(_x)     ((((_x) >> 0) & 0x3) ? (((_x) >> 0) & 0x3) : 1)
+#define CFG_SAP_NSS(_x)     ((((_x) >> 2) & 0x3) ? (((_x) >> 2) & 0x3) : 1)
+#define CFG_P2P_GO_NSS(_x)  ((((_x) >> 4) & 0x3) ? (((_x) >> 4) & 0x3) : 1)
+#define CFG_P2P_CLI_NSS(_x) ((((_x) >> 6) & 0x3) ? (((_x) >> 6) & 0x3) : 1)
+#define CFG_P2P_DEV_NSS(_x) ((((_x) >> 8) & 0x3) ? (((_x) >> 8) & 0x3) : 1)
+#define CFG_IBSS_NSS(_x)    ((((_x) >> 10) & 0x3) ? (((_x) >> 10) & 0x3) : 1)
+#define CFG_TDLS_NSS(_x)    ((((_x) >> 12) & 0x3) ? (((_x) >> 12) & 0x3) : 1)
+#define CFG_OCB_NSS(_x)     ((((_x) >> 14) & 0x3) ? (((_x) >> 14) & 0x3) : 1)
+
+/**
+ * enum log_event_type - Type of event initiating bug report
+ * @WLAN_LOG_TYPE_NON_FATAL: Non fatal event
+ * @WLAN_LOG_TYPE_FATAL: Fatal event
+ *
+ * Enum indicating the type of event that is initiating the bug report
+ */
+enum log_event_type {
+	WLAN_LOG_TYPE_NON_FATAL,
+	WLAN_LOG_TYPE_FATAL,
+};
+
+/**
+ * enum log_event_indicator - Module triggering bug report
+ * @WLAN_LOG_INDICATOR_UNUSED: Unused
+ * @WLAN_LOG_INDICATOR_FRAMEWORK: Framework triggers bug report
+ * @WLAN_LOG_INDICATOR_HOST_DRIVER: Host driver triggers bug report
+ * @WLAN_LOG_INDICATOR_FIRMWARE: FW initiates bug report
+ *
+ * Enum indicating the module that triggered the bug report
+ */
+enum log_event_indicator {
+	WLAN_LOG_INDICATOR_UNUSED,
+	WLAN_LOG_INDICATOR_FRAMEWORK,
+	WLAN_LOG_INDICATOR_HOST_DRIVER,
+	WLAN_LOG_INDICATOR_FIRMWARE,
+};
+
+/**
+ * enum log_event_host_reason_code - Reason code for bug report
+ * @WLAN_LOG_REASON_CODE_UNUSED: Unused
+ * @WLAN_LOG_REASON_COMMAND_UNSUCCESSFUL: Command response status from FW
+ * is error
+ * @WLAN_LOG_REASON_ROAM_FAIL: Driver initiated roam has failed
+ * @WLAN_LOG_REASON_THREAD_STUCK: Monitor Health of host threads and report
+ * fatal event if some thread is stuck
+ * @WLAN_LOG_REASON_DATA_STALL: Unable to send/receive data due to low resource
+ * scenario for a prolonged period
+ * @WLAN_LOG_REASON_SME_COMMAND_STUCK: SME command is stuck in SME active queue
+ * @WLAN_LOG_REASON_ZERO_SCAN_RESULTS: Full scan resulted in zero scan results
+ * @WLAN_LOG_REASON_QUEUE_FULL: Defer queue becomes full for a prolonged period
+ * @WLAN_LOG_REASON_POWER_COLLAPSE_FAIL: Unable to allow apps power collapse
+ * for a prolonged period
+ * @WLAN_LOG_REASON_SSR_FAIL: Unable to gracefully complete SSR
+ * @WLAN_LOG_REASON_DISCONNECT_FAIL: Disconnect from Supplicant is not
+ * successful
+ * @WLAN_LOG_REASON_CLEAN_UP_FAIL: Clean up of  TDLS or Pre-Auth Sessions
+ * not successful
+ * @WLAN_LOG_REASON_MALLOC_FAIL: Memory allocation Fails
+ * @WLAN_LOG_REASON_VOS_MSG_UNDER_RUN: VOS Core runs out of message wrapper
+ * @WLAN_LOG_REASON_MSG_POST_FAIL: Unable to post msg
+ *
+ * This enum contains the different reason codes for bug report
+ */
+enum log_event_host_reason_code {
+	WLAN_LOG_REASON_CODE_UNUSED,
+	WLAN_LOG_REASON_COMMAND_UNSUCCESSFUL,
+	WLAN_LOG_REASON_ROAM_FAIL,
+	WLAN_LOG_REASON_THREAD_STUCK,
+	WLAN_LOG_REASON_DATA_STALL,
+	WLAN_LOG_REASON_SME_COMMAND_STUCK,
+	WLAN_LOG_REASON_ZERO_SCAN_RESULTS,
+	WLAN_LOG_REASON_QUEUE_FULL,
+	WLAN_LOG_REASON_POWER_COLLAPSE_FAIL,
+	WLAN_LOG_REASON_SSR_FAIL,
+	WLAN_LOG_REASON_DISCONNECT_FAIL,
+	WLAN_LOG_REASON_CLEAN_UP_FAIL,
+	WLAN_LOG_REASON_MALLOC_FAIL,
+	WLAN_LOG_REASON_VOS_MSG_UNDER_RUN,
+	WLAN_LOG_REASON_MSG_POST_FAIL,
+};
+
+/**
+ * enum userspace_log_level - Log level at userspace
+ * @LOG_LEVEL_NO_COLLECTION: verbose_level 0 corresponds to no collection
+ * @LOG_LEVEL_NORMAL_COLLECT: verbose_level 1 correspond to normal log level,
+ * with minimal user impact. this is the default value
+ * @LOG_LEVEL_ISSUE_REPRO: verbose_level 2 are enabled when user is lazily
+ * trying to reproduce a problem, wifi performances and power can be impacted
+ * but device should not otherwise be significantly impacted
+ * @LOG_LEVEL_ACTIVE: verbose_level 3+ are used when trying to
+ * actively debug a problem
+ *
+ * Various log levels defined in the userspace for logging applications
+ */
+enum userspace_log_level {
+	LOG_LEVEL_NO_COLLECTION,
+	LOG_LEVEL_NORMAL_COLLECT,
+	LOG_LEVEL_ISSUE_REPRO,
+	LOG_LEVEL_ACTIVE,
+};
+
+/**
+ * enum wifi_driver_log_level - Log level defined in the driver for logging
+ * @WLAN_LOG_LEVEL_OFF: No logging
+ * @WLAN_LOG_LEVEL_NORMAL: Default logging
+ * @WLAN_LOG_LEVEL_REPRO: Normal debug level
+ * @WLAN_LOG_LEVEL_ACTIVE: Active debug level
+ *
+ * Log levels defined for logging by the wifi driver
+ */
+enum wifi_driver_log_level {
+	WLAN_LOG_LEVEL_OFF,
+	WLAN_LOG_LEVEL_NORMAL,
+	WLAN_LOG_LEVEL_REPRO,
+	WLAN_LOG_LEVEL_ACTIVE,
+};
+
+/**
+ * enum wifi_logging_ring_id - Ring id of logging entities
+ * @RING_ID_WAKELOCK:         Power events ring id
+ * @RING_ID_CONNECTIVITY:     Connectivity event ring id
+ * @RING_ID_PER_PACKET_STATS: Per packet statistic ring id
+ * @RIND_ID_DRIVER_DEBUG:     Driver debug messages ring id
+ * @RING_ID_FIRMWARE_DEBUG:   Firmware debug messages ring id
+ *
+ * This enum has the ring id values of logging rings
+ */
+enum wifi_logging_ring_id {
+	RING_ID_WAKELOCK,
+	RING_ID_CONNECTIVITY,
+	RING_ID_PER_PACKET_STATS,
+	RIND_ID_DRIVER_DEBUG,
+	RING_ID_FIRMWARE_DEBUG,
+};
 
 // -------------------------------------------------------------------
 // Change channel generic scheme
@@ -187,7 +324,6 @@ typedef struct sLimTimers
     TX_TIMER   gLimBackgroundScanTimer;
 
     TX_TIMER    gLimPreAuthClnupTimer;
-    //TX_TIMER    gLimAuthResponseTimer[HAL_NUM_STA];
 
     // Association related timers
     TX_TIMER    gLimAssocFailureTimer;
@@ -244,11 +380,6 @@ typedef struct sLimTimers
     TX_TIMER           gLimEseTsmTimer;
 #endif
     TX_TIMER           gLimRemainOnChannelTimer;
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-    TX_TIMER           gLimTdlsDisRspWaitTimer;
-    TX_TIMER           gLimTdlsLinkSetupRspTimeouTimer;
-    TX_TIMER           gLimTdlsLinkSetupCnfTimeoutTimer;
-#endif
 
     TX_TIMER           gLimPeriodicJoinProbeReqTimer;
     TX_TIMER           gLimDisassocAckTimer;
@@ -356,7 +487,7 @@ typedef struct sAniSirLim
     /// Place holder for current channel ID
     /// being scanned during background scanning
     tANI_U32   gLimBackgroundScanChannelId;
-    /// flag to indicate that bacground scan timer has been started
+    /* Flag to indicate that background scan timer has been started */
     tANI_U8    gLimBackgroundScanStarted;
 
     /* Used to store the list of legacy bss sta detected during scan on one channel */
@@ -364,17 +495,17 @@ typedef struct sAniSirLim
     tANI_U16    gLimRestoreCBCount;
     tSirMacAddr gLimLegacyBssidList[MAX_NUM_LEGACY_BSSID_PER_CHANNEL];
 
-    //
-    // If this flag is 1,
-    //   then, LIM will "try and trigger" a background
-    //   scan whenever it receives a Quiet BSS IE
-    //
-    // If this flag is 0,
-    //   then, LIM will simply shut-off Tx/Rx whenever it
-    //   receives a Quiet BSS IE.
-    //   This is the default behavior when a Quiet BSS IE
-    //   is received and 11H is enabled
-    //
+    /*
+     * If this flag is 1,
+     *   then, LIM will "try and trigger" a background
+     *   scan whenever it receives a Quiet BSS IE
+     *
+     * If this flag is 0,
+     *   then, LIM will simply shut-off Tx/Rx whenever it
+     *   receives a Quiet BSS IE.
+     *   This is the default behaviour when a Quiet BSS IE
+     *   is received and 11H is enabled
+     */
     tANI_U32 gLimTriggerBackgroundScanDuringQuietBss;
 
 
@@ -419,24 +550,16 @@ typedef struct sAniSirLim
     void* gpLimMlmSetKeysReq;
     void* gpLimMlmRemoveKeyReq;
 
-    //On STA: staid for self generated by HAL and sent as response to 'ADD STA' msg.
-    //On AP:   staid corresponding to BSS generated by HAL and sent as response to 'ADD BSS' msg.
-  //  tANI_U16             gLimStaid; // TO SUPPORT BT-AMP
-
     //////////////////////////////////////////     BSS RELATED END ///////////////////////////////////////////
 
     //////////////////////////////////////////     IBSS RELATED START ///////////////////////////////////////////
-    // This indicates whether we've a partner
-    // that is also transmitting Beacon frame
-    // in IBSS
-    //tANI_U8    gLimIbssActive;  oct1 review
-
     //This indicates whether this STA coalesced and adapter to peer's capabilities or not.
     tANI_U8    gLimIbssCoalescingHappened;
 
     /// Definition for storing IBSS peers BSS description
     tLimIbssPeerNode      *gLimIbssPeerList;
     tANI_U32               gLimNumIbssPeers;
+    tANI_U32               gLimIbssRetryCnt;
 
     // ibss info - params for which ibss to join while coalescing
     tAniSirLimIbss      ibssInfo;
@@ -457,11 +580,10 @@ typedef struct sAniSirLim
     tANI_U16  gLimNumOfAniSTAs;      // count of ANI peers
     tANI_U16  gLimAssocStaLimit;
 
-    /// This indicates number of RXed Beacons during HB period
-   // tANI_U8    gLimRxedBeaconCntDuringHB;
-
     // Heart-Beat interval value
     tANI_U32   gLimHeartBeatCount;
+    tSirMacAddr gLimHeartBeatApMac[2];
+    tANI_U8 gLimHeartBeatApMacIndex;
 
     // Statistics to keep track of no. beacons rcvd in heart beat interval
     tANI_U16            gLimHeartBeatBeaconStats[MAX_NO_BEACONS_PER_HEART_BEAT_INTERVAL];
@@ -536,7 +658,6 @@ typedef struct sAniSirLim
     /// Previous MLM State
     tLimMlmStates       gLimPrevMlmState;
 
-#ifdef GEN4_SCAN
     // LIM to HAL SCAN Management Message Interface states
     tLimLimHalScanState gLimHalScanState;
 //WLAN_SUSPEND_LINK Related
@@ -551,7 +672,6 @@ typedef struct sAniSirLim
     //current channel. CB state goes along with channel to resume to
     tANI_U16    gResumeChannel;
     ePhyChanBondState    gResumePhyCbState;
-#endif // GEN4_SCAN
 
     // Change channel generic scheme
     CHANGE_CHANNEL_CALLBACK gpchangeChannelCallback;
@@ -583,7 +703,6 @@ typedef struct sAniSirLim
     tANI_U32           propRateAdjustPeriod;
     tANI_U32           scanStartTime;    // used to measure scan time
 
-    //tANI_U8            gLimBssid[6];
     tANI_U8            gLimMyMacAddr[6];
     tANI_U8            ackPolicy;
 
@@ -599,13 +718,13 @@ typedef struct sAniSirLim
 
     //////////////////////////////////////////     MISC RELATED START ///////////////////////////////////////////
 
-    // WDS info
-    tANI_U32            gLimNumWdsInfoInd;
-    tANI_U32            gLimNumWdsInfoSet;
-    tSirWdsInfo         gLimWdsInfo;
-
-    // Deferred Queue Paramters
+    /* Deferred Queue Parameters */
     tLimDeferredMsgQParams    gLimDeferredMsgQ;
+
+#ifdef SAP_AUTH_OFFLOAD
+    /* SAP deferred msg queue */
+    struct slim_deferred_sap_queue    glim_sap_deferred_msgq;
+#endif
 
     // addts request if any - only one can be outstanding at any time
     tSirAddtsReq       gLimAddtsReq;
@@ -616,7 +735,7 @@ typedef struct sAniSirLim
     tCfgProtection    cfgProtection;
 
     tANI_U8 gLimProtectionControl;
-    //RF band to determibe 2.4/5 GHZ
+    /* RF band to determine 2.4/5 GHz */
 
     // alternate radio info used by STA
     tSirAlternateRadioInfo  gLimAlternateRadio;
@@ -652,7 +771,7 @@ typedef struct sAniSirLim
 
     /* Used on STA for AC downgrade. This is a dynamic mask
      * setting which keep tracks of ACs being admitted.
-     * If bit is set to 0: That partiular AC is not admitted
+     * If bit is set to 0: That particular AC is not admitted
      * If bit is set to 1: That particular AC is admitted
      */
     tANI_U8  gAcAdmitMask[SIR_MAC_DIRECTION_DIRECT];
@@ -670,10 +789,10 @@ typedef struct sAniSirLim
 #ifdef FEATURE_WLAN_TDLS
     tANI_U8 gLimTDLSBufStaEnabled;
     tANI_U8 gLimTDLSUapsdMask;
+    tANI_U8 gLimTDLSOffChannelEnabled;
+    // TDLS WMM Mode
+    tANI_U8 gLimTDLSWmmMode;
 #endif
-
-
-
     //////////////////////////////////////////     MISC RELATED END ///////////////////////////////////////////
 
     //////////////////////////////////////////     ASSOC RELATED START ///////////////////////////////////////////
@@ -691,10 +810,6 @@ typedef struct sAniSirLim
     // Place holder for current authentication request
     // being handled
     tLimMlmAuthReq     *gpLimMlmAuthReq;
-
-    // Place holder for Join request that we're
-    // currently attempting
-    //tLimMlmJoinReq       *gpLimMlmJoinReq;
 
     // Reason code to determine the channel change context while sending
     // WDA_CHNL_SWITCH_REQ message to HAL
@@ -725,39 +840,6 @@ typedef struct sAniSirLim
     tCacheParams    protStaCache[LIM_PROT_STA_CACHE_SIZE];
 
     //////////////////////////////////////////     ASSOC RELATED END ///////////////////////////////////////////
-
-
-
-    //
-    // For DEBUG purposes
-    // Primarily for - TITAN BEACON workaround
-    // Symptom - TFP/PHY gets stuck
-    //
-    tANI_U32 gLimScanOverride;
-    // Holds the desired tSirScanType, as requested by SME
-    tSirScanType gLimScanOverrideSaved;
-
-    //
-    // CB State protection, operated upon as follows:
-    // 1 - CB is enabled in the hardware ONLY WHEN a Titan
-    // STA associates with the AP
-    // 0 - CB is enabled/disabled based on the configuration
-    // received as per eWNI_SME_START_BSS_REQ
-    //
-    tANI_U32 gLimCBStateProtection;
-
-    // Count of TITAN STA's currently associated
-    tANI_U16 gLimTitanStaCount;
-
-    //
-    // For DEBUG purposes
-    // Primarily for - TITAN workaround
-    // Symptom - Avoid NULL data frames
-        // Applies to AP only
-    //
-    tANI_U32 gLimBlockNonTitanSta;
-    /////////////////////////// TITAN related globals       //////////////////////////////////////////
-
 
     ////////////////////////////////  HT RELATED           //////////////////////////////////////////
     //
@@ -861,10 +943,10 @@ typedef struct sAniSirLim
     //
     tANI_U8 gHTDualCTSProtection;
 
-    //
-    // Identifies a single STBC MCS that shall ne used for
-    // STBC control frames and STBC beacons
-    //
+    /*
+     * Identifies a single STBC MCS that shall be used for
+     * STBC control frames and STBC beacons
+     */
     tANI_U8 gHTSTBCBasicMCS;
 
     tANI_U8 gHTNonGFDevicesPresent;
@@ -873,22 +955,6 @@ typedef struct sAniSirLim
 
     ////////////////////////////////  HT RELATED           //////////////////////////////////////////
 
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-    ////////////////////////////////  TDLS RELATED         //////////////////////////////////////////
-
-    tSirTdlsDisReq gLimTdlsDisReq ;
-    //tLimDisResultList *gTdlsDisResultList ;
-    tLimDisResultList *gLimTdlsDisResultList ;
-    tANI_U8 gLimTdlsDisStaCount ;
-    tANI_U8 gAddStaDisRspWait ;
-
-    tLimTdlsLinkSetupInfo  gLimTdlsLinkSetupInfo;
-
-    /* to track if direct link is b/g/n, this can be independent of AP link */
-#ifdef FEATURE_WLAN_TDLS_NEGATIVE
-    tANI_U32 gLimTdlsNegativeBehavior;
-#endif
-#endif
 #ifdef FEATURE_WLAN_TDLS
     tANI_U8 gLimAddStaTdls ;
     tANI_U8 gLimTdlsLinkMode ;
@@ -930,6 +996,12 @@ tLimMlmOemDataRsp       *gpLimMlmOemDataRsp;
     tANI_U8 gLimDfsTargetChanNum;
     tANI_U8 fOffloadScanPending; /*Flag to track offload scan */
     tANI_U8 fOffloadScanP2PSearch; /*Flag to track the p2p search */
+    tANI_U8 fOffloadScanP2PListen; /*Flag to track the p2p listen */
+    /*Filter out P2P result if not P2P scan/listen */
+    tANI_U8 offload_scan_filter_p2p_result;
+    tANI_U8 probeCounter;
+    tANI_U8 maxProbe;
+    uint8_t retry_packet_cnt;
 } tAniSirLim, *tpAniSirLim;
 
 typedef struct sLimMgmtFrameRegistration
@@ -947,14 +1019,6 @@ typedef struct sRrmContext
   tRrmSMEContext rrmSmeContext;
   tRrmPEContext  rrmPEContext;
 }tRrmContext, *tpRrmContext;
-#endif
-
-#if defined WLAN_FEATURE_VOWIFI_11R
-typedef struct sFTContext
-{
-  tftSMEContext ftSmeContext;
-  tftPEContext  ftPEContext;
-} tftContext, *tpFTContext;
 #endif
 
 //Check if this definition can actually move here even for Volans. In that case
@@ -1017,32 +1081,73 @@ typedef struct sMacOpenParameters
     /* max offload peer */
     tANI_U8 apMaxOffloadPeers;
 
+    /* max offload reorder buffs */
+    tANI_U8 apMaxOffloadReorderBuffs;
+
+#ifdef FEATURE_WLAN_RA_FILTERING
+    tANI_U16 RArateLimitInterval;
+    v_BOOL_t IsRArateLimitEnabled;
+#endif
+    /* is RX re-ordering offloaded to the fw */
+    tANI_U8 reorderOffload;
+
+    /* dfs radar pri multiplier */
+    tANI_S32 dfsRadarPriMultiplier;
+
+#ifdef IPA_UC_OFFLOAD
+    /* IPA Micro controller data path offload enable flag */
+    tANI_U8 ucOffloadEnabled;
+    /* IPA Micro controller data path offload TX buffer count */
+    tANI_U32 ucTxBufCount;
+    /* IPA Micro controller data path offload TX buffer size */
+    tANI_U32 ucTxBufSize;
+    /* IPA Micro controller data path offload RX indication ring count */
+    tANI_U32 ucRxIndRingCount;
+    /* IPA Micro controller data path offload TX partition base */
+    tANI_U32 ucTxPartitionBase;
+#endif /* IPA_UC_OFFLOAD */
+
+    bool      tx_chain_mask_cck;
+    uint16_t  self_gen_frm_pwr;
 } tMacOpenParameters;
 
 typedef struct sHalMacStartParameters
 {
-    // parametes for the Firmware
-    //tHalFirmwareParameters FW;
+    /* Parameters for the Firmware */
     tDriverType  driverType;
 
 } tHalMacStartParameters;
 
+/**
+ * struct vdev_type_nss - vdev type nss structure
+ *
+ * @sta: STA Nss value.
+ * @sap: SAP Nss value.
+ * @p2p_go: P2P GO Nss value.
+ * @p2p_cli: P2P CLI Nss value.
+ * @p2p_dev: P2P device Nss value.
+ * @ibss: IBSS Nss value.
+ * @tdls: TDLS Nss value.
+ * @ocb: OCB Nss value.
+ *
+ * Holds the Nss values of different vdev types.
+ */
+struct vdev_type_nss {
+    uint8_t sta;
+    uint8_t sap;
+    uint8_t p2p_go;
+    uint8_t p2p_cli;
+    uint8_t p2p_dev;
+    uint8_t ibss;
+    uint8_t tdls;
+    uint8_t ocb;
+};
 // -------------------------------------------------------------------
 /// MAC Sirius parameter structure
 typedef struct sAniSirGlobal
-
 {
     tDriverType  gDriverType;
 
-    // we should be able to save this hddHandle in here and deprecate
-    // the pAdapter.  For now, compiles are a problem because there
-    // are dependencides on the header files that are not handling the
-    // compiler very gracefully.
-//    tHddHandle   hHdd;       // Handle to the HDD.
-    //void        *hHdd;
-    void        *pAdapter;   // deprecate this pAdapter pointer eventually...
-                             // all interfaces to the HDD should pass hHdd, which
-                             // is stored in this struct above.....
     tSirMbMsg*   pResetMsg;
     tAniSirCfg   cfg;
     tAniSirLim   lim;
@@ -1050,22 +1155,18 @@ typedef struct sAniSirGlobal
     tAniSirSch   sch;
     tAniSirSys   sys;
     tAniSirUtils utils;
-    // PAL/HDD handle
+
+    /* PAL/HDD handle */
     tHddHandle hHdd;
 
-#ifdef ANI_DVT_DEBUG
-    tAniSirDvt   dvt;
-#endif
 
     tSmeStruct sme;
+    tSapStruct sap;
     tCsrScanStruct scan;
     tCsrRoamStruct roam;
 
 #ifdef FEATURE_OEM_DATA_SUPPORT
     tOemDataStruct oemData;
-#endif
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-    tCsrTdlsCtxStruct tdlsCtx ;
 #endif
     tPmcInfo     pmc;
     tSmeBtcInfo  btc;
@@ -1081,16 +1182,12 @@ typedef struct sAniSirGlobal
     tp2pContext p2pContext;
 #endif
 
-#if defined WLAN_FEATURE_VOWIFI_11R
-    tftContext   ft;
-#endif
-
     tANI_U32     gCurrentLogSize;
     tANI_U32     menuCurrent;
     /* logDump specific */
     tANI_U32 dumpTablecurrentId;
-    /* Instead of static allocation I will dyanamically allocate memory for dumpTableEntry
-        Thinking of using linkedlist  */
+    /* Instead of static allocation I will dynamically allocate memory
+       for dumpTableEntry thinking of using linked list  */
     tDumpModuleEntry *dumpTableEntry[MAX_DUMP_TABLE_ENTRY];
 #ifdef FEATURE_WLAN_TDLS
     v_BOOL_t isTdlsPowerSaveProhibited;
@@ -1113,13 +1210,29 @@ typedef struct sAniSirGlobal
     tANI_U8 lteCoexAntShare;
     tANI_U8 beacon_offload;
     tANI_U32 fEnableDebugLog;
-#ifdef QCA_WIFI_2_0
     tANI_U16 mgmtSeqNum;
-#endif /* QCA_WIFI_2_0 */
     v_BOOL_t enable5gEBT;
     /* Miracast session 0-Disabled, 1-Source, 2-sink*/
     tANI_U8 fMiracastSessionPresent;
+#ifdef WLAN_FEATURE_EXTWOW_SUPPORT
+    csrReadyToExtWoWCallback readyToExtWoWCallback;
+    void *readyToExtWoWContext;
+#endif
 
+#ifdef SAP_AUTH_OFFLOAD
+    bool sap_auth_offload;
+    uint32_t sap_auth_offload_sec_type;
+#endif /* SAP_AUTH_OFFLOAD */
+
+    /* 802.11p enable */
+    bool enable_dot11p;
+    uint32_t f_sta_miracast_mcc_rest_time_val;
+    uint8_t f_prefer_non_dfs_on_radar;
+    uint32_t fine_time_meas_cap;
+    /* per band chain mask support */
+    bool per_band_chainmask_supp;
+    struct vdev_type_nss vdev_type_nss_2g;
+    struct vdev_type_nss vdev_type_nss_5g;
 } tAniSirGlobal;
 
 typedef enum

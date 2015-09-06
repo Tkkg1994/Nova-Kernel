@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -20,10 +20,9 @@
  */
 
 /*
- * Copyright (c) 2012-2014 Qualcomm Atheros, Inc.
- * All Rights Reserved.
- * Qualcomm Atheros Confidential and Proprietary.
- *
+ * This file was originally distributed by Qualcomm Atheros, Inc.
+ * under proprietary terms before Copyright ownership was assigned
+ * to the Linux Foundation.
  */
 
 
@@ -44,12 +43,16 @@
 
 # include "sirTypes.h"
 
+/* defines for WPS config states */
+#define       SAP_WPS_DISABLED             0
+#define       SAP_WPS_ENABLED_UNCONFIGURED 1
+#define       SAP_WPS_ENABLED_CONFIGURED   2
+
 // Firmware wide constants
 
-#define SIR_MAX_PACKET_SIZE     2048
+#define SIR_MAX_PACKET_SIZE     512
 #define SIR_MAX_NUM_CHANNELS    64
 #define SIR_MAX_NUM_STA_IN_IBSS 16
-#define SIR_MAX_NUM_STA_IN_BSS  256
 #define SIR_ESE_MAX_MEAS_IE_REQS   8
 
 typedef enum
@@ -68,6 +71,8 @@ typedef enum
 #endif
     PHY_CHANNEL_BONDING_STATE_MAX   = 11
 }ePhyChanBondState;
+
+#define MAX_BONDED_CHANNELS 4
 
 #define SIR_MIN(a,b)   (((a) < (b)) ? (a) : (b))
 #define SIR_MAX(a,b)   (((a) > (b)) ? (a) : (b))
@@ -103,9 +108,6 @@ typedef enum {
    TDLS_OFF_CHANNEL = 30,
 #endif
 
-#ifdef FEATURE_WLAN_BATCH_SCAN
-   BATCH_SCAN = 31,
-#endif
    //MAX_FEATURE_SUPPORTED = 128
 } placeHolderInCapBitmap;
 
@@ -147,8 +149,8 @@ typedef struct sSirMsgQ
     /**
      * Based on the type either a bodyptr pointer into
      * memory or bodyval as a 32 bit data is used.
-     * bodyptr: is always a freeable pointer, one should always
-     * make sure that bodyptr is always freeable.
+     * bodyptr: is always a free able pointer, one should always
+     * make sure that bodyptr is always free able.
      *
      * Messages should use either bodyptr or bodyval; not both !!!.
      */
@@ -209,86 +211,6 @@ typedef struct sSirMbMsgP2p
     tANI_U32 data[1];
 } tSirMbMsgP2p, *tpSirMbMsgP2p;
 
-/// Message queue definitions
-//  msgtype(2bytes) reserved(2bytes) bodyptr(4bytes) bodyval(4bytes)
-//  NOTE tSirMsgQ should be always multiples of WORD(4Bytes)
-//  All Queue Message Size are multiples of word Size (4 bytes)
-#define SYS_MSG_SIZE            (sizeof(tSirMsgQ)/4)
-
-/// gHalMsgQ
-
-#define SYS_HAL_MSG_SIZE        SYS_MSG_SIZE
-
-/// gMMHhiPriorityMsgQ
-
-#define SYS_MMH_HI_PRI_MSG_SIZE SYS_MSG_SIZE
-
-/// gMMHprotocolMsgQ
-
-#define SYS_MMH_PROT_MSG_SIZE   SYS_MSG_SIZE
-
-/// gMMHdebugMsgQ
-
-#define SYS_MMH_DEBUG_MSG_SIZE  SYS_MSG_SIZE
-
-/// gMAINTmsgQ
-
-#define SYS_MNT_MSG_SIZE        SYS_MSG_SIZE
-
-/// LIM Message Queue
-
-#define SYS_LIM_MSG_SIZE        SYS_MSG_SIZE
-
-/// ARQ Message Queue
-
-#define SYS_ARQ_MSG_SIZE        SYS_MSG_SIZE
-
-/// Scheduler Message Queue
-
-#define SYS_SCH_MSG_SIZE        SYS_MSG_SIZE
-
-/// PMM Message Queue
-
-#define SYS_PMM_MSG_SIZE        SYS_MSG_SIZE
-
-/// TX Message Queue
-
-#define SYS_TX_MSG_SIZE         (sizeof(void *)/4)  // Message pointer size
-
-/// RX Message Queue
-
-#define SYS_RX_MSG_SIZE         (sizeof(void *)/4)  // Message pointer size
-
-/// PTT  Message Queue
-#define SYS_NIM_PTT_MSG_SIZE    SYS_MSG_SIZE  // Message pointer size
-
-
-
-/* *************************************** *
- *                                         *
- *        Block pool configuration         *
- *                                         *
- * *************************************** */
-
-// The following values specify the number of blocks to be created
-// for each block pool size.
-
-#define SIR_BUF_BLK_32_NUM           64
-#define SIR_BUF_BLK_64_NUM           128
-#define SIR_BUF_BLK_96_NUM           16
-#define SIR_BUF_BLK_128_NUM          128
-#define SIR_BUF_BLK_160_NUM          8
-#define SIR_BUF_BLK_192_NUM          0
-#define SIR_BUF_BLK_224_NUM          0
-#define SIR_BUF_BLK_256_NUM          128
-#define SIR_BUF_BLK_512_NUM          0
-#define SIR_BUF_BLK_768_NUM          0
-#define SIR_BUF_BLK_1024_NUM         2
-#define SIR_BUF_BLK_1280_NUM         0
-#define SIR_BUF_BLK_1536_NUM         2
-#define SIR_BUF_BLK_1792_NUM         0
-#define SIR_BUF_BLK_2048_NUM         2
-#define SIR_BUF_BLK_2304_NUM         0
 
 /* ******************************************* *
  *                                             *
@@ -324,9 +246,7 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_CCA_CHANGE_MODE            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 10)
 #define SIR_HAL_TIMER_WRAP_AROUND_STATS_COLLECT_REQ   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 11)
 
-/*
- * New Taurus related messages
- */
+#define SIR_HAL_GET_FW_STATUS_REQ          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 12)
 #define SIR_HAL_ADD_STA_REQ                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 13)
 #define SIR_HAL_ADD_STA_RSP                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 14)
 #define SIR_HAL_DELETE_STA_REQ             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 15)
@@ -474,7 +394,7 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_BTC_SET_CFG                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 138)
 #define SIR_HAL_SIGNAL_BT_EVENT            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 139)
 #define SIR_HAL_HANDLE_FW_MBOX_RSP            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 140)
-#define SIR_HAL_UPDATE_PROBE_RSP_TEMPLATE_IND     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 141)
+#define SIR_HAL_SEND_PROBE_RSP_TMPL        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 141)
 
 /* PE <-> HAL addr2 mismatch message */
 #define SIR_LIM_ADDR2_MISS_IND             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 142)
@@ -497,7 +417,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_ADD_STA_SELF_RSP           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 151)
 #define SIR_HAL_DEL_STA_SELF_REQ           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 152)
 #define SIR_HAL_DEL_STA_SELF_RSP           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 153)
-#define SIR_HAL_SIGNAL_BTAMP_EVENT         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 154)
 
 #define SIR_HAL_CFG_RXP_FILTER_REQ         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 155)
 #define SIR_HAL_CFG_RXP_FILTER_RSP         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 156)
@@ -531,7 +450,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_SET_PNO_REQ                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 170)
 #define SIR_HAL_SET_PNO_CHANGED_IND        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 171)
 #define SIR_HAL_UPDATE_SCAN_PARAMS         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 172)
-#define SIR_HAL_SET_RSSI_FILTER_REQ        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 173)
 #endif // FEATURE_WLAN_SCAN_PNO
 
 
@@ -578,8 +496,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_ROAM_SCAN_OFFLOAD_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 191)
 #define SIR_HAL_ROAM_SCAN_OFFLOAD_RSP      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 192)
 #endif
-#define SIR_HAL_GET_ROAM_RSSI_REQ          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 193)
-#define SIR_HAL_GET_ROAM_RSSI_RSP          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 194)
 
 #define SIR_HAL_TRAFFIC_STATS_IND          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 195)
 
@@ -609,22 +525,16 @@ typedef struct sSirMbMsgP2p
 
 #define SIR_HAL_RATE_UPDATE_IND            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 217)
 
-#ifdef FEATURE_WLAN_BATCH_SCAN
-#define SIR_HAL_SET_BATCH_SCAN_REQ         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 218)
-#define SIR_HAL_SET_BATCH_SCAN_RSP         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 219)
-#define SIR_HAL_STOP_BATCH_SCAN_IND        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 220)
-#define SIR_HAL_TRIGGER_BATCH_SCAN_RESULT_IND (SIR_HAL_ITC_MSG_TYPES_BEGIN + 221)
-#endif
+#define SIR_HAL_FLUSH_LOG_TO_FW            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 218)
 
+/* 219 to 221 unused */
 
 #define SIR_HAL_START_ROAM_CANDIDATE_LOOKUP_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 222)
 
-#ifdef QCA_WIFI_2_0
 #define SIR_HAL_CLI_SET_CMD                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 223)
 #define SIR_HAL_CLI_GET_CMD                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 224)
 #ifndef REMOVE_PKT_LOG
 #define SIR_HAL_PKTLOG_ENABLE_REQ          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 225)
-#endif
 #endif
 #ifdef FEATURE_WLAN_SCAN_PNO
 #define SIR_HAL_SME_SCAN_CACHE_UPDATED     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 226)
@@ -644,14 +554,12 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_UPDATE_USERPOS              (SIR_HAL_ITC_MSG_TYPES_BEGIN + 236)
 #endif
 
-#ifdef QCA_WIFI_2_0
 #ifdef FEATURE_WLAN_TDLS
 #define SIR_HAL_UPDATE_FW_TDLS_STATE        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 237)
 #define SIR_HAL_UPDATE_TDLS_PEER_STATE      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 238)
 #define SIR_HAL_TDLS_SHOULD_DISCOVER        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 239)
 #define SIR_HAL_TDLS_SHOULD_TEARDOWN        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 240)
 #define SIR_HAL_TDLS_PEER_DISCONNECTED      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 241)
-#endif
 #endif
 
 /* Handling of beacon tx indication from FW */
@@ -685,9 +593,7 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_STATS_EXT_EVENT            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 260)
 #endif /* WLAN_FEATURE_STATS_EXT */
 
-#ifdef QCA_WIFI_2_0
 #define SIR_HAL_HIDE_SSID_VDEV_RESTART     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 261)
-#endif /* QCA_WIFI_2_0 */
 
 #define SIR_HAL_VDEV_START_RSP_IND         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 262)
 #define SIR_HAL_GET_LINK_SPEED             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 263)
@@ -695,6 +601,132 @@ typedef struct sSirMbMsgP2p
 #define SIR_HAL_ROAM_PREAUTH_IND           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 264)
 
 #define SIR_HAL_TBTT_UPDATE_IND            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 265)
+
+#ifdef FEATURE_WLAN_EXTSCAN
+#define SIR_HAL_EXTSCAN_GET_CAPABILITIES_REQ  (SIR_HAL_ITC_MSG_TYPES_BEGIN + 266)
+#define SIR_HAL_EXTSCAN_START_REQ             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 267)
+#define SIR_HAL_EXTSCAN_STOP_REQ              (SIR_HAL_ITC_MSG_TYPES_BEGIN + 268)
+#define SIR_HAL_EXTSCAN_SET_BSS_HOTLIST_REQ   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 269)
+#define SIR_HAL_EXTSCAN_RESET_BSS_HOTLIST_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 270)
+#define SIR_HAL_EXTSCAN_SET_SIGNF_CHANGE_REQ  (SIR_HAL_ITC_MSG_TYPES_BEGIN + 271)
+#define SIR_HAL_EXTSCAN_RESET_SIGNF_CHANGE_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 272)
+#define SIR_HAL_EXTSCAN_GET_CACHED_RESULTS_REQ (SIR_HAL_ITC_MSG_TYPES_BEGIN + 273)
+#endif /* FEATURE_WLAN_EXTSCAN */
+
+#ifdef FEATURE_WLAN_CH_AVOID
+#define SIR_HAL_CH_AVOID_UPDATE_REQ        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 274)
+#endif
+
+#ifdef WLAN_FEATURE_LINK_LAYER_STATS
+#define SIR_HAL_LL_STATS_CLEAR_REQ         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 275)
+#define SIR_HAL_LL_STATS_SET_REQ           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 276)
+#define SIR_HAL_LL_STATS_GET_REQ           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 277)
+#define SIR_HAL_LL_STATS_RESULTS_RSP       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 278)
+#endif /* WLAN_FEATURE_LINK_LAYER_STATS */
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+#define SIR_HAL_ROAM_OFFLOAD_SYNCH_CNF     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 279)
+#endif
+#ifdef WLAN_FEATURE_NAN
+#define SIR_HAL_NAN_REQUEST                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 280)
+#endif /* WLAN_FEATURE_NAN */
+
+#ifdef FEATURE_WLAN_AUTO_SHUTDOWN
+#define SIR_HAL_SET_AUTO_SHUTDOWN_TIMER_REQ  (SIR_HAL_ITC_MSG_TYPES_BEGIN + 281)
+#endif
+
+#define SIR_HAL_SET_BASE_MACADDR_IND       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 282)
+
+#define SIR_HAL_UNIT_TEST_CMD              (SIR_HAL_ITC_MSG_TYPES_BEGIN + 283)
+
+#define SIR_HAL_LINK_STATUS_GET_REQ        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 285)
+#define SIR_HAL_GET_LINK_STATUS_RSP_IND    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 286)
+
+#ifdef WLAN_FEATURE_EXTWOW_SUPPORT
+#define SIR_HAL_CONFIG_EXT_WOW             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 287)
+#define SIR_HAL_CONFIG_APP_TYPE1_PARAMS    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 288)
+#define SIR_HAL_CONFIG_APP_TYPE2_PARAMS    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 289)
+#endif
+
+#define SIR_HAL_GET_TEMPERATURE_REQ        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 290)
+#define SIR_HAL_SET_SCAN_MAC_OUI_REQ       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 291)
+
+#ifdef DHCP_SERVER_OFFLOAD
+#define SIR_HAL_SET_DHCP_SERVER_OFFLOAD    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 292)
+#endif /* DHCP_SERVER_OFFLOAD */
+#define SIR_HAL_LED_FLASHING_REQ           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 293)
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+#define SIR_HAL_ROAM_OFFLOAD_SYNCH_IND     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 294)
+#endif
+
+#ifdef FEATURE_WLAN_TDLS
+#define SIR_HAL_TDLS_SET_OFFCHAN_MODE      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 295)
+#endif
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+#define SIR_HAL_ROAM_OFFLOAD_SYNCH_FAIL    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 296)
+#define SIR_HAL_ROAM_INVOKE                (SIR_HAL_ITC_MSG_TYPES_BEGIN + 297)
+#endif
+#define SIR_HAL_IPA_OFFLOAD_ENABLE_DISABLE (SIR_HAL_ITC_MSG_TYPES_BEGIN + 298)
+
+#ifdef MDNS_OFFLOAD
+#define SIR_HAL_SET_MDNS_OFFLOAD           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 299)
+#define SIR_HAL_SET_MDNS_FQDN              (SIR_HAL_ITC_MSG_TYPES_BEGIN + 300)
+#define SIR_HAL_SET_MDNS_RESPONSE          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 301)
+#define SIR_HAL_GET_MDNS_STATUS            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 302)
+#endif /* MDNS_OFFLOAD */
+
+#ifdef SAP_AUTH_OFFLOAD
+#define SIR_HAL_SET_SAP_AUTH_OFL           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 303)
+#define SIR_HAL_SAP_OFL_ADD_STA            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 304)
+#define SIR_HAL_SAP_OFL_DEL_STA            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 305)
+#define SIR_HAL_SET_CLIENT_BLOCK_INFO      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 306)
+#endif
+
+#ifdef WLAN_FEATURE_APFIND
+#define SIR_HAL_APFIND_SET_CMD             (SIR_HAL_ITC_MSG_TYPES_BEGIN + 307)
+#endif /* WLAN_FEATURE_APFIND */
+
+#ifdef FEATURE_RUNTIME_PM
+#define SIR_HAL_RUNTIME_PM_SUSPEND_IND     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 308)
+#define SIR_HAL_RUNTIME_PM_RESUME_IND      (SIR_HAL_ITC_MSG_TYPES_BEGIN + 309)
+#endif
+
+#ifdef FEATURE_AP_MCC_CH_AVOIDANCE
+#define SIR_HAL_UPDATE_Q2Q_IE_IND          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 310)
+#endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
+
+#define SIR_HAL_SET_MAS                    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 311)
+#define SIR_HAL_SET_MIRACAST               (SIR_HAL_ITC_MSG_TYPES_BEGIN + 312)
+
+#define SIR_HAL_SET_EPNO_LIST_REQ          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 313)
+#define SIR_HAL_CONFIG_STATS_FACTOR        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 314)
+#define SIR_HAL_CONFIG_GUARD_TIME          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 315)
+#define SIR_HAL_SET_PASSPOINT_LIST_REQ     (SIR_HAL_ITC_MSG_TYPES_BEGIN + 316)
+#define SIR_HAL_RESET_PASSPOINT_LIST_REQ   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 317)
+#define SIR_HAL_EXTSCAN_SET_SSID_HOTLIST_REQ   (SIR_HAL_ITC_MSG_TYPES_BEGIN + 318)
+
+#define SIR_HAL_OCB_SET_CONFIG_CMD          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 319)
+#define SIR_HAL_OCB_SET_UTC_TIME_CMD        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 320)
+#define SIR_HAL_OCB_START_TIMING_ADVERT_CMD (SIR_HAL_ITC_MSG_TYPES_BEGIN + 321)
+#define SIR_HAL_OCB_STOP_TIMING_ADVERT_CMD  (SIR_HAL_ITC_MSG_TYPES_BEGIN + 322)
+#define SIR_HAL_OCB_GET_TSF_TIMER_CMD       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 323)
+#define SIR_HAL_DCC_GET_STATS_CMD           (SIR_HAL_ITC_MSG_TYPES_BEGIN + 324)
+#define SIR_HAL_DCC_CLEAR_STATS_CMD         (SIR_HAL_ITC_MSG_TYPES_BEGIN + 325)
+#define SIR_HAL_DCC_UPDATE_NDL_CMD          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 326)
+#define SIR_HAL_FW_MEM_DUMP_REQ            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 327)
+#define SIR_HAL_START_STOP_LOGGING          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 328)
+#define SIR_HAL_EXTSCAN_STATUS_IND          (SIR_HAL_ITC_MSG_TYPES_BEGIN + 329)
+
+#define SIR_HAL_TSF_GPIO_PIN_REQ            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 330)
+#define SIR_HAL_SET_IE_INFO                 (SIR_HAL_ITC_MSG_TYPES_BEGIN + 331)
+
+#define SIR_HAL_BAD_PEER_TX_CTL_INI_CMD    (SIR_HAL_ITC_MSG_TYPES_BEGIN + 332)
+#define SIR_HAL_SET_RSSI_MONITOR_REQ        (SIR_HAL_ITC_MSG_TYPES_BEGIN + 333)
+#define SIR_HAL_SET_PDEV_IE_REQ            (SIR_HAL_ITC_MSG_TYPES_BEGIN + 334)
+#define SIR_HAL_EXTSCAN_OPERATION_IND       (SIR_HAL_ITC_MSG_TYPES_BEGIN + 335)
+
 #define SIR_HAL_MSG_TYPES_END              (SIR_HAL_MSG_TYPES_BEGIN + 0x1FF)
 
 // CFG message types
@@ -747,7 +779,7 @@ typedef struct sSirMbMsgP2p
 #define SIR_LIM_UPDATE_BEACON                   (SIR_LIM_ITC_MSG_TYPES_BEGIN + 0x13)
 
 
-// LIM Timeout messages
+/* LIM Time out messages */
 #define SIR_LIM_TIMEOUT_MSG_START      ((SIR_LIM_MODULE_ID  << 8) + 0xD0)
 #define SIR_LIM_MIN_CHANNEL_TIMEOUT    SIR_LIM_TIMEOUT_MSG_START
 #define SIR_LIM_MAX_CHANNEL_TIMEOUT    (SIR_LIM_TIMEOUT_MSG_START + 1)
@@ -778,10 +810,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_LIM_REMAIN_CHN_TIMEOUT       (SIR_LIM_TIMEOUT_MSG_START + 0x1F)
 #define SIR_LIM_INSERT_SINGLESHOT_NOA_TIMEOUT   (SIR_LIM_TIMEOUT_MSG_START + 0x20)
 
-#ifdef WMM_APSD
-#define SIR_LIM_WMM_APSD_SP_START_MSG_TYPE (SIR_LIM_TIMEOUT_MSG_START + 0x21)
-#define SIR_LIM_WMM_APSD_SP_END_MSG_TYPE (SIR_LIM_TIMEOUT_MSG_START + 0x22)
-#endif
 #define SIR_LIM_BEACON_GEN_IND          (SIR_LIM_TIMEOUT_MSG_START + 0x23)
 #define SIR_LIM_PERIODIC_PROBE_REQ_TIMEOUT    (SIR_LIM_TIMEOUT_MSG_START + 0x24)
 #ifdef FEATURE_WLAN_ESE
@@ -792,11 +820,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_LIM_DEAUTH_ACK_TIMEOUT       (SIR_LIM_TIMEOUT_MSG_START + 0x27)
 #define SIR_LIM_PERIODIC_JOIN_PROBE_REQ_TIMEOUT (SIR_LIM_TIMEOUT_MSG_START + 0x28)
 
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-#define SIR_LIM_TDLS_DISCOVERY_RSP_WAIT     (SIR_LIM_TIMEOUT_MSG_START + 0x29)
-#define SIR_LIM_TDLS_LINK_SETUP_RSP_TIMEOUT (SIR_LIM_TIMEOUT_MSG_START + 0x2A)
-#define SIR_LIM_TDLS_LINK_SETUP_CNF_TIMEOUT (SIR_LIM_TIMEOUT_MSG_START + 0x2B)
-#endif
 #define SIR_LIM_CONVERT_ACTIVE_CHANNEL_TO_PASSIVE (SIR_LIM_TIMEOUT_MSG_START + 0x2C)
 
 #define SIR_LIM_MSG_TYPES_END            (SIR_LIM_MSG_TYPES_BEGIN+0xFF)
@@ -825,7 +848,6 @@ typedef struct sSirMbMsgP2p
 #define SIR_DVT_ITC_MSG_TYPES_BEGIN    (SIR_DVT_MSG_TYPES_BEGIN+0x0F)
 #define SIR_DVT_MSG_TYPES_END          (SIR_DVT_ITC_MSG_TYPES_BEGIN+0xFFF)
 
-
 //PTT message types
 #define SIR_PTT_MSG_TYPES_BEGIN            0x3000
 #define SIR_PTT_MSG_TYPES_END              0x3300
@@ -833,7 +855,7 @@ typedef struct sSirMbMsgP2p
 
 /* ****************************************** *
  *                                            *
- *         EVENT TYPE Defintions              *
+ *         EVENT TYPE Definitions             *
  *                                            *
  * ****************************************** */
 
