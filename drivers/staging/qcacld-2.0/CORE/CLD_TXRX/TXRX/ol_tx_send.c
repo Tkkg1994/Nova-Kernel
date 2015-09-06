@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -57,6 +57,8 @@
 #ifdef QCA_SUPPORT_SW_TXRX_ENCAP
 #include <ol_txrx_encap.h>    /* OL_TX_RESTORE_HDR, etc*/
 #endif
+#include <ol_tx_queue.h>
+#include <ol_txrx.h>
 
 #ifdef TX_CREDIT_RECLAIM_SUPPORT
 
@@ -110,17 +112,23 @@
 #endif
 
 #ifdef QCA_LL_TX_FLOW_CT
+#ifdef CONFIG_PER_VDEV_TX_DESC_POOL
 #define OL_TX_FLOW_CT_UNPAUSE_OS_Q(pdev)                                          \
 do {                                                                              \
     struct ol_txrx_vdev_t *vdev;                                                  \
     TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {                       \
-        if (adf_os_atomic_read(&vdev->os_q_paused)) {                             \
+        if (adf_os_atomic_read(&vdev->os_q_paused) &&                             \
+                          (vdev->tx_fl_hwm != 0)) {                               \
             adf_os_spin_lock(&pdev->tx_mutex);                                    \
-            if (pdev->tx_desc.num_free > vdev->tx_fl_hwm) {                       \
+            if (((ol_tx_desc_pool_size_hl(vdev->pdev->ctrl_pdev) >> 1)            \
+               - TXRX_HL_TX_FLOW_CTRL_MGMT_RESERVED)                              \
+               - adf_os_atomic_read(&vdev->tx_desc_count)                         \
+               > vdev->tx_fl_hwm)                                                 \
+            {                                                                     \
+               adf_os_atomic_set(&vdev->os_q_paused, 0);                          \
                adf_os_spin_unlock(&pdev->tx_mutex);                               \
                vdev->osif_flow_control_cb(vdev->osif_dev,                         \
                                           vdev->vdev_id, A_TRUE);                 \
-               adf_os_atomic_set(&vdev->os_q_paused, 0);                          \
             }                                                                     \
             else {                                                                \
                adf_os_spin_unlock(&pdev->tx_mutex);                               \
@@ -128,6 +136,27 @@ do {                                                                            
         }                                                                         \
     }                                                                             \
 } while(0)
+#else
+#define OL_TX_FLOW_CT_UNPAUSE_OS_Q(pdev)                                          \
+do {                                                                              \
+    struct ol_txrx_vdev_t *vdev;                                                  \
+    TAILQ_FOREACH(vdev, &pdev->vdev_list, vdev_list_elem) {                       \
+        if (adf_os_atomic_read(&vdev->os_q_paused) &&                            \
+                          (vdev->tx_fl_hwm != 0)) {                               \
+            adf_os_spin_lock(&pdev->tx_mutex);                                    \
+            if (pdev->tx_desc.num_free > vdev->tx_fl_hwm) {                       \
+               adf_os_atomic_set(&vdev->os_q_paused, 0);                          \
+               adf_os_spin_unlock(&pdev->tx_mutex);                               \
+               vdev->osif_flow_control_cb(vdev->osif_dev,                         \
+                                          vdev->vdev_id, A_TRUE);                 \
+            }                                                                     \
+            else {                                                                \
+               adf_os_spin_unlock(&pdev->tx_mutex);                               \
+            }                                                                     \
+        }                                                                         \
+    }                                                                             \
+} while(0)
+#endif
 #else
 #define OL_TX_FLOW_CT_UNPAUSE_OS_Q(pdev)
 #endif /* QCA_LL_TX_FLOW_CT */
@@ -325,7 +354,14 @@ ol_tx_download_done_hl_free(
 
     tx_desc = ol_tx_desc_find(pdev, msdu_id);
     adf_os_assert(tx_desc);
-    ol_tx_desc_frame_free_nonstd(pdev, tx_desc, status != A_OK);
+
+    ol_tx_download_done_base(pdev, status, msdu, msdu_id);
+
+    if ((tx_desc->pkt_type != ol_tx_frm_no_free) &&
+        (tx_desc->pkt_type < OL_TXRX_MGMT_TYPE_BASE)) {
+        adf_os_atomic_add(1, &pdev->tx_queue.rsrc_cnt);
+        ol_tx_desc_frame_free_nonstd(pdev, tx_desc, status != A_OK);
+    }
 #if 0 /* TODO: Advanced feature */
     //ol_tx_dwl_sched(pdev, OL_TX_HL_SCHED_DOWNLOAD_DONE);
 adf_os_assert(0);
@@ -467,6 +503,17 @@ ol_tx_discard_target_frms(ol_txrx_pdev_handle pdev)
     }
 }
 
+void
+ol_tx_credit_completion_handler(ol_txrx_pdev_handle pdev, int credits)
+{
+    ol_tx_target_credit_update(pdev, credits);
+    if (pdev->cfg.is_high_latency) {
+        ol_tx_sched(pdev);
+    }
+    /* UNPAUSE OS Q */
+    OL_TX_FLOW_CT_UNPAUSE_OS_Q(pdev);
+}
+
 /* WARNING: ol_tx_inspect_handler()'s bahavior is similar to that of ol_tx_completion_handler().
  * any change in ol_tx_completion_handler() must be mirrored in ol_tx_inspect_handler().
  */
@@ -501,6 +548,11 @@ ol_tx_completion_handler(
         tx_desc->status = status;
         netbuf = tx_desc->netbuf;
 
+        if (pdev->cfg.is_high_latency) {
+            OL_TX_DESC_UPDATE_GROUP_CREDIT(pdev, tx_desc_id, 1, 0, status);
+        }
+
+        htc_pm_runtime_put(pdev->htt_pdev->htc_pdev);
         adf_nbuf_trace_update(netbuf, trace_str);
         /* Per SDU update of byte count */
         byte_cnt += adf_nbuf_len(netbuf);
@@ -525,8 +577,8 @@ ol_tx_completion_handler(
         adf_os_spin_lock(&pdev->tx_mutex);
         tx_desc_last->next = pdev->tx_desc.freelist;
         pdev->tx_desc.freelist = lcl_freelist;
-        adf_os_spin_unlock(&pdev->tx_mutex);
         pdev->tx_desc.num_free += (u_int16_t) num_msdus;
+        adf_os_spin_unlock(&pdev->tx_mutex);
     } else {
         ol_tx_desc_frame_list_free(pdev, &tx_descs, status != htt_tx_status_ok);
     }
@@ -548,6 +600,124 @@ ol_tx_completion_handler(
     /* Do one shot statistics */
     TXRX_STATS_UPDATE_TX_STATS(pdev, status, num_msdus, byte_cnt);
 }
+
+#ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL
+void
+ol_tx_desc_update_group_credit(ol_txrx_pdev_handle pdev, u_int16_t tx_desc_id,
+                       int credit, u_int8_t absolute, enum htt_tx_status status)
+{
+    uint8_t i, is_member;
+    uint16_t vdev_id_mask;
+    struct ol_tx_desc_t *tx_desc;
+    union ol_tx_desc_list_elem_t *td_array = pdev->tx_desc.array;
+
+    tx_desc = &td_array[tx_desc_id].tx_desc;
+
+    for (i = 0; i < OL_TX_MAX_TXQ_GROUPS; i++) {
+        vdev_id_mask =
+               OL_TXQ_GROUP_VDEV_ID_MASK_GET(pdev->txq_grps[i].membership);
+        is_member = OL_TXQ_GROUP_VDEV_ID_BIT_MASK_GET(vdev_id_mask,
+                                                      tx_desc->vdev->vdev_id);
+        if (is_member) {
+            ol_txrx_update_group_credit(&pdev->txq_grps[i],
+                                        credit, absolute);
+            break;
+        }
+    }
+    OL_TX_UPDATE_GROUP_CREDIT_STATS(pdev);
+}
+
+#ifdef DEBUG_HL_LOGGING
+void
+ol_tx_update_group_credit_stats(ol_txrx_pdev_handle pdev)
+{
+    uint16 curr_index;
+    uint8 i;
+
+    adf_os_spin_lock_bh(&pdev->grp_stat_spinlock);
+    pdev->grp_stats.last_valid_index++;
+    if (pdev->grp_stats.last_valid_index > (OL_TX_GROUP_STATS_LOG_SIZE - 1)) {
+        pdev->grp_stats.last_valid_index -= OL_TX_GROUP_STATS_LOG_SIZE;
+        pdev->grp_stats.wrap_around = 1;
+    }
+    curr_index = pdev->grp_stats.last_valid_index;
+
+    for (i = 0; i < OL_TX_MAX_TXQ_GROUPS; i++) {
+        pdev->grp_stats.stats[curr_index].grp[i].member_vdevs =
+        OL_TXQ_GROUP_VDEV_ID_MASK_GET(pdev->txq_grps[i].membership);
+        pdev->grp_stats.stats[curr_index].grp[i].credit =
+                  adf_os_atomic_read(&pdev->txq_grps[i].credit);
+    }
+
+    adf_os_spin_unlock_bh(&pdev->grp_stat_spinlock);
+}
+
+void
+ol_tx_dump_group_credit_stats(ol_txrx_pdev_handle pdev)
+{
+    uint16 i,j, is_break = 0;
+    int16 curr_index, old_index, wrap_around;
+    uint16 curr_credit, old_credit, mem_vdevs;
+
+    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,"Group credit stats:");
+    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+                                      "  No: GrpID: Credit: Change: vdev_map");
+
+    adf_os_spin_lock_bh(&pdev->grp_stat_spinlock);
+    curr_index = pdev->grp_stats.last_valid_index;
+    wrap_around = pdev->grp_stats.wrap_around;
+    adf_os_spin_unlock_bh(&pdev->grp_stat_spinlock);
+
+    if(curr_index < 0) {
+        VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,"Not initialized");
+        return;
+    }
+
+    for (i = 0; i < OL_TX_GROUP_STATS_LOG_SIZE; i++) {
+        old_index = curr_index - 1;
+        if (old_index < 0) {
+            if (wrap_around == 0)
+                is_break = 1;
+            else
+                old_index = OL_TX_GROUP_STATS_LOG_SIZE - 1;
+        }
+
+        for (j = 0; j < OL_TX_MAX_TXQ_GROUPS; j++) {
+            adf_os_spin_lock_bh(&pdev->grp_stat_spinlock);
+            curr_credit = pdev->grp_stats.stats[curr_index].grp[j].credit;
+            if (!is_break)
+                old_credit = pdev->grp_stats.stats[old_index].grp[j].credit;
+            mem_vdevs = pdev->grp_stats.stats[curr_index].grp[j].member_vdevs;
+            adf_os_spin_unlock_bh(&pdev->grp_stat_spinlock);
+
+            if (!is_break)
+                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+                      "%4d: %5d: %6d %6d %8x",curr_index, j,
+                      curr_credit, (curr_credit - old_credit),
+                      mem_vdevs);
+            else
+                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+                      "%4d: %5d: %6d %6s %8x",curr_index, j,
+                      curr_credit, "NA", mem_vdevs);
+       }
+
+       if (is_break)
+           break;
+
+       curr_index = old_index;
+    }
+}
+
+void ol_tx_clear_group_credit_stats(ol_txrx_pdev_handle pdev)
+{
+    adf_os_spin_lock_bh(&pdev->grp_stat_spinlock);
+    adf_os_mem_zero(&pdev->grp_stats, sizeof(pdev->grp_stats));
+    pdev->grp_stats.last_valid_index = -1;
+    pdev->grp_stats.wrap_around= 0;
+    adf_os_spin_unlock_bh(&pdev->grp_stat_spinlock);
+}
+#endif
+#endif
 
 /*
  * ol_tx_single_completion_handler performs the same tx completion
@@ -897,13 +1067,15 @@ ol_tx_delay_compute(
      */
 
     cat = ol_tx_delay_category(pdev, desc_ids[0]);
-    if (cat == -1)
+    if (cat < 0 || cat >= QCA_TX_DELAY_NUM_CATEGORIES)
         return;
 
     pdev->packet_count[cat] = pdev->packet_count[cat] + num_msdus;
     if (status != htt_tx_status_ok) {
         for (i = 0; i < num_msdus; i++) {
             cat = ol_tx_delay_category(pdev, desc_ids[i]);
+            if (cat < 0 || cat >= QCA_TX_DELAY_NUM_CATEGORIES)
+                return;
             pdev->packet_loss_count[cat]++;
         }
         return;

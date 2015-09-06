@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -105,6 +105,27 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
 
         return;
     }
+    if (!lim_validate_received_frame_a1_addr(pMac, pHdr->da, psessionEntry)) {
+        limLog(pMac, LOGE,
+               FL("rx frame doesn't have valid a1 address, dropping it"));
+        return;
+    }
+
+    if (LIM_IS_STA_ROLE(psessionEntry) &&
+        (eLIM_SME_WT_DISASSOC_STATE == psessionEntry->limSmeState)) {
+        if (pHdr->fc.retry > 0) {
+            /*
+             * This can happen when first disassoc frame is received
+             * but ACK from this STA is lost, in this case 2nd disassoc frame is
+             * already in transmission queue
+             */
+            PELOGE(limLog(pMac, LOGE,
+                   FL("AP is sending disassoc after ACK lost..."));)
+            return;
+        }
+
+    }
+
 
 #ifdef WLAN_FEATURE_11W
     /* PMF: If this session is a PMF session, then ensure that this frame was protected */
@@ -127,8 +148,9 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
 
     PELOG2(limLog(pMac, LOGE,
         FL("Received Disassoc frame for Addr: "MAC_ADDRESS_STR"(mlm state=%s, sme state=%d),"
-        "with reason code %d from "MAC_ADDRESS_STR), MAC_ADDR_ARRAY(pHdr->da),
-        limMlmStateStr(psessionEntry->limMlmState), psessionEntry->limSmeState, reasonCode,
+        "with reason code %d [%s] from "MAC_ADDRESS_STR), MAC_ADDR_ARRAY(pHdr->da),
+        limMlmStateStr(psessionEntry->limMlmState), psessionEntry->limSmeState,
+        reasonCode, limDot11ReasonStr(reasonCode),
         MAC_ADDR_ARRAY(pHdr->sa));)
 
     /**
@@ -183,9 +205,7 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         }
     }
 
-    if ( (psessionEntry->limSystemRole == eLIM_AP_ROLE) ||
-         (psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )
-    {
+    if (LIM_IS_AP_ROLE(psessionEntry) || LIM_IS_BT_AMP_AP_ROLE(psessionEntry)) {
         switch (reasonCode)
         {
             case eSIR_MAC_UNSPEC_FAILURE_REASON:
@@ -207,14 +227,12 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
                        reasonCode, MAC_ADDR_ARRAY(pHdr->sa));)
                 break;
         }
-    }
-    else if (  ((psessionEntry->limSystemRole == eLIM_STA_ROLE) ||
-                (psessionEntry->limSystemRole == eLIM_BT_AMP_STA_ROLE)) &&
+    } else if ((LIM_IS_STA_ROLE(psessionEntry) ||
+              LIM_IS_BT_AMP_STA_ROLE(psessionEntry)) &&
                ((psessionEntry->limSmeState != eLIM_SME_WT_JOIN_STATE) &&
                 (psessionEntry->limSmeState != eLIM_SME_WT_AUTH_STATE)  &&
                 (psessionEntry->limSmeState != eLIM_SME_WT_ASSOC_STATE)  &&
-                (psessionEntry->limSmeState != eLIM_SME_WT_REASSOC_STATE) ))
-    {
+                (psessionEntry->limSmeState != eLIM_SME_WT_REASSOC_STATE))) {
         switch (reasonCode)
         {
             case eSIR_MAC_UNSPEC_FAILURE_REASON:
@@ -261,22 +279,23 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         limLog(pMac, LOGE,
                FL("received Disassoc frame with invalid reasonCode %d in role "
                "%d in sme state %d from "MAC_ADDRESS_STR), reasonCode,
-               psessionEntry->limSystemRole, psessionEntry->limSmeState,
+               GET_LIM_SYSTEM_ROLE(psessionEntry), psessionEntry->limSmeState,
                MAC_ADDR_ARRAY(pHdr->sa));
 
         return;
     }
 
     if ((pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_STA_RSP_STATE) ||
-        (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_BSS_RSP_STATE))
-    {
+        (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_BSS_RSP_STATE)) {
         /**
          * Already in the process of deleting context for the peer
          * and received Disassociation frame. Log and Ignore.
          */
         PELOGE(limLog(pMac, LOGE,
-               FL("received Disassoc frame in state %d from "MAC_ADDRESS_STR),
-               pStaDs->mlmStaContext.mlmState, MAC_ADDR_ARRAY(pHdr->sa));)
+               FL("received Disassoc frame in state %d from "MAC_ADDRESS_STR
+               ",isDisassocDeauthInProgress : %d\n"),
+               pStaDs->mlmStaContext.mlmState, MAC_ADDR_ARRAY(pHdr->sa),
+               pStaDs->isDisassocDeauthInProgress);)
 
         return;
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -48,7 +48,11 @@
 #include <pktlog_ac_fmt.h>
 #include <wdi_event.h>
 #include <ol_htt_tx_api.h>
-#include <ol_txrx_types.h>
+#include <ol_txrx_stats.h>
+#include <wdi_event_api.h>
+#include <ol_txrx_ctrl_api.h>
+#include <ol_txrx_peer_find.h>
+#include <ol_ctrl_txrx_api.h>
 /*--- target->host HTT message dispatch function ----------------------------*/
 
 #ifndef DEBUG_CREDIT
@@ -84,6 +88,55 @@ htt_t2h_mac_addr_deswizzle(u_int8_t *tgt_mac_addr, u_int8_t *buffer)
 #endif
 }
 
+#if defined(CONFIG_HL_SUPPORT)
+#define HTT_RX_FRAG_SET_LAST_MSDU(pdev, msg) /* no-op */
+#else
+static void HTT_RX_FRAG_SET_LAST_MSDU(
+    struct htt_pdev_t *pdev, adf_nbuf_t msg)
+{
+    u_int32_t *msg_word;
+    unsigned num_msdu_bytes;
+    adf_nbuf_t msdu;
+    struct htt_host_rx_desc_base *rx_desc;
+    int start_idx;
+    u_int8_t *p_fw_msdu_rx_desc = 0;
+
+    msg_word = (u_int32_t *) adf_nbuf_data(msg);
+    num_msdu_bytes = HTT_RX_FRAG_IND_FW_RX_DESC_BYTES_GET(*(msg_word +
+               HTT_RX_FRAG_IND_HDR_PREFIX_SIZE32));
+    /*
+     * 1 word for the message header,
+     * 1 word to specify the number of MSDU bytes,
+     * 1 word for every 4 MSDU bytes (round up),
+     * 1 word for the MPDU range header
+     */
+    pdev->rx_mpdu_range_offset_words = 3 + ((num_msdu_bytes + 3) >> 2);
+    pdev->rx_ind_msdu_byte_idx = 0;
+
+    p_fw_msdu_rx_desc = ((u_int8_t *)(msg_word) +
+               HTT_ENDIAN_BYTE_IDX_SWAP(HTT_RX_FRAG_IND_FW_DESC_BYTE_OFFSET));
+
+    /*
+     * Fix for EV126710, in which BSOD occurs due to last_msdu bit
+     * not set while the next pointer is deliberately set to NULL
+     * before calling ol_rx_pn_check_base()
+     *
+     * For fragment frames, the HW may not have set the last_msdu bit
+     * in the rx descriptor, but the SW expects this flag to be set,
+     * since each fragment is in a separate MPDU. Thus, set the flag here,
+     * just in case the HW didn't.
+     */
+    start_idx = pdev->rx_ring.sw_rd_idx.msdu_payld;
+    msdu = pdev->rx_ring.buf.netbufs_ring[start_idx];
+    adf_nbuf_set_pktlen(msdu, HTT_RX_BUF_SIZE);
+    adf_nbuf_unmap(pdev->osdev, msdu, ADF_OS_DMA_FROM_DEVICE);
+    rx_desc = htt_rx_desc(msdu);
+    *((u_int8_t *) &rx_desc->fw_desc.u.val) = *p_fw_msdu_rx_desc;
+    rx_desc->msdu_end.last_msdu = 1;
+    adf_nbuf_map(pdev->osdev, msdu, ADF_OS_DMA_FROM_DEVICE);
+}
+#endif /* CONFIG_HL_SUPPORT */
+
 /* Target to host Msg/event  handler  for low priority messages*/
 void
 htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
@@ -97,6 +150,7 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
     switch (msg_type) {
     case HTT_T2H_MSG_TYPE_VERSION_CONF:
         {
+            htc_pm_runtime_put(pdev->htc_pdev);
             pdev->tgt_ver.major = HTT_VER_CONF_MAJOR_GET(*msg_word);
             pdev->tgt_ver.minor = HTT_VER_CONF_MINOR_GET(*msg_word);
             adf_os_print("target uses HTT version %d.%d; host uses %d.%d\n",
@@ -148,43 +202,12 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
         }
     case  HTT_T2H_MSG_TYPE_RX_FRAG_IND:
         {
-            unsigned num_msdu_bytes;
             u_int16_t peer_id;
             u_int8_t tid;
-            adf_nbuf_t msdu;
-            struct htt_host_rx_desc_base *rx_desc;
-            int start_idx;
 
             peer_id = HTT_RX_FRAG_IND_PEER_ID_GET(*msg_word);
             tid = HTT_RX_FRAG_IND_EXT_TID_GET(*msg_word);
-
-            num_msdu_bytes = HTT_RX_IND_FW_RX_DESC_BYTES_GET(*(msg_word + 2));
-            /*
-             * 1 word for the message header,
-             * 1 word to specify the number of MSDU bytes,
-             * 1 word for every 4 MSDU bytes (round up),
-             * 1 word for the MPDU range header
-             */
-            pdev->rx_mpdu_range_offset_words = 3 + ((num_msdu_bytes + 3) >> 2);
-            pdev->rx_ind_msdu_byte_idx = 0;
-
-            /*
-             * Fix for EV126710, in which BSOD occurs due to last_msdu bit
-             * not set while the next pointer is deliberately set to NULL
-             * before calling ol_rx_pn_check_base()
-             *
-             * For fragment frames, the HW may not have set the last_msdu bit
-             * in the rx descriptor, but the SW expects this flag to be set,
-             * since each fragment is in a separate MPDU. Thus, set the flag here,
-             * just in case the HW didn't.
-             */
-            start_idx = pdev->rx_ring.sw_rd_idx.msdu_payld;
-            msdu = pdev->rx_ring.buf.netbufs_ring[start_idx];
-            adf_nbuf_set_pktlen(msdu, HTT_RX_BUF_SIZE);
-            adf_nbuf_unmap(pdev->osdev, msdu, ADF_OS_DMA_FROM_DEVICE);
-            rx_desc = htt_rx_desc(msdu);
-            rx_desc->msdu_end.last_msdu = 1;
-            adf_nbuf_map(pdev->osdev, msdu, ADF_OS_DMA_FROM_DEVICE);
+            HTT_RX_FRAG_SET_LAST_MSDU(pdev, htt_t2h_msg);
 
             ol_rx_frag_indication_handler(
                 pdev->txrx_pdev,
@@ -265,13 +288,25 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
     case HTT_T2H_MSG_TYPE_MGMT_TX_COMPL_IND:
         {
             struct htt_mgmt_tx_compl_ind *compl_msg;
+            int32_t credit_delta = 1;
 
             compl_msg = (struct htt_mgmt_tx_compl_ind *)(msg_word + 1);
+
             if (pdev->cfg.is_high_latency) {
-                ol_tx_target_credit_update(pdev->txrx_pdev, 1);
+                if (!pdev->cfg.default_tx_comp_req) {
+                    adf_os_atomic_add(credit_delta,
+                                      &pdev->htt_tx_credit.target_delta);
+                    credit_delta = htt_tx_credit_update(pdev);
+                }
+                if (credit_delta) {
+                    ol_tx_target_credit_update(pdev->txrx_pdev, credit_delta);
+                }
             }
+            OL_TX_DESC_UPDATE_GROUP_CREDIT(
+                pdev->txrx_pdev, compl_msg->desc_id, 1, 0, compl_msg->status);
             ol_tx_single_completion_handler(
                 pdev->txrx_pdev, compl_msg->status, compl_msg->desc_id);
+            htc_pm_runtime_put(pdev->htc_pdev);
             HTT_TX_SCHED(pdev);
             break;
         }
@@ -285,6 +320,7 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
             cookie |= ((u_int64_t) (*(msg_word + 2))) << 32;
 
             stats_info_list = (u_int8_t *) (msg_word + 3);
+            htc_pm_runtime_put(pdev->htc_pdev);
             ol_txrx_fw_stats_handler(pdev->txrx_pdev, cookie, stats_info_list);
             break;
         }
@@ -316,31 +352,144 @@ htt_t2h_lp_msg_handler(void *context, adf_nbuf_t htt_t2h_msg )
 #endif
     case HTT_T2H_MSG_TYPE_TX_CREDIT_UPDATE_IND:
     {
-        A_INT16  htt_credit_delta_abs = HTT_TX_CREDIT_DELTA_ABS_GET(*msg_word);
-        struct ol_txrx_pdev_t* ptxrx_pdev = pdev->txrx_pdev;
-        if ( HTT_TX_CREDIT_SIGN_BIT_GET(*msg_word) ) {
-            /* negative delta */
-#if DEBUG_CREDIT
-            adf_os_print(" <HTT> Decrease Credit %d - %d = %d(Msg).\n",
-                    adf_os_atomic_read(&ptxrx_pdev->target_tx_credit),
-                    htt_credit_delta_abs,
-                    adf_os_atomic_read(&ptxrx_pdev->target_tx_credit) - htt_credit_delta_abs);
-#endif
-            adf_os_atomic_add((A_INT32)(-htt_credit_delta_abs), &ptxrx_pdev->target_tx_credit);
-        } else {
-            /* positive delta */
-#if DEBUG_CREDIT
-            adf_os_print(" <HTT> Increase Credit %d + %d = %d(Msg).\n",
-                    adf_os_atomic_read(&ptxrx_pdev->target_tx_credit),
-                    htt_credit_delta_abs,
-                    adf_os_atomic_read(&ptxrx_pdev->target_tx_credit) + htt_credit_delta_abs);
-#endif
-            adf_os_atomic_add((A_INT32)htt_credit_delta_abs, &ptxrx_pdev->target_tx_credit);
+        u_int32_t htt_credit_delta_abs;
+        int32_t htt_credit_delta;
+        int sign;
+
+        htt_credit_delta_abs = HTT_TX_CREDIT_DELTA_ABS_GET(*msg_word);
+        sign = HTT_TX_CREDIT_SIGN_BIT_GET(*msg_word) ? -1 : 1;
+        htt_credit_delta = sign * htt_credit_delta_abs;
+
+        if (pdev->cfg.is_high_latency &&
+            !pdev->cfg.default_tx_comp_req) {
+            adf_os_atomic_add(htt_credit_delta,
+                              &pdev->htt_tx_credit.target_delta);
+            htt_credit_delta = htt_tx_credit_update(pdev);
         }
 
+        HTT_TX_GROUP_CREDIT_PROCESS(pdev, msg_word);
+        /*
+         * Call ol_tx_credit_completion even if htt_credit_delta is zero,
+         * in case there is some global credit already available, but the
+         * above group credit updates have removed credit restrictions,
+         * possibly allowing the download scheduler to perform a download
+         * even if htt_credit_delta == 0.
+         */
+        ol_tx_credit_completion_handler(pdev->txrx_pdev, htt_credit_delta);
         break;
     }
 
+#ifdef IPA_UC_OFFLOAD
+    case HTT_T2H_MSG_TYPE_WDI_IPA_OP_RESPONSE:
+        {
+            u_int8_t op_code;
+            u_int16_t len;
+            u_int8_t *op_msg_buffer;
+            u_int8_t *msg_start_ptr;
+
+            htc_pm_runtime_put(pdev->htc_pdev);
+            msg_start_ptr = (u_int8_t *)msg_word;
+            op_code = HTT_WDI_IPA_OP_RESPONSE_OP_CODE_GET(*msg_word);
+            msg_word++;
+            len = HTT_WDI_IPA_OP_RESPONSE_RSP_LEN_GET(*msg_word);
+
+            op_msg_buffer = adf_os_mem_alloc(NULL,
+                sizeof(struct htt_wdi_ipa_op_response_t) + len);
+            if (!op_msg_buffer) {
+                adf_os_print("OPCODE messsage buffer alloc fail");
+                break;
+            }
+            adf_os_mem_copy(op_msg_buffer,
+                    msg_start_ptr,
+                    sizeof(struct htt_wdi_ipa_op_response_t) + len);
+            ol_txrx_ipa_uc_op_response(pdev->txrx_pdev, op_msg_buffer);
+            break;
+        }
+#endif /* IPA_UC_OFFLOAD */
+    case HTT_T2H_MSG_TYPE_RX_OFLD_PKT_ERR:
+    {
+        switch (HTT_RX_OFLD_PKT_ERR_MSG_SUB_TYPE_GET(*msg_word)) {
+            case HTT_RX_OFLD_PKT_ERR_TYPE_MIC_ERR:
+            {
+                struct ol_error_info err_info;
+                struct ol_txrx_vdev_t *vdev;
+                struct ol_txrx_peer_t *peer;
+                u_int8_t * pn_ptr;
+                u_int16_t peer_id =
+                     HTT_RX_OFLD_PKT_ERR_MIC_ERR_PEER_ID_GET(*(msg_word + 1));
+
+                peer = ol_txrx_peer_find_by_id(pdev->txrx_pdev, peer_id);
+                if (!peer) {
+                    adf_os_print("%s: invalid peer id %d\n", __FUNCTION__,
+                                  peer_id);
+                    break;
+                }
+                vdev = peer->vdev;
+
+                err_info.u.mic_err.vdev_id = vdev->vdev_id;
+                err_info.u.mic_err.key_id =
+                     HTT_RX_OFLD_PKT_ERR_MIC_ERR_KEYID_GET(*(msg_word + 1));
+                adf_os_mem_copy(err_info.u.mic_err.da,
+                                (u_int8_t *)(msg_word + 2),
+                                 OL_TXRX_MAC_ADDR_LEN);
+                adf_os_mem_copy(err_info.u.mic_err.sa,
+                                (u_int8_t *)(msg_word + 4),
+                                 OL_TXRX_MAC_ADDR_LEN);
+                adf_os_mem_copy(err_info.u.mic_err.ta,
+                                peer->mac_addr.raw, OL_TXRX_MAC_ADDR_LEN);
+
+                pn_ptr = (u_int8_t *)&err_info.u.mic_err.pn;
+                adf_os_mem_copy(pn_ptr, (u_int8_t *)(msg_word + 6), 4);
+                adf_os_mem_copy((pn_ptr + 4), (u_int8_t *)(msg_word + 7), 2);
+
+                ol_indicate_err(OL_RX_ERR_TKIP_MIC, &err_info);
+                break;
+            }
+
+            default:
+            {
+                adf_os_print("%s: unhandled error type %d\n", __FUNCTION__,
+                             HTT_RX_OFLD_PKT_ERR_MSG_SUB_TYPE_GET(*msg_word));
+                break;
+            }
+        }
+    }
+    case HTT_T2H_MSG_TYPE_RATE_REPORT:
+        {
+            u_int16_t peer_cnt = HTT_PEER_RATE_REPORT_MSG_PEER_COUNT_GET(*msg_word);
+            u_int16_t i;
+            struct rate_report_t *report, *each;
+
+            /* Param sanity check */
+            if (peer_cnt == 0) {
+                adf_os_print("RATE REPORT messsage peer_cnt is 0! \n");
+                break;
+            }
+
+            /* At least one peer and no limit apply to peer_cnt here */
+            report = adf_os_mem_alloc(NULL,
+                sizeof(struct rate_report_t) * peer_cnt);
+            if (!report) {
+                adf_os_print("RATE REPORT messsage buffer alloc fail. peer_cnt %d\n",
+                                peer_cnt);
+                break;
+            }
+
+            each = report;
+            msg_word++; /* point to the payload */
+            for (i = 0; i < peer_cnt; i++) {
+                each->id  =
+                    HTT_PEER_RATE_REPORT_MSG_PEER_ID_GET(*(msg_word + i*2));
+                each->phy =
+                    HTT_PEER_RATE_REPORT_MSG_PHY_GET(*(msg_word + i*2));
+                each->rate = *(msg_word + i*2 + 1);
+                each++;
+            }
+            ol_txrx_peer_link_status_handler(pdev->txrx_pdev, peer_cnt, report);
+
+            adf_os_mem_free(report);
+            break;
+        }
     default:
         break;
     };
@@ -370,6 +519,14 @@ htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
         return;
     }
 
+#ifdef HTT_RX_RESTORE
+if (adf_os_unlikely(pdev->rx_ring.rx_reset)) {
+        adf_os_print("rx restore ..\n");
+        adf_nbuf_free(htt_t2h_msg);
+        return;
+    }
+#endif
+
     /* confirm alignment */
     HTT_ASSERT3((((unsigned long) adf_nbuf_data(htt_t2h_msg)) & 0x3) == 0);
 
@@ -383,8 +540,18 @@ htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
             u_int16_t peer_id;
             u_int8_t tid;
 
+            if (adf_os_unlikely(pdev->cfg.is_full_reorder_offload)) {
+                adf_os_print("HTT_T2H_MSG_TYPE_RX_IND not supported with full "
+                             "reorder offload\n");
+                break;
+            }
             peer_id = HTT_RX_IND_PEER_ID_GET(*msg_word);
             tid = HTT_RX_IND_EXT_TID_GET(*msg_word);
+
+            if (tid >= OL_TXRX_NUM_EXT_TIDS) {
+                adf_os_print("HTT_T2H_MSG_TYPE_RX_IND, invalid tid %d\n", tid);
+                break;
+            }
 
             num_msdu_bytes = HTT_RX_IND_FW_RX_DESC_BYTES_GET(
                 *(msg_word + 2 + HTT_RX_PPDU_DESC_SIZE32));
@@ -440,9 +607,20 @@ htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
                         compl->payload[num_msdus];
                 }
             }
+
             if (pdev->cfg.is_high_latency) {
-                ol_tx_target_credit_update(
-                    pdev->txrx_pdev, num_msdus /* 1 credit per MSDU */);
+                if (!pdev->cfg.default_tx_comp_req) {
+                    int credit_delta;
+                    adf_os_atomic_add(num_msdus,
+                        &pdev->htt_tx_credit.target_delta);
+                    credit_delta = htt_tx_credit_update(pdev);
+                    if (credit_delta) {
+                        ol_tx_target_credit_update(pdev->txrx_pdev,
+                                                   credit_delta);
+                    }
+                } else {
+                    ol_tx_target_credit_update(pdev->txrx_pdev, num_msdus);
+                }
             }
             ol_tx_completion_handler(
                 pdev->txrx_pdev, num_msdus, status, msg_word + 1);
@@ -501,6 +679,40 @@ htt_t2h_msg_handler(void *context, HTC_PACKET *pkt)
             HTT_TX_SCHED(pdev);
             break;
         }
+    case HTT_T2H_MSG_TYPE_RX_IN_ORD_PADDR_IND:
+        {
+            u_int16_t peer_id;
+            u_int8_t tid;
+            u_int8_t offload_ind, frag_ind;
+
+            if (adf_os_unlikely(!pdev->cfg.is_full_reorder_offload)) {
+                adf_os_print("HTT_T2H_MSG_TYPE_RX_IN_ORD_PADDR_IND not supported"
+                             " when full reorder offload is disabled\n");
+                break;
+            }
+
+            if (adf_os_unlikely(pdev->cfg.is_high_latency)) {
+                adf_os_print("HTT_T2H_MSG_TYPE_RX_IN_ORD_PADDR_IND not supported"
+                             " on high latency\n");
+                break;
+            }
+
+            peer_id = HTT_RX_IN_ORD_PADDR_IND_PEER_ID_GET(*msg_word);
+            tid = HTT_RX_IN_ORD_PADDR_IND_EXT_TID_GET(*msg_word);
+            offload_ind = HTT_RX_IN_ORD_PADDR_IND_OFFLOAD_GET(*msg_word);
+            frag_ind = HTT_RX_IN_ORD_PADDR_IND_FRAG_GET(*msg_word);
+
+            if (adf_os_unlikely(frag_ind)) {
+                ol_rx_frag_indication_handler(pdev->txrx_pdev, htt_t2h_msg,
+                                               peer_id, tid);
+                break;
+            }
+
+            ol_rx_in_order_indication_handler(pdev->txrx_pdev, htt_t2h_msg,
+                                               peer_id, tid, offload_ind);
+            break;
+     }
+
     default:
         htt_t2h_lp_msg_handler(context, htt_t2h_msg);
         return ;
@@ -604,11 +816,20 @@ htt_rx_ind_mpdu_range_info(
     *mpdu_count = HTT_RX_IND_MPDU_COUNT_GET(*msg_word);
 }
 
-#define HTT_TGT_NOISE_FLOOR_DBM (-95) /* approx */
+/**
+ * htt_rx_ind_rssi_dbm() - Return the RSSI provided in a rx indication message.
+ *
+ * @pdev:       the HTT instance the rx data was received on
+ * @rx_ind_msg: the netbuf containing the rx indication message
+ *
+ * Return the RSSI from an rx indication message in dBm units.
+ *
+ * Return: RSSI in dBm, or HTT_INVALID_RSSI
+ */
 int16_t
 htt_rx_ind_rssi_dbm(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg)
 {
-    int16_t rssi;
+    int8_t rssi;
     u_int32_t *msg_word;
 
     msg_word = (u_int32_t *)
@@ -622,9 +843,173 @@ htt_rx_ind_rssi_dbm(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg)
     rssi = HTT_RX_IND_RSSI_CMB_GET(*msg_word);
     return (HTT_TGT_RSSI_INVALID == rssi) ?
         HTT_RSSI_INVALID :
-        rssi + HTT_TGT_NOISE_FLOOR_DBM;
+        rssi;
 }
 
+/**
+ * htt_rx_ind_rssi_dbm_chain() - Return the RSSI for a chain provided in a rx
+ *              indication message.
+ * @pdev:       the HTT instance the rx data was received on
+ * @rx_ind_msg: the netbuf containing the rx indication message
+ * @chain:      the index of the chain (0-4)
+ *
+ * Return the RSSI for a chain from an rx indication message in dBm units.
+ *
+ * Return: RSSI in dBm, or HTT_INVALID_RSSI
+ */
+int16_t
+htt_rx_ind_rssi_dbm_chain(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
+                          int8_t chain)
+{
+    int8_t rssi;
+    u_int32_t *msg_word;
+
+    if (chain < 0 || chain > 3) {
+        return HTT_RSSI_INVALID;
+    }
+
+    msg_word = (u_int32_t *)
+        (adf_nbuf_data(rx_ind_msg) + HTT_RX_IND_FW_RX_PPDU_DESC_BYTE_OFFSET);
+
+    /* check if the RX_IND message contains valid rx PPDU start info */
+    if (!HTT_RX_IND_START_VALID_GET(*msg_word)) {
+        return HTT_RSSI_INVALID;
+    }
+
+    msg_word += 1 + chain;
+
+    rssi = HTT_RX_IND_RSSI_PRI20_GET(*msg_word);
+    return (HTT_TGT_RSSI_INVALID == rssi) ?
+        HTT_RSSI_INVALID :
+        rssi;
+}
+
+/**
+ * htt_rx_ind_legacy_rate() - Return the data rate
+ * @pdev:        the HTT instance the rx data was received on
+ * @rx_ind_msg:  the netbuf containing the rx indication message
+ * @legacy_rate: (output) the data rate
+ *      The legacy_rate parameter's value depends on the
+ *      legacy_rate_sel value.
+ *      If legacy_rate_sel is 0:
+ *              0x8: OFDM 48 Mbps
+ *              0x9: OFDM 24 Mbps
+ *              0xA: OFDM 12 Mbps
+ *              0xB: OFDM 6 Mbps
+ *              0xC: OFDM 54 Mbps
+ *              0xD: OFDM 36 Mbps
+ *              0xE: OFDM 18 Mbps
+ *              0xF: OFDM 9 Mbps
+ *      If legacy_rate_sel is 1:
+ *              0x8: CCK 11 Mbps long preamble
+ *              0x9: CCK 5.5 Mbps long preamble
+ *              0xA: CCK 2 Mbps long preamble
+ *              0xB: CCK 1 Mbps long preamble
+ *              0xC: CCK 11 Mbps short preamble
+ *              0xD: CCK 5.5 Mbps short preamble
+ *              0xE: CCK 2 Mbps short preamble
+ *      -1 on error.
+ * @legacy_rate_sel: (output) 0 to indicate OFDM, 1 to indicate CCK.
+ *      -1 on error.
+ *
+ * Return the data rate provided in a rx indication message.
+ */
+void
+htt_rx_ind_legacy_rate(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
+    uint8_t *legacy_rate, uint8_t *legacy_rate_sel)
+{
+    u_int32_t *msg_word;
+
+    msg_word = (u_int32_t *)
+        (adf_nbuf_data(rx_ind_msg) + HTT_RX_IND_FW_RX_PPDU_DESC_BYTE_OFFSET);
+
+    /* check if the RX_IND message contains valid rx PPDU start info */
+    if (!HTT_RX_IND_START_VALID_GET(*msg_word)) {
+        *legacy_rate = -1;
+        *legacy_rate_sel = -1;
+        return;
+    }
+
+    *legacy_rate = HTT_RX_IND_LEGACY_RATE_GET(*msg_word);
+    *legacy_rate_sel = HTT_RX_IND_LEGACY_RATE_SEL_GET(*msg_word);
+}
+
+/**
+ * htt_rx_ind_timestamp() - Return the timestamp
+ * @pdev:                  the HTT instance the rx data was received on
+ * @rx_ind_msg:            the netbuf containing the rx indication message
+ * @timestamp_microsec:    (output) the timestamp to microsecond resolution.
+ *                         -1 on error.
+ * @timestamp_submicrosec: the submicrosecond portion of the
+ *                         timestamp. -1 on error.
+ *
+ * Return the timestamp provided in a rx indication message.
+ */
+void
+htt_rx_ind_timestamp(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
+    uint32_t *timestamp_microsec, uint8_t *timestamp_submicrosec)
+{
+    u_int32_t *msg_word;
+
+    msg_word = (u_int32_t *)
+        (adf_nbuf_data(rx_ind_msg) + HTT_RX_IND_FW_RX_PPDU_DESC_BYTE_OFFSET);
+
+    /* check if the RX_IND message contains valid rx PPDU start info */
+    if (!HTT_RX_IND_END_VALID_GET(*msg_word)) {
+        *timestamp_microsec = -1;
+        *timestamp_submicrosec = -1;
+        return;
+    }
+
+    *timestamp_microsec = *(msg_word + 6);
+    *timestamp_submicrosec =
+            HTT_RX_IND_TIMESTAMP_SUBMICROSEC_GET(*msg_word);
+}
+
+/**
+ * htt_rx_ind_tsf32() - Return the TSF timestamp
+ * @pdev:       the HTT instance the rx data was received on
+ * @rx_ind_msg: the netbuf containing the rx indication message
+ *
+ * Return the TSF timestamp provided in a rx indication message.
+ *
+ * Return: TSF timestamp
+ */
+uint32_t
+htt_rx_ind_tsf32(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg)
+{
+    u_int32_t *msg_word;
+
+    msg_word = (u_int32_t *)
+        (adf_nbuf_data(rx_ind_msg) + HTT_RX_IND_FW_RX_PPDU_DESC_BYTE_OFFSET);
+
+    /* check if the RX_IND message contains valid rx PPDU start info */
+    if (!HTT_RX_IND_END_VALID_GET(*msg_word)) {
+        return -1;
+    }
+
+    return *(msg_word + 5);
+}
+
+/**
+ * htt_rx_ind_ext_tid() - Return the extended traffic ID provided in a rx indication message.
+ * @pdev:       the HTT instance the rx data was received on
+ * @rx_ind_msg: the netbuf containing the rx indication message
+ *
+ * Return the extended traffic ID in a rx indication message.
+ *
+ * Return: Extended TID
+ */
+uint8_t
+htt_rx_ind_ext_tid(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg)
+{
+    u_int32_t *msg_word;
+
+    msg_word = (u_int32_t *)
+        (adf_nbuf_data(rx_ind_msg));
+
+    return HTT_RX_IND_EXT_TID_GET(*msg_word);
+}
 
 /*--- stats confirmation message ---*/
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -107,9 +107,16 @@ typedef enum
 #define NV_VERSION_11N_11AC_COUPER_TYPE    0
 #define NV_VERSION_11N_11AC_FW_CONFIG      1
 #define NV_VERSION_LPDC_FW_CONFIG          2
+#ifdef FEATURE_WLAN_CH144
+#define NV_VERSION_CH144_CONFIG            3
+#endif /* FEATURE_WLAN_CH144 */
 
 #ifdef WCN_PRONTO
+#ifdef FEATURE_WLAN_CH144
+#define WLAN_NV_VERSION     NV_VERSION_CH144_CONFIG
+#else
 #define WLAN_NV_VERSION     NV_VERSION_LPDC_FW_CONFIG
+#endif /* FEATURE_WLAN_CH144 */
 #else //WCN_PRONTO
 #define WLAN_NV_VERSION     NV_VERSION_11N_11AC_FW_CONFIG
 #endif //WCN_PRONTO
@@ -223,95 +230,118 @@ typedef enum
 {
     //2.4GHz Band
     RF_CHAN_1                 = 0,
-    RF_CHAN_2                 = 1,
-    RF_CHAN_3                 = 2,
-    RF_CHAN_4                 = 3,
-    RF_CHAN_5                 = 4,
-    RF_CHAN_6                 = 5,
-    RF_CHAN_7                 = 6,
-    RF_CHAN_8                 = 7,
-    RF_CHAN_9                 = 8,
-    RF_CHAN_10                = 9,
-    RF_CHAN_11                = 10,
-    RF_CHAN_12                = 11,
-    RF_CHAN_13                = 12,
-    RF_CHAN_14                = 13,
+    RF_CHAN_2,
+    RF_CHAN_3,
+    RF_CHAN_4,
+    RF_CHAN_5,
+    RF_CHAN_6,
+    RF_CHAN_7,
+    RF_CHAN_8,
+    RF_CHAN_9,
+    RF_CHAN_10,
+    RF_CHAN_11,
+    RF_CHAN_12,
+    RF_CHAN_13,
+    RF_CHAN_14,
 
     //4.9GHz Band
-    RF_CHAN_240               = 14,
-    RF_CHAN_244               = 15,
-    RF_CHAN_248               = 16,
-    RF_CHAN_252               = 17,
-    RF_CHAN_208               = 18,
-    RF_CHAN_212               = 19,
-    RF_CHAN_216               = 20,
+    RF_CHAN_240,
+    RF_CHAN_244,
+    RF_CHAN_248,
+    RF_CHAN_252,
+    RF_CHAN_208,
+    RF_CHAN_212,
+    RF_CHAN_216,
 
     //5GHz Low & Mid U-NII Band
-    RF_CHAN_36                = 21,
-    RF_CHAN_40                = 22,
-    RF_CHAN_44                = 23,
-    RF_CHAN_48                = 24,
-    RF_CHAN_52                = 25,
-    RF_CHAN_56                = 26,
-    RF_CHAN_60                = 27,
-    RF_CHAN_64                = 28,
+    RF_CHAN_36,
+    RF_CHAN_40,
+    RF_CHAN_44,
+    RF_CHAN_48,
+    RF_CHAN_52,
+    RF_CHAN_56,
+    RF_CHAN_60,
+    RF_CHAN_64,
 
     //5GHz Mid Band - ETSI & FCC
-    RF_CHAN_100               = 29,
-    RF_CHAN_104               = 30,
-    RF_CHAN_108               = 31,
-    RF_CHAN_112               = 32,
-    RF_CHAN_116               = 33,
-    RF_CHAN_120               = 34,
-    RF_CHAN_124               = 35,
-    RF_CHAN_128               = 36,
-    RF_CHAN_132               = 37,
-    RF_CHAN_136               = 38,
-    RF_CHAN_140               = 39,
+    RF_CHAN_100,
+    RF_CHAN_104,
+    RF_CHAN_108,
+    RF_CHAN_112,
+    RF_CHAN_116,
+    RF_CHAN_120,
+    RF_CHAN_124,
+    RF_CHAN_128,
+    RF_CHAN_132,
+    RF_CHAN_136,
+    RF_CHAN_140,
+#ifdef FEATURE_WLAN_CH144
+    RF_CHAN_144,
+#endif /* FEATURE_WLAN_CH144 */
 
     //5GHz High U-NII Band
-    RF_CHAN_149               = 40,
-    RF_CHAN_153               = 41,
-    RF_CHAN_157               = 42,
-    RF_CHAN_161               = 43,
-    RF_CHAN_165               = 44,
+    RF_CHAN_149,
+    RF_CHAN_153,
+    RF_CHAN_157,
+    RF_CHAN_161,
+    RF_CHAN_165,
+
+    // 802.11p
+    RF_CHAN_170,
+    RF_CHAN_171,
+    RF_CHAN_172,
+    RF_CHAN_173,
+    RF_CHAN_174,
+    RF_CHAN_175,
+    RF_CHAN_176,
+    RF_CHAN_177,
+    RF_CHAN_178,
+    RF_CHAN_179,
+    RF_CHAN_180,
+    RF_CHAN_181,
+    RF_CHAN_182,
+    RF_CHAN_183,
+    RF_CHAN_184,
 
     //CHANNEL BONDED CHANNELS
-    RF_CHAN_BOND_3            = 45,
-    RF_CHAN_BOND_4            = 46,
-    RF_CHAN_BOND_5            = 47,
-    RF_CHAN_BOND_6            = 48,
-    RF_CHAN_BOND_7            = 49,
-    RF_CHAN_BOND_8            = 50,
-    RF_CHAN_BOND_9            = 51,
-    RF_CHAN_BOND_10           = 52,
-    RF_CHAN_BOND_11           = 53,
-    RF_CHAN_BOND_242          = 54,    //4.9GHz Band
-    RF_CHAN_BOND_246          = 55,
-    RF_CHAN_BOND_250          = 56,
-    RF_CHAN_BOND_210          = 57,
-    RF_CHAN_BOND_214          = 58,
-    RF_CHAN_BOND_38           = 59,    //5GHz Low & Mid U-NII Band
-    RF_CHAN_BOND_42           = 60,
-    RF_CHAN_BOND_46           = 61,
-    RF_CHAN_BOND_50           = 62,
-    RF_CHAN_BOND_54           = 63,
-    RF_CHAN_BOND_58           = 64,
-    RF_CHAN_BOND_62           = 65,
-    RF_CHAN_BOND_102          = 66,    //5GHz Mid Band - ETSI & FCC
-    RF_CHAN_BOND_106          = 67,
-    RF_CHAN_BOND_110          = 68,
-    RF_CHAN_BOND_114          = 69,
-    RF_CHAN_BOND_118          = 70,
-    RF_CHAN_BOND_122          = 71,
-    RF_CHAN_BOND_126          = 72,
-    RF_CHAN_BOND_130          = 73,
-    RF_CHAN_BOND_134          = 74,
-    RF_CHAN_BOND_138          = 75,
-    RF_CHAN_BOND_151          = 76,    //5GHz High U-NII Band
-    RF_CHAN_BOND_155          = 77,
-    RF_CHAN_BOND_159          = 78,
-    RF_CHAN_BOND_163          = 79,
+    RF_CHAN_BOND_3,
+    RF_CHAN_BOND_4,
+    RF_CHAN_BOND_5,
+    RF_CHAN_BOND_6,
+    RF_CHAN_BOND_7,
+    RF_CHAN_BOND_8,
+    RF_CHAN_BOND_9,
+    RF_CHAN_BOND_10,
+    RF_CHAN_BOND_11,
+    RF_CHAN_BOND_242,    //4.9GHz Band
+    RF_CHAN_BOND_246,
+    RF_CHAN_BOND_250,
+    RF_CHAN_BOND_210,
+    RF_CHAN_BOND_214,
+    RF_CHAN_BOND_38,    //5GHz Low & Mid U-NII Band
+    RF_CHAN_BOND_42,
+    RF_CHAN_BOND_46,
+    RF_CHAN_BOND_50,
+    RF_CHAN_BOND_54,
+    RF_CHAN_BOND_58,
+    RF_CHAN_BOND_62,
+    RF_CHAN_BOND_102,    //5GHz Mid Band - ETSI & FCC
+    RF_CHAN_BOND_106,
+    RF_CHAN_BOND_110,
+    RF_CHAN_BOND_114,
+    RF_CHAN_BOND_118,
+    RF_CHAN_BOND_122,
+    RF_CHAN_BOND_126,
+    RF_CHAN_BOND_130,
+    RF_CHAN_BOND_134,
+    RF_CHAN_BOND_138,
+#ifdef FEATURE_WLAN_CH144
+    RF_CHAN_BOND_142,
+#endif /* FEATURE_WLAN_CH144 */
+    RF_CHAN_BOND_151,    //5GHz High U-NII Band
+    RF_CHAN_BOND_155,
+    RF_CHAN_BOND_159,
+    RF_CHAN_BOND_163,
 
     NUM_RF_CHANNELS,
 
@@ -319,11 +349,11 @@ typedef enum
     MAX_2_4GHZ_CHANNEL = RF_CHAN_14,
 
     MIN_5GHZ_CHANNEL = RF_CHAN_240,
-    MAX_5GHZ_CHANNEL = RF_CHAN_165,
+    MAX_5GHZ_CHANNEL = RF_CHAN_184,
     NUM_5GHZ_CHANNELS = (MAX_5GHZ_CHANNEL - MIN_5GHZ_CHANNEL + 1),
 
     MIN_20MHZ_RF_CHANNEL = RF_CHAN_1,
-    MAX_20MHZ_RF_CHANNEL = RF_CHAN_165,
+    MAX_20MHZ_RF_CHANNEL = RF_CHAN_184,
     NUM_20MHZ_RF_CHANNELS = (MAX_20MHZ_RF_CHANNEL - MIN_20MHZ_RF_CHANNEL + 1),
 
     MIN_40MHZ_RF_CHANNEL = RF_CHAN_BOND_3,
@@ -417,7 +447,6 @@ typedef enum
 #define HW_VAL_VALUES_VALID_CUSTOM_TCXO_REG8_MASK                   0x10
 #define HW_VAL_VALUES_VALID_CUSTOM_TCXO_REG9_MASK                   0x20
 
-
 //From wlanfw/inc/halPhyCalMemory.h
 typedef PACKED_PRE struct PACKED_POST
 {
@@ -428,10 +457,10 @@ typedef PACKED_PRE struct PACKED_POST
     uint8     nv_TxBBFSel9MHz       : 1;
     uint8     hwParam1              : 7;
     uint8     hwParam2;
-    
+
     uint16    custom_tcxo_reg8;
     uint16    custom_tcxo_reg9;
-    
+
     uint32    hwParam3;
     uint32    hwParam4;
     uint32    hwParam5;
@@ -586,7 +615,7 @@ typedef enum
 #ifdef WCN_PRONTO
     HAL_PHY_RATE_VHT_20MHZ_MCS_1NSS_NGI_86_5_MBPS,
 #endif
-    
+
     /*11AC rate 20MHZ Shortl GI*/
     HAL_PHY_RATE_VHT_20MHZ_MCS_1NSS_SGI_7_2_MBPS,
     HAL_PHY_RATE_VHT_20MHZ_MCS_1NSS_SGI_14_4_MBPS,
@@ -600,7 +629,7 @@ typedef enum
 #ifdef WCN_PRONTO
     HAL_PHY_RATE_VHT_20MHZ_MCS_1NSS_SGI_96_1_MBPS,
 #endif
-    
+
     /*11AC rates 40MHZ normal GI*/
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_NGI_13_5_MBPS ,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_NGI_27_MBPS,
@@ -612,7 +641,7 @@ typedef enum
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_NGI_135_MBPS,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_NGI_162_MBPS,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_NGI_180_MBPS,
-    
+
     /*11AC rates 40MHZ short GI*/
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_SGI_15_MBPS ,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_SGI_30_MBPS,
@@ -624,7 +653,7 @@ typedef enum
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_SGI_150_MBPS,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_SGI_180_MBPS,
     HAL_PHY_RATE_VHT_40MHZ_MCS_1NSS_CB_SGI_200_MBPS,
-    
+
     /*11AC rates 80 MHZ normal GI*/
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_NGI_29_3_MBPS ,
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_NGI_58_5_MBPS,
@@ -636,7 +665,7 @@ typedef enum
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_NGI_292_5_MBPS,
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_NGI_351_MBPS,
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_NGI_390_MBPS,
-    
+
     /*11AC rates 80 MHZ short GI*/
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_SGI_32_5_MBPS ,
     HAL_PHY_RATE_VHT_80MHZ_MCS_1NSS_CB_SGI_65_MBPS,
@@ -693,7 +722,7 @@ typedef PACKED_PRE struct PACKED_POST
 
 typedef PACKED_PRE struct PACKED_POST
 {
-    uint8 skuID; 
+    uint8 skuID;
     uint8 tpcMode2G;
     uint8 tpcMode5G;
     uint8 configItem1;

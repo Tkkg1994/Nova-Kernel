@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -20,10 +20,9 @@
  */
 
 /*
- * Copyright (c) 2011-2014 Qualcomm Atheros, Inc.
- * All Rights Reserved.
- * Qualcomm Atheros Confidential and Proprietary.
- *
+ * This file was originally distributed by Qualcomm Atheros, Inc.
+ * under proprietary terms before Copyright ownership was assigned
+ * to the Linux Foundation.
  */
 
 
@@ -77,13 +76,6 @@ typedef enum eSmeCommandType
     eSmeCommandTdlsAddPeer,
     eSmeCommandTdlsDelPeer,
     eSmeCommandTdlsLinkEstablish,
-#ifdef FEATURE_WLAN_TDLS_INTERNAL
-    eSmeCommandTdlsDiscovery,
-    eSmeCommandTdlsLinkSetup,
-    eSmeCommandTdlsLinkTear,
-    eSmeCommandTdlsEnterUapsd,
-    eSmeCommandTdlsExitUapsd,
-#endif
 #endif
     //PMC
     eSmePmcCommandMask = 0x20000, //To identify PMC commands
@@ -119,6 +111,7 @@ typedef enum eSmeState
 #define SME_IS_READY(pMac)  (SME_STATE_READY == (pMac)->sme.state)
 
 typedef struct sStatsExtEvent {
+    tANI_U32 vdev_id;
     tANI_U32 event_data_len;
     tANI_U8 event_data[];
 } tStatsExtEvent, *tpStatsExtEvent;
@@ -137,6 +130,8 @@ typedef struct sSelfRecoveryStats {
     tANI_U8 cmdStatsIndx;
 } tSelfRecoveryStats;
 
+typedef void (*ocb_callback)(void *context, void *response);
+
 typedef struct tagSmeStruct
 {
     eSmeState state;
@@ -150,7 +145,7 @@ typedef struct tagSmeStruct
     void *pTxPerHitCbContext;
     tVOS_CON_MODE currDeviceMode;
 #ifdef FEATURE_WLAN_LPHB
-    void (*pLphbIndCb) (void *pAdapter, void *indParam);
+    void (*pLphbIndCb) (void *pHddCtx, tSirLPHBInd *indParam);
 #endif /* FEATURE_WLAN_LPHB */
     //pending scan command list
     tDblLinkList smeScanCmdPendingList;
@@ -162,13 +157,56 @@ typedef struct tagSmeStruct
 #ifdef FEATURE_WLAN_CH_AVOID
     void (*pChAvoidNotificationCb) (void *hdd_context, void *indi_param);
 #endif /* FEATURE_WLAN_CH_AVOID */
+#ifdef WLAN_FEATURE_LINK_LAYER_STATS
+    void(*pLinkLayerStatsIndCallback)(void *callbackContext,
+                                        int indType, void *pRsp);
+#endif /* WLAN_FEATURE_LINK_LAYER_STATS */
+#ifdef FEATURE_WLAN_AUTO_SHUTDOWN
+    void (*pAutoShutdownNotificationCb) (void);
+#endif
     /* Maximum interfaces allowed by the host */
     tANI_U8 max_intf_count;
     void (* StatsExtCallback) (void *, tStatsExtEvent *);
-    /* linkspeed callback */
+    /* link speed callback */
     void (*pLinkSpeedIndCb) (tSirLinkSpeedInfo *indParam, void *pDevContext);
     void *pLinkSpeedCbContext;
+#ifdef FEATURE_WLAN_EXTSCAN
+    void (*pExtScanIndCb) (void *, const tANI_U16, void *);
+#endif /* FEATURE_WLAN_EXTSCAN */
+#ifdef WLAN_FEATURE_NAN
+    void (*nanCallback) (void*, tSirNanEvent*);
+#endif
+
+    int (*get_tsf_cb)(void *pcb_cxt, struct stsf *ptsf);
+    void *get_tsf_cxt;
+
     v_BOOL_t enableSelfRecovery;
+    tCsrLinkStatusCallback linkStatusCallback;
+    void *linkStatusContext;
+    tcsr_fw_state_callback fw_state_callback;
+    void *fw_state_context;
+    /* get temperature event context and callback */
+    void *pTemperatureCbContext;
+    void (*pGetTemperatureCb)(int temperature, void *context);
+    uint8_t miracast_value;
+
+    /* OCB callbacks */
+    void *ocb_set_config_context;
+    ocb_callback ocb_set_config_callback;
+    void *ocb_get_tsf_timer_context;
+    ocb_callback ocb_get_tsf_timer_callback;
+    void *dcc_get_stats_context;
+    ocb_callback dcc_get_stats_callback;
+    void *dcc_update_ndl_context;
+    ocb_callback dcc_update_ndl_callback;
+    void *dcc_stats_event_context;
+    ocb_callback dcc_stats_event_callback;
+#ifdef WLAN_FEATURE_MEMDUMP
+    void (*fw_dump_callback)(void *context, struct fw_dump_rsp *rsp);
+#endif
+    void (*set_thermal_level_cb)(void *hdd_context, uint8_t level);
+
+    void (*rssi_threshold_breached_cb)(void *, struct rssi_breach_event *);
 } tSmeStruct, *tpSmeStruct;
 
 

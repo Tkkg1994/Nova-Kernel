@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2014, 2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -27,12 +27,14 @@
 
 
 #include "ol_if_athvar.h"
+#include "htc_debug.h"
 #include "htc_internal.h"
 #include <adf_nbuf.h>     /* adf_nbuf_t */
 #include <adf_os_types.h> /* adf_os_print */
 #include <hif_msg_based.h> /* HIFFlushSurpriseRemove */
 #include <vos_getBin.h>
 #include "epping_main.h"
+#include "htc_api.h"
 
 #ifdef DEBUG
 static ATH_DEBUG_MASK_DESCRIPTION g_HTCDebugDescription[] = {
@@ -141,10 +143,13 @@ void HTCDump(HTC_HANDLE HTCHandle, u_int8_t CmdId, bool start)
 static void HTCCleanup(HTC_TARGET *target)
 {
     HTC_PACKET *pPacket;
-    //adf_nbuf_t netbuf;
+    adf_nbuf_t netbuf;
 
     if (target->hif_dev != NULL) {
         HIFDetachHTC(target->hif_dev);
+#ifdef HIF_SDIO
+        HIFMaskInterrupt(target->hif_dev);
+#endif
         target->hif_dev = NULL;
     }
 
@@ -156,9 +161,29 @@ static void HTCCleanup(HTC_TARGET *target)
         A_FREE(pPacket);
     }
 
-    pPacket = target->pBundleFreeList;
+    pPacket = target->pBundleFreeTxList;
     while (pPacket) {
         HTC_PACKET *pPacketTmp = (HTC_PACKET *)pPacket->ListLink.pNext;
+        if(pPacket->pContext != NULL) {
+           A_FREE(pPacket->pContext);
+        }
+        netbuf = GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket);
+        if(netbuf != NULL)
+            adf_nbuf_free(netbuf);
+        A_FREE(pPacket);
+        pPacket = pPacketTmp;
+    }
+
+    pPacket = target->pBundleFreeRxList;
+    while (pPacket) {
+        HTC_PACKET *pPacketTmp = (HTC_PACKET *)pPacket->ListLink.pNext;
+        if (pPacket->pContext != NULL) {
+            A_FREE(pPacket->pContext);
+        }
+        netbuf = (adf_nbuf_t)GET_HTC_PACKET_NET_BUF_CONTEXT(pPacket);
+        if (netbuf != NULL) {
+            adf_nbuf_free(netbuf);
+        }
         A_FREE(pPacket);
         pPacket = pPacketTmp;
     }
@@ -245,6 +270,7 @@ HTC_HANDLE HTCCreate(void *ol_sc, HTC_INIT_INFO *pInfo, adf_os_device_t osdev)
         htcCallbacks.txCompletionHandler = HTCTxCompletionHandler;
         htcCallbacks.txResourceAvailHandler = HTCTxResourceAvailHandler;
         htcCallbacks.fwEventHandler = HTCFwEventHandler;
+        htcCallbacks.txResumeAllHandler = HTCTxResumeAllHandler;
         target->hif_dev = hHIF;
 
         /* Get HIF default pipe for HTC message exchange */
@@ -266,6 +292,7 @@ void  HTCDestroy(HTC_HANDLE HTCHandle)
 {
     HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
     AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("+HTCDestroy ..  Destroying :0x%p \n",target));
+    HIFStop(HTCGetHifDevice(HTCHandle));
     HTCCleanup(target);
     AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("-HTCDestroy \n"));
 }
@@ -309,9 +336,6 @@ A_STATUS HTCSetupTargetBufferAssignments(HTC_TARGET *target)
 
     credits = target->TotalTransmitCredits;
     pEntry = &target->ServiceTxAllocTable[0];
-#if defined(HIF_USB)
-    target->avail_tx_credits = target->TotalTransmitCredits - 1 ;
-#endif
 #if !(defined(HIF_PCI) || defined(HIF_SIM) || defined(CONFIG_HL_SUPPORT) || (defined(HIF_USB)))
     status = A_NO_RESOURCE;
 #endif
@@ -331,60 +355,35 @@ A_STATUS HTCSetupTargetBufferAssignments(HTC_TARGET *target)
     pEntry->CreditAllocation = credits;
 
     if (WLAN_IS_EPPING_ENABLED(vos_get_conparam())) {
+        /* endpoint ping is a testing tool directly on top of HTC in
+         * both target and host sides.
+         * In target side, the endppint ping fw has no wlan stack and the
+         * FW mboxping app directly sits on HTC and it simply drops
+         * or loops back TX packets. For rx perf, FW mboxping app
+         * generates packets and passes packets to HTC to send to host.
+         * There is no WMI mesage exchanges between host and target
+         * in endpoint ping case.
+         * In host side, the endpoint ping driver is a Ethernet driver
+         * and it directly sits on HTC. Only HIF, HTC, VOSS, ADF are
+         * used by the endpoint ping driver. There is no wifi stack
+         * at all in host side also. For tx perf use case,
+         * the user space mboxping app sends the raw packets to endpoint
+         * ping driver and it directly forwards to HTC for transmission
+         * to stress the bus. For the rx perf, HTC passes the received
+         * packets to endpoint ping driver and it is passed to the user
+         * space through the Ethernet interface.
+         * For credit allocation, in SDIO bus case, only BE service is
+         * used for tx/rx perf testing so that all credits are given
+         * to BE service. In PCIe and USB bus case, endpoint ping uses both
+         * BE and BK services to stress the bus so that the total credits
+         * are equally distributed to BE and BK services.
+         */
 #if !defined(HIF_USB)
         pEntry++;
         pEntry->ServiceID = WMI_DATA_BE_SVC;
         pEntry->CreditAllocation = credits;
 #endif
-#if defined(HIF_USB)
-        do {
-            pEntry++;
-            pEntry->ServiceID = WMI_DATA_VI_SVC;
-            pEntry->CreditAllocation = credits / 4;
-            if (pEntry->CreditAllocation == 0) {
-                pEntry->CreditAllocation++;
-            }
-            credits -= (int)pEntry->CreditAllocation;
-            if (credits <= 0) {
-                break;
-            }
-            pEntry++;
-            pEntry->ServiceID = WMI_DATA_VO_SVC;
-            pEntry->CreditAllocation = credits / 3;
-            if (pEntry->CreditAllocation == 0) {
-                pEntry->CreditAllocation++;
-            }
-            credits -= (int)pEntry->CreditAllocation;
-            if (credits <= 0) {
-                break;
-            }
-            pEntry++;
-            pEntry->ServiceID = WMI_DATA_BK_SVC;
-            pEntry->CreditAllocation = credits / 2;
-            credits -= (int)pEntry->CreditAllocation;
-            if (credits <= 0) {
-                break;
-            }
-            /*
-             * HTT_DATA_MSG_SVG is unidirectional from target -> host,
-             * so no target buffers are needed.
-             */
-            pEntry++;
-            pEntry->ServiceID = WMI_DATA_BE_SVC;
-            pEntry->CreditAllocation = credits / 2;
-            credits -= (int)pEntry->CreditAllocation;
-            if (credits <= 0) {
-                break;
-            }
-            /* leftovers go to best effort */
-            pEntry++;
-            pEntry->ServiceID = WMI_CONTROL_SVC;
-            pEntry->CreditAllocation = (A_UINT8)credits;
-            status = A_OK;
-        } while (FALSE);
- #endif
- #if defined(HIF_PCI)
-        //pEntry++;
+ #if defined(HIF_PCI) || defined(HIF_USB)
         pEntry->ServiceID = WMI_DATA_BE_SVC;
         pEntry->CreditAllocation = (credits >> 1);
 
@@ -559,10 +558,19 @@ A_STATUS HTCWaitTarget(HTC_HANDLE HTCHandle)
         }
 
         target->TotalTransmitCredits = HTC_GET_FIELD(rdy_msg, HTC_READY_MSG, CREDITCOUNT);
-        target->TargetCreditSize = (int)HTC_GET_FIELD(rdy_msg, HTC_READY_MSG, CREDITSIZE);
+        target->TargetCreditSize     = (int)HTC_GET_FIELD(rdy_msg, HTC_READY_MSG, CREDITSIZE);
 
-        AR_DEBUG_PRINTF(ATH_DEBUG_INIT, ("Target Ready! : transmit resources : %d size:%d\n",
-                target->TotalTransmitCredits, target->TargetCreditSize));
+        target->MaxMsgsPerHTCBundle  = (A_UINT8) HTC_GET_FIELD(pReadyMsg, HTC_READY_EX_MSG, MAXMSGSPERHTCBUNDLE);
+        target->AltDataCreditSize    = (A_UINT16)HTC_GET_FIELD(pReadyMsg, HTC_READY_EX_MSG, ALTDATACREDITSIZE);
+
+        /* for old fw this value is set to 0. But the minimum value should be 1,
+         * i.e., no bundling */
+        if (target->MaxMsgsPerHTCBundle < 1)
+            target->MaxMsgsPerHTCBundle = 1;
+
+        AR_DEBUG_PRINTF(ATH_DEBUG_INIT,
+            ("Target Ready! : transmit resources : %d size:%d, MaxMsgsPerHTCBundle = %d\n",
+            target->TotalTransmitCredits, target->TargetCreditSize, target->MaxMsgsPerHTCBundle));
 
         if ((0 == target->TotalTransmitCredits) || (0 == target->TargetCreditSize)) {
             status = A_ECOMM;
@@ -588,11 +596,6 @@ A_STATUS HTCWaitTarget(HTC_HANDLE HTCHandle)
                                    &resp);
 
     } while (FALSE);
-
-#if defined(HIF_USB)
-    if (WLAN_IS_EPPING_ENABLED(vos_get_conparam()))
-        HIFStart_INPipe(target->hif_dev);
-#endif
 
     AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("HTCWaitTarget - Exit (%d)\n",status));
     AR_DEBUG_PRINTF(ATH_DEBUG_ANY, ("-HWT\n"));
@@ -665,6 +668,19 @@ A_STATUS HTCStart(HTC_HANDLE HTCHandle)
         } else {
             AR_DEBUG_PRINTF(ATH_DEBUG_INIT, ("HTC using TX credit flow control\n"));
         }
+
+#if defined(HIF_SDIO) || defined(HIF_USB)
+#if ENABLE_BUNDLE_RX
+        if (HTC_ENABLE_BUNDLE(target)) {
+            pSetupComp->SetupFlags |=
+                HTC_SETUP_COMPLETE_FLAGS_ENABLE_BUNDLE_RECV;
+
+            HIFSetBundleMode(target->hif_dev, true, HTC_MAX_MSG_PER_BUNDLE_RX);
+        }
+#endif /* ENABLE_BUNDLE_RX */
+#endif
+
+        pSetupComp->MaxMsgsPerBundledRecv = HTC_MAX_MSG_PER_BUNDLE_RX;
 
         SET_HTC_PACKET_INFO_TX(pSendPacket,
                                NULL,
@@ -790,6 +806,53 @@ void HTCDumpCreditStates(HTC_HANDLE HTCHandle)
     }
 }
 
+void HTCEndpointDumpCreditStats(HTC_HANDLE HTCHandle, HTC_ENDPOINT_ID Endpoint)
+{
+#ifdef HTC_EP_STAT_PROFILING
+    HTC_TARGET    *target;
+    AR_DEBUG_PRINTF(ATH_DEBUG_ANY, ("+%s \n", __func__));
+
+    target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
+
+    AR_DEBUG_PRINTF(ATH_DEBUG_ANY, (" ******* HTC Stats for EP %d ******* \n", Endpoint));
+
+    AR_DEBUG_PRINTF(ATH_DEBUG_ANY, ("HIFDSRCount=%d \t RxAllocThreshBytes=%d \t RxAllocThreshHit=%d \n"
+                                    "RxBundleIndFromHdr=%d \t RxBundleLookAheads=%d \t RxLookAheads=%d \n"
+                                    "RxPacketsBundled=%d \t RxReceived=%d \t TxBundles=%d \n"
+                                    "TxCreditLowIndications=%d \t TxCreditRpts=%d \t TxCreditRptsFromEp0=%d \n"
+                                    "TxCreditRptsFromOther=%d \t TxCreditRptsFromRx=%d \t TxCreditsConsummed=%d \n"
+                                    "TxCreditsFromEp0=%d \t TxCreditsFromOther=%d \t TxCreditsFromRx=%d \n"
+                                    "TxCreditsReturned=%d \t TxDropped=%d \t TxIssued=%d \n"
+                                    "TxPacketsBundled=%d \t TxPosted=%d \n",
+                                    target->EndPoint->EndPointStats.HIFDSRCount,
+                                    target->EndPoint->EndPointStats.RxAllocThreshBytes,
+                                    target->EndPoint->EndPointStats.RxAllocThreshHit,
+                                    target->EndPoint->EndPointStats.RxBundleIndFromHdr,
+                                    target->EndPoint->EndPointStats.RxBundleLookAheads,
+                                    target->EndPoint->EndPointStats.RxLookAheads,
+                                    target->EndPoint->EndPointStats.RxPacketsBundled,
+                                    target->EndPoint->EndPointStats.RxReceived,
+                                    target->EndPoint->EndPointStats.TxBundles,
+                                    target->EndPoint->EndPointStats.TxCreditLowIndications,
+                                    target->EndPoint->EndPointStats.TxCreditRpts,
+                                    target->EndPoint->EndPointStats.TxCreditRptsFromEp0,
+                                    target->EndPoint->EndPointStats.TxCreditRptsFromOther,
+                                    target->EndPoint->EndPointStats.TxCreditRptsFromRx,
+                                    target->EndPoint->EndPointStats.TxCreditsConsummed,
+                                    target->EndPoint->EndPointStats.TxCreditsFromEp0,
+                                    target->EndPoint->EndPointStats.TxCreditsFromOther,
+                                    target->EndPoint->EndPointStats.TxCreditsFromRx,
+                                    target->EndPoint->EndPointStats.TxCreditsReturned,
+                                    target->EndPoint->EndPointStats.TxDropped,
+                                    target->EndPoint->EndPointStats.TxIssued,
+                                    target->EndPoint->EndPointStats.TxPacketsBundled,
+                                    target->EndPoint->EndPointStats.TxPosted));
+
+    AR_DEBUG_PRINTF(ATH_DEBUG_ANY, (" ******* End Stats ******* \n"));
+#else
+    AR_DEBUG_PRINTF(ATH_DEBUG_ANY, ("%s not implemented\n", __func__));
+#endif
+}
 
 A_BOOL HTCGetEndpointStatistics(HTC_HANDLE               HTCHandle,
                                 HTC_ENDPOINT_ID          Endpoint,
@@ -851,6 +914,7 @@ void *htc_get_targetdef(HTC_HANDLE htc_handle)
 
 void HTCSetTargetToSleep(void *context)
 {
+#ifdef HIF_PCI
 #if CONFIG_ATH_PCIE_MAX_PERF == 0
 #if CONFIG_ATH_PCIE_AWAKE_WHILE_DRIVER_LOAD
     struct ol_softc *sc = (struct ol_softc *)context;
@@ -858,12 +922,102 @@ void HTCSetTargetToSleep(void *context)
     HIFSetTargetSleep(sc->hif_hdl, true, false);
 #endif
 #endif
+#endif
 }
 
 void HTCCancelDeferredTargetSleep(void *context)
 {
+#ifdef HIF_PCI
 #if CONFIG_ATH_PCIE_MAX_PERF == 0
     struct ol_softc *sc = (struct ol_softc *)context;
     HIFCancelDeferredTargetSleep(sc->hif_hdl);
 #endif
+#endif
 }
+
+#ifdef IPA_UC_OFFLOAD
+void HTCIpaGetCEResource(HTC_HANDLE htc_handle,
+                      a_uint32_t *ce_sr_base_paddr,
+                      a_uint32_t *ce_sr_ring_size,
+                      a_uint32_t *ce_reg_paddr)
+{
+    HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(htc_handle);
+
+    if (target->hif_dev != NULL) {
+        HIFIpaGetCEResource(target->hif_dev,
+                            ce_sr_base_paddr,
+                            ce_sr_ring_size,
+                            ce_reg_paddr);
+    }
+}
+#endif /* IPA_UC_OFFLOAD */
+
+#if defined(DEBUG_HL_LOGGING) && defined(CONFIG_HL_SUPPORT)
+
+void HTCDumpBundleStats(HTC_HANDLE HTCHandle)
+{
+    HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
+    int total, i;
+
+    total = 0;
+    for (i = 0; i < HTC_MAX_MSG_PER_BUNDLE_RX; i++) {
+        total += target->rx_bundle_stats[i];
+    }
+
+    if (total) {
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,("RX Bundle stats:\n"));
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,("Total RX packets: %d\n", total));
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,(
+            "Number of bundle: Number of packets\n"));
+        for (i = 0; i < HTC_MAX_MSG_PER_BUNDLE_RX; i++) {
+            AR_DEBUG_PRINTF(ATH_DEBUG_ANY,
+                ("%10d:%10d(%2d%s)\n",(i+1), target->rx_bundle_stats[i],
+                ((target->rx_bundle_stats[i]*100)/total), "%"));
+        }
+    }
+
+
+    total = 0;
+    for (i = 0; i < HTC_MAX_MSG_PER_BUNDLE_TX; i++) {
+        total += target->tx_bundle_stats[i];
+    }
+
+    if (total) {
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,("TX Bundle stats:\n"));
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,("Total TX packets: %d\n", total));
+        AR_DEBUG_PRINTF(ATH_DEBUG_ANY,
+            ("Number of bundle: Number of packets\n"));
+        for (i = 0; i < HTC_MAX_MSG_PER_BUNDLE_TX; i++) {
+            AR_DEBUG_PRINTF(ATH_DEBUG_ANY,
+                ("%10d:%10d(%2d%s)\n",(i+1), target->tx_bundle_stats[i],
+                ((target->tx_bundle_stats[i]*100)/total), "%"));
+        }
+    }
+}
+
+void HTCClearBundleStats (HTC_HANDLE HTCHandle)
+{
+    HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(HTCHandle);
+
+    adf_os_mem_zero(&target->rx_bundle_stats, sizeof(target->rx_bundle_stats));
+    adf_os_mem_zero(&target->tx_bundle_stats, sizeof(target->tx_bundle_stats));
+}
+#endif
+
+#ifdef FEATURE_RUNTIME_PM
+int htc_pm_runtime_get(HTC_HANDLE htc_handle)
+{
+	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(htc_handle);
+
+	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("%s: %pS\n", __func__, (void *)_RET_IP_));
+	return hif_pm_runtime_get(target->hif_dev);
+}
+
+int htc_pm_runtime_put(HTC_HANDLE htc_handle)
+{
+	HTC_TARGET *target = GET_HTC_TARGET_FROM_HANDLE(htc_handle);
+
+	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("%s: %pS\n", __func__, (void *)_RET_IP_));
+	return hif_pm_runtime_put(target->hif_dev);
+}
+#endif

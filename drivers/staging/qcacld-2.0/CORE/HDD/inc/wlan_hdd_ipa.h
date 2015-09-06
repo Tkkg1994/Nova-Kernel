@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,6 +51,38 @@ int hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 VOS_STATUS hdd_ipa_process_rxt(v_VOID_t *vosContext, adf_nbuf_t rxBuf,
 		v_U8_t sta_id);
 bool hdd_ipa_is_enabled(hdd_context_t *pHddCtx);
+
+int hdd_ipa_set_perf_level(hdd_context_t *hdd_ctx, uint64_t tx_packets,
+		uint64_t rx_packets);
+
+int hdd_ipa_suspend(hdd_context_t *hdd_ctx);
+int hdd_ipa_resume(hdd_context_t *hdd_ctx);
+
+#ifdef IPA_UC_STA_OFFLOAD
+int hdd_ipa_send_mcc_scc_msg(hdd_context_t *hdd_ctx, bool mcc_mode);
 #endif
 
+#ifdef IPA_UC_OFFLOAD
+void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx);
+int hdd_ipa_uc_ssr_reinit(void);
+int hdd_ipa_uc_ssr_deinit(void);
+void hdd_ipa_uc_stat_query(hdd_context_t *pHddCtx,
+	uint32_t *ipa_tx_diff, uint32_t *ipa_rx_diff);
+void hdd_ipa_uc_stat_request( hdd_adapter_t *adapter, uint8_t reason);
+void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx);
+#endif /* IPA_UC_OFFLOAD */
+#endif /* IPA_OFFLOAD */
+
+#if !defined(IPA_OFFLOAD) || !defined(IPA_UC_OFFLOAD)
+static inline
+void hdd_ipa_uc_force_pipe_shutdown(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+static inline
+void hdd_ipa_uc_rt_debug_host_dump(hdd_context_t *hdd_ctx)
+{
+	return;
+}
+#endif
 #endif

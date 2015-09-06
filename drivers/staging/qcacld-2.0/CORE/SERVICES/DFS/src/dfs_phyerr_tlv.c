@@ -136,28 +136,59 @@ calc_freq_offset(int sindex, int is_oversampling)
 }
 
 static void
-radar_summary_print(struct ath_dfs *dfs, struct rx_radar_status *rsu)
+radar_summary_print(struct ath_dfs *dfs,
+                    struct rx_radar_status *rsu,
+                    bool enable_log)
 {
+   if (!enable_log)
+       return;
 
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    pulsedur=%d", rsu->pulse_duration);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    rssi=%d", rsu->rssi);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    ischirp=%d", rsu->is_chirp);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    sidx=%d", rsu->sidx);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    raw tsf=%d", rsu->raw_tsf);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    tsf_offset=%d", rsu->tsf_offset);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    cooked tsf=%d", rsu->raw_tsf - rsu->tsf_offset);
-   DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "    frequency offset=%d.%d MHz (oversampling=%d)",
-       (int) (rsu->freq_offset / 1000),
-       (int) abs(rsu->freq_offset % 1000),
-       PERE_IS_OVERSAMPLING(dfs));
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             " \n ############ Radar Summary ############ \n");
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - pulsedur = %d\n",
+             __func__, rsu->pulse_duration);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - rssi = %d\n",
+              __func__, rsu->rssi);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - ischirp = %d\n",
+             __func__,  rsu->is_chirp);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - sidx = %d\n",
+             __func__,  rsu->sidx);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - delta_peak = %d\n",
+             __func__,  rsu->delta_peak);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - delta_diff = %d\n",
+             __func__,  rsu->delta_diff);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - raw tsf = %d\n",
+             __func__,  rsu->raw_tsf);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - tsf_offset = %d\n",
+             __func__,  rsu->tsf_offset);
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: Radar Summary - cooked tsf = %d \n",
+             __func__, (rsu->raw_tsf - rsu->tsf_offset));
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+             "%s: frequency offset = %d.%d MHz (oversampling = %d) \n",
+             __func__, (int) (rsu->freq_offset / 1000),
+             (int) abs(rsu->freq_offset % 1000), PERE_IS_OVERSAMPLING(dfs));
+
+   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
+            "\n ################################### \n");
 }
 
 /*
@@ -170,12 +201,13 @@ radar_summary_parse(struct ath_dfs *dfs, const char *buf, size_t len,
     struct rx_radar_status *rsu)
 {
    uint32_t rs[2];
+   int freq_centre, freq;
 
    /* Drop out if we have < 2 DWORDs available */
    if (len < sizeof(rs)) {
       DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR |
           ATH_DEBUG_DFS_PHYERR_SUM,
-          "%s: len (%d) < expected (%d)!",
+          "%s: len (%zu) < expected (%zu)!",
           __func__,
           len,
           sizeof(rs));
@@ -211,6 +243,33 @@ radar_summary_parse(struct ath_dfs *dfs, const char *buf, size_t len,
            6);
    rsu->delta_diff =
        MS(rs[RADAR_REPORT_PULSE_REG_1], RADAR_REPORT_PULSE_DELTA_DIFF);
+
+   /* WAR for FCC Type 4*/
+   /*
+    * HW is giving longer pulse duration (in case of VHT80, with traffic)
+    * which fails to detect FCC type4 radar pulses. Added a work around to
+    * fix the pulse duration and duration delta.
+    *
+    * IF VHT80
+    *   && (primary_channel==30MHz || primary_channel== -30MHz)
+    *   && -4 <= pulse_index <= 4
+    *   && !chirp
+    *   && pulse duration > 20 us
+    * THEN
+    *   Set pulse duration to 20 us
+    */
+
+   freq = ieee80211_chan2freq(dfs->ic, dfs->ic->ic_curchan);
+   freq_centre = dfs->ic->ic_curchan->ic_vhtop_ch_freq_seg1;
+
+   if ((IEEE80211_IS_CHAN_11AC_VHT80(dfs->ic->ic_curchan) &&
+            (abs(freq - freq_centre) == 30) &&
+            !rsu->is_chirp &&
+            abs(rsu->sidx) <= 4 &&
+            rsu->pulse_duration > 20)){
+      rsu->pulse_duration = 20;
+   }
+
 }
 
 static void
@@ -223,7 +282,7 @@ radar_fft_search_report_parse(struct ath_dfs *dfs, const char *buf, size_t len,
    if (len < sizeof(rs)) {
       DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR |
           ATH_DEBUG_DFS_PHYERR_SUM,
-          "%s: len (%d) < expected (%d)!",
+          "%s: len (%zu) < expected (%zu)!",
           __func__,
           len,
           sizeof(rs));
@@ -276,13 +335,13 @@ tlv_parse_frame(struct ath_dfs *dfs, struct rx_radar_status *rs,
         bool false_detect = false;
 
    DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-       "%s: total length = %d bytes", __func__, len);
+       "%s: total length = %zu bytes", __func__, len);
    while ((i < len ) && (false_detect == false)) {
       /* Ensure we at least have four bytes */
       if ((len - i) < sizeof(tlv_hdr)) {
          DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR |
              ATH_DEBUG_DFS_PHYERR_SUM,
-             "%s: ran out of bytes, len=%d, i=%d",
+             "%s: ran out of bytes, len=%zu, i=%d",
              __func__, len, i);
          return (0);
       }
@@ -309,7 +368,7 @@ tlv_parse_frame(struct ath_dfs *dfs, struct rx_radar_status *rs,
        */
       if (MS(tlv_hdr[TLV_REG], TLV_LEN) + i >= len) {
          DFS_DPRINTK(dfs, ATH_DEBUG_DFS_PHYERR,
-             "%s: TLV oversize: TLV LEN=%d, available=%d, "
+             "%s: TLV oversize: TLV LEN=%d, available=%zu, "
              "i=%d",
              __func__,
              MS(tlv_hdr[TLV_REG], TLV_LEN),
@@ -401,9 +460,7 @@ tlv_calc_freq_info(struct ath_dfs *dfs, struct rx_radar_status *rs)
        * appropriately!
        */
 
-      chan_centre = dfs->ic->ic_ieee2mhz(
-          dfs->ic->ic_curchan->ic_vhtop_ch_freq_seg1,
-          dfs->ic->ic_curchan->ic_flags);
+      chan_centre = dfs->ic->ic_curchan->ic_vhtop_ch_freq_seg1;
    } else {
       /* HT20/HT40 */
 
@@ -590,8 +647,9 @@ tlv_calc_event_freq(struct ath_dfs *dfs, struct rx_radar_status *rs,
  */
 int
 dfs_process_phyerr_bb_tlv(struct ath_dfs *dfs, void *buf, u_int16_t datalen,
-    u_int8_t rssi, u_int8_t ext_rssi, u_int32_t rs_tstamp, u_int64_t fulltsf,
-    struct dfs_phy_err *e)
+                          u_int8_t rssi, u_int8_t ext_rssi, u_int32_t rs_tstamp,
+                          u_int64_t fulltsf, struct dfs_phy_err *e,
+                          bool enable_log)
 {
    struct rx_radar_status rs;
         struct rx_search_fft_report rsfr;
@@ -627,12 +685,13 @@ dfs_process_phyerr_bb_tlv(struct ath_dfs *dfs, void *buf, u_int16_t datalen,
        return (0);
    }
    /* For debugging, print what we have parsed */
-   radar_summary_print(dfs, &rs);
+   radar_summary_print(dfs, &rs, enable_log);
 
    /* Populate dfs_phy_err from rs */
    OS_MEMSET(e, 0, sizeof(*e));
    e->rssi = rs.rssi;
    e->dur = rs.pulse_duration;
+   e->sidx = rs.sidx;
    e->is_pri = 1;    /* XXX always PRI for now */
    e->is_ext = 0;
    e->is_dc = 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, 2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,7 +54,8 @@ ol_tx_dest_addr_find(
     } else if (pdev->frame_format == wlan_frm_fmt_802_3) {
         hdr_ptr = datap;
     } else {
-        adf_os_print("Invalid standard frame type: %d\n",
+        VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_ERROR,
+            "Invalid standard frame type: %d\n",
             pdev->frame_format);
         adf_os_assert(0);
         hdr_ptr = NULL;

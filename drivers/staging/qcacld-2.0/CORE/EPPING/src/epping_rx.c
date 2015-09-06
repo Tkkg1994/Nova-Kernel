@@ -20,12 +20,10 @@
  */
 
 /*
- * Copyright (c) 2014 Qualcomm Atheros, Inc.
- * All Rights Reserved.
- * Qualcomm Atheros Confidential and Proprietary.
- *
+ * This file was originally distributed by Qualcomm Atheros, Inc.
+ * under proprietary terms before Copyright ownership was assigned
+ * to the Linux Foundation.
  */
-
 
 /*========================================================================
 
@@ -45,7 +43,6 @@
 #include <linux/firmware.h>
 #include <wcnss_api.h>
 #include <wlan_hdd_tx_rx.h>
-#include <palTimer.h>
 #include <wniApi.h>
 #include <wlan_nlink_srv.h>
 #include <wlan_btc_svc.h>
