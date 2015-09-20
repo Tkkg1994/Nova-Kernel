@@ -1028,4 +1028,9 @@ source "drivers/input/touchscreen/wacom/Kconfig"
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 source "drivers/input/touchscreen/synaptics/Kconfig"
 
+config STATE_NOTIFIER
+        bool "State Notifier"
+	depends on TOUCHSCREEN_SYNAPTICS_G2
+	default y
+
 endif
