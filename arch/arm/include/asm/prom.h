@@ -15,12 +15,12 @@
 
 #ifdef CONFIG_OF
 
-extern const struct machine_desc *setup_machine_fdt(unsigned int dt_phys);
+extern struct machine_desc *setup_machine_fdt(unsigned int dt_phys);
 extern void __init arm_dt_init_cpu_maps(void);
 
 #else /* CONFIG_OF */
 
-static inline const struct machine_desc *setup_machine_fdt(unsigned int dt_phys)
+static inline struct machine_desc *setup_machine_fdt(unsigned int dt_phys)
 {
 	return NULL;
 }
