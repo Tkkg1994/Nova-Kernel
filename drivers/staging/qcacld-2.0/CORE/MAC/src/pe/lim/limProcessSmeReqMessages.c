@@ -58,13 +58,11 @@
 #include "wmmApsd.h"
 #include "sirMacProtDef.h"
 #include "regdomain_common.h"
+#include "rrmApi.h"
 
 
 #include "sapApi.h"
 
-#if defined WLAN_FEATURE_VOWIFI
-#include "rrmApi.h"
-#endif
 #if defined(FEATURE_WLAN_ESE) && !defined(FEATURE_WLAN_ESE_UPLOAD)
 #include "eseApi.h"
 #endif
@@ -1814,17 +1812,6 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
 
     PELOG1(limLog(pMac, LOG1, FL("Received SME_JOIN_REQ"));)
 
-#ifdef WLAN_FEATURE_VOWIFI
-    /* Need to read the CFG here itself as this is used in limExtractAPCapability() below.
-    * This CFG is actually read in rrmUpdateConfig() which is called later. Because this is not
-    * read, RRM related path before calling rrmUpdateConfig() is not getting executed causing issues
-    * like not honoring power constraint on 1st association after driver loading. */
-    if (wlan_cfgGetInt(pMac, WNI_CFG_RRM_ENABLED, &val) != eSIR_SUCCESS)
-        limLog(pMac, LOGP, FL("cfg get rrm enabled failed"));
-    pMac->rrm.rrmPEContext.rrmEnable = (val) ? 1 : 0;
-    val = 0;
-#endif /* WLAN_FEATURE_VOWIFI */
-
    /**
      * Expect Join request in idle state.
      * Reassociate request is expected in link established state.
@@ -1856,8 +1843,15 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
             goto end;
         }
 
-        /* check for the existence of start BSS session  */
+        /*
+         * Update the capability here itself as this is used in
+         * limExtractAPCapability() below. If not updated issues like not
+         * honoring power constraint on 1st association after driver loading
+         * might occur.
+         */
+        lim_update_rrm_capability(pMac, pSmeJoinReq);
 
+        /* check for the existence of start BSS session  */
 
         if((psessionEntry = peFindSessionByBssid(pMac,pSmeJoinReq->bssDescription.bssId,&sessionId)) != NULL)
         {
@@ -1943,14 +1937,10 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                     SIR_MAC_CISCO_OUI_SIZE,
                    ((tANI_U8 *)&pSmeJoinReq->bssDescription.ieFields) , ieLen);
 
-        if ( NULL != vendorIE )
-        {
-            limLog(pMac, LOGE,
-                   FL("DUT is trying to connect to Cisco AP"));
+        if (NULL != vendorIE) {
+            limLog(pMac, LOG1, FL("Cisco vendor OUI present"));
             psessionEntry->isCiscoVendorAP = TRUE;
-        }
-        else
-        {
+        } else {
             psessionEntry->isCiscoVendorAP = FALSE;
         }
 
@@ -3021,6 +3011,20 @@ __limProcessSmeDisassocCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                "does not have context, addr= "MAC_ADDRESS_STR),
                      MAC_ADDR_ARRAY(smeDisassocCnf.peerMacAddr));)
             return;
+        }
+
+        /*
+         * If MlM state is either of del_sta or del_bss state, then no need to
+         * go ahead and clean up further as there must be some cleanup in
+         * progress from upper layer disassoc/deauth request.
+         */
+        if((pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_STA_RSP_STATE) ||
+           (pStaDs->mlmStaContext.mlmState == eLIM_MLM_WT_DEL_BSS_RSP_STATE)) {
+            limLog(pMac, LOGE, FL("No need to cleanup for addr:"MAC_ADDRESS_STR
+                   "as Mlm state is %d"),
+                   MAC_ADDR_ARRAY(smeDisassocCnf.peerMacAddr),
+                   pStaDs->mlmStaContext.mlmState);
+           return;
         }
 
 #if defined WLAN_FEATURE_VOWIFI_11R
@@ -5163,6 +5167,8 @@ void __limProcessReportMessage(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
              rrmProcessBeaconReportXmit( pMac, pMsg->bodyptr );
         }
         break;
+      default:
+        limLog(pMac, LOGE, FL("Invalid msg type:%d"), pMsg->type);
    }
 #endif
 }

@@ -711,21 +711,13 @@ tANI_BOOLEAN smeProcessScanQueue(tpAniSirGlobal pMac)
             if (pEntry) {
                 pCommand = GET_BASE_ADDR( pEntry, tSmeCmd, Link );
                 if (pSmeCommand != NULL) {
-                    /*
-                    * if scan is running on one interface and SME receives
-                    * the next command on the same interface then
-                    * dont the allow the command to be queued to
-                    * smeCmdPendingList. If next scan is allowed on
-                    * the same interface the CSR state machine will
-                    * get screwed up.
-                    */
-                     if (pSmeCommand->sessionId == pCommand->sessionId) {
-                          smsLog(pMac, LOGE,
-                                "SME command is pending on session %d",
-                                pSmeCommand->sessionId);
-                            status = eANI_BOOLEAN_FALSE;
-                          goto end;
-                      }
+                    /* if there is an active SME command, do not process
+                     * the pending scan cmd
+                     */
+                    smsLog(pMac, LOGE, "SME scan cmd is pending on session %d",
+                           pSmeCommand->sessionId);
+                    status = eANI_BOOLEAN_FALSE;
+                    goto end;
                 }
                 //We cannot execute any command in wait-for-key state until setKey is through.
                 if (CSR_IS_WAIT_FOR_KEY( pMac, pCommand->sessionId))
@@ -2900,7 +2892,7 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
            case eWNI_SME_CH_AVOID_IND:
                 if (pMac->sme.pChAvoidNotificationCb)
                 {
-                   VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                   VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
                              "%s: CH avoid notification", __func__);
                    pMac->sme.pChAvoidNotificationCb(pMac->hHdd, pMsg->bodyptr);
                 }
@@ -3036,17 +3028,27 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
 #ifdef FEATURE_WLAN_EXTSCAN
           case eWNI_SME_EXTSCAN_FULL_SCAN_RESULT_IND:
           {
-                pMac->sme.pExtScanIndCb(pMac->hHdd,
-                                        eSIR_EXTSCAN_FULL_SCAN_RESULT_IND,
-                                        pMsg->bodyptr);
+		if (pMac->sme.pExtScanIndCb) {
+                    pMac->sme.pExtScanIndCb(pMac->hHdd,
+                                            eSIR_EXTSCAN_FULL_SCAN_RESULT_IND,
+                                            pMsg->bodyptr);
+                } else {
+                    smsLog(pMac, LOGE,
+                           FL("callback not registered to process eWNI_SME_EXTSCAN_FULL_SCAN_RESULT_IND"));
+                }
                 vos_mem_free(pMsg->bodyptr);
                 break;
           }
           case eWNI_SME_EPNO_NETWORK_FOUND_IND:
           {
-                pMac->sme.pExtScanIndCb(pMac->hHdd,
-                                        eSIR_EPNO_NETWORK_FOUND_IND,
-                                        pMsg->bodyptr);
+                if (pMac->sme.pExtScanIndCb) {
+                    pMac->sme.pExtScanIndCb(pMac->hHdd,
+                                            eSIR_EPNO_NETWORK_FOUND_IND,
+                                            pMsg->bodyptr);
+                } else {
+                    smsLog(pMac, LOGE,
+                           FL("callback not registered to process eWNI_SME_EPNO_NETWORK_FOUND_IND"));
+                }
                 vos_mem_free(pMsg->bodyptr);
                 break;
           }
@@ -3129,6 +3131,13 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                {
                    pMac->sme.set_thermal_level_cb(pMac->hHdd, pMsg->bodyval);
                }
+               break;
+          case eWNI_SME_LOST_LINK_INFO_IND:
+               if (pMac->sme.lost_link_info_cb) {
+                   pMac->sme.lost_link_info_cb(pMac->hHdd,
+                             (struct sir_lost_link_info *)pMsg->bodyptr);
+               }
+               vos_mem_free(pMsg->bodyptr);
                break;
           default:
 
@@ -4737,6 +4746,7 @@ eHalStatus sme_GetConfigParam(tHalHandle hHal, tSmeConfigParams *pParam)
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
       pParam->fScanOffload = pMac->fScanOffload;
       pParam->fP2pListenOffload = pMac->fP2pListenOffload;
+      pParam->pnoOffload = pMac->pnoOffload;
       pParam->max_intf_count = pMac->sme.max_intf_count;
       pParam->enableSelfRecovery = pMac->sme.enableSelfRecovery;
       pParam->f_prefer_non_dfs_on_radar = pMac->f_prefer_non_dfs_on_radar;
@@ -8717,10 +8727,8 @@ eHalStatus sme_8023MulticastList (tHalHandle hHal, tANI_U8 sessionId, tpSirRcvFl
         pSession = CSR_GET_SESSION( pMac, sessionId );
     }
 
-    if(pSession == NULL )
-    {
-        VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR, "%s: Unable to find "
-            "the session Id: %d", __func__, sessionId);
+    if (pSession == NULL) {
+        smsLog(pMac, LOGW, FL("Unable to find the session Id: %d"), sessionId);
         return eHAL_STATUS_FAILURE;
     }
 
@@ -14570,10 +14578,9 @@ VOS_STATUS sme_UpdateDSCPtoUPMapping( tHalHandle hHal,
             return eHAL_STATUS_FAILURE;
         }
 
-        if ( !pSession->QosMapSet.present )
-        {
-            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-                     "%s: QOS Mapping IE not present", __func__);
+        if (!pSession->QosMapSet.present) {
+            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_WARN,
+                     FL("QOS Mapping IE not present"));
             sme_ReleaseGlobalLock( &pMac->sme);
             return eHAL_STATUS_FAILURE;
         }
@@ -17068,3 +17075,82 @@ void sme_get_opclass(tHalHandle hal, uint8_t channel, uint8_t bw_offset,
 }
 
 #endif
+
+
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/**
+ * sme_set_udp_resp_offload() - set udp response payload.
+ * @pudp_resp_cmd: specific udp and response udp payload struct pointer
+ *
+ * This function set specific udp and response udp payload info
+ * including enable dest_port,udp_payload, resp_payload.
+ *
+ * Return: Return VOS_STATUS.
+ */
+VOS_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd)
+{
+	vos_msg_t vos_message;
+	VOS_STATUS vos_status;
+	struct udp_resp_offload *udp_resp_cmd;
+
+	if (!pudp_resp_cmd) {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				"%s: invalid pudp_resp_cmd pointer", __func__);
+		return VOS_STATUS_E_FAILURE;
+	}
+
+	udp_resp_cmd = vos_mem_malloc(sizeof(*udp_resp_cmd));
+	if (NULL == udp_resp_cmd) {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				"%s: fail to alloc sudp_cmd", __func__);
+		return VOS_STATUS_E_FAILURE;
+	}
+
+	*udp_resp_cmd = *pudp_resp_cmd;
+
+	vos_message.type = WDA_SET_UDP_RESP_OFFLOAD;
+	vos_message.bodyptr = udp_resp_cmd;
+	vos_status = vos_mq_post_message(VOS_MODULE_ID_WDA,
+					&vos_message);
+	if (!VOS_IS_STATUS_SUCCESS(vos_status)) {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+				"%s: Not able to post msg to WDA!",
+				__func__);
+		vos_mem_free(udp_resp_cmd);
+		vos_status = VOS_STATUS_E_FAILURE;
+	}
+
+	return vos_status;
+}
+#endif
+
+/**
+ * sme_set_lost_link_info_cb() - plug in callback function for receiving
+ * lost link info
+ * @hal: HAL handle
+ * @cb: callback function
+ *
+ * Return: HAL status
+ */
+eHalStatus sme_set_lost_link_info_cb(tHalHandle hal,
+				     void (*cb)(void *,
+				     struct sir_lost_link_info *))
+{
+	eHalStatus status = eHAL_STATUS_SUCCESS;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+
+	status = sme_AcquireGlobalLock(&mac->sme);
+	if (eHAL_STATUS_SUCCESS == status) {
+		mac->sme.lost_link_info_cb = cb;
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_INFO,
+			  "%s: set lost link info callback", __func__);
+		sme_ReleaseGlobalLock(&mac->sme);
+	} else {
+		VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+			  "%s: sme_AcquireGlobalLock error status %d",
+			  __func__, status);
+	}
+	return status;
+}
+

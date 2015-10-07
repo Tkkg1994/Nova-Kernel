@@ -77,6 +77,7 @@
 
 #define PCIE_WAKE_TIMEOUT 1000 /* Maximum ms timeout for host to wake up target */
 #define RAMDUMP_EVENT_TIMEOUT 2500
+#define MAX_REG_READ_RETRIES 10
 
 unsigned int msienable = 0;
 module_param(msienable, int, 0644);
@@ -85,6 +86,44 @@ int hif_pci_configure(struct hif_pci_softc *sc, hif_handle_t *hif_hdl);
 void hif_nointrs(struct hif_pci_softc *sc);
 static int __hif_pci_suspend(struct pci_dev *, pm_message_t, bool);
 static int __hif_pci_resume(struct pci_dev *, bool);
+
+static void print_config_soc_reg(struct hif_pci_softc *sc)
+{
+	A_UINT16 val;
+	A_UINT32 bar0;
+
+	pci_read_config_word(sc->pdev, PCI_VENDOR_ID, &val);
+	pr_err("%s: PCI Vendor ID = 0x%04x\n", __func__, val);
+
+	pci_read_config_word(sc->pdev, PCI_DEVICE_ID, &val);
+	pr_err("%s: PCI Device ID = 0x%04x\n", __func__, val);
+
+	pci_read_config_word(sc->pdev, PCI_COMMAND, &val);
+	pr_err("%s: PCI Command = 0x%04x\n", __func__, val);
+
+	pci_read_config_word(sc->pdev, PCI_STATUS, &val);
+	pr_err("%s: PCI Status = 0x%04x\n", __func__, val);
+
+	pci_read_config_dword(sc->pdev, PCI_BASE_ADDRESS_0, &bar0);
+	pr_err("%s: PCI BAR0 = 0x%08x\n", __func__, bar0);
+
+	pr_err("%s: RTC_STATE_ADDRESS = 0x%08x, "
+		"PCIE_SOC_WAKE_ADDRESS = 0x%08x\n", __func__,
+		A_PCI_READ32(sc->mem + PCIE_LOCAL_BASE_ADDRESS
+			+ RTC_STATE_ADDRESS),
+		A_PCI_READ32(sc->mem + PCIE_LOCAL_BASE_ADDRESS
+			+ PCIE_SOC_WAKE_ADDRESS));
+
+	pr_err("%s: 0x80008 = 0x%08x, 0x8000c = 0x%08x, "
+		"0x80010 = 0x%08x,\n0x80014 = 0x%08x, 0x80018 = 0x%08x, "
+		"0x8001c = 0x%08x\n", __func__,
+		A_PCI_READ32(sc->mem + 0x80008),
+		A_PCI_READ32(sc->mem + 0x8000c),
+		A_PCI_READ32(sc->mem + 0x80010),
+		A_PCI_READ32(sc->mem + 0x80014),
+		A_PCI_READ32(sc->mem + 0x80018),
+		A_PCI_READ32(sc->mem + 0x8001c));
+};
 
 static struct pci_device_id hif_pci_id_table[] = {
 	{ 0x168c, 0x003c, PCI_ANY_ID, PCI_ANY_ID },
@@ -113,8 +152,6 @@ hif_pci_interrupt_handler(int irq, void *arg)
     struct hif_pci_softc *sc = (struct hif_pci_softc *) arg;
     struct HIF_CE_state *hif_state = (struct HIF_CE_state *)sc->hif_device;
     volatile int tmp;
-    A_UINT16 val;
-    A_UINT32 bar0;
 
     if (sc->hif_init_done == TRUE) {
         adf_os_spin_lock_irqsave(&hif_state->suspend_lock);
@@ -138,40 +175,8 @@ hif_pci_interrupt_handler(int irq, void *arg)
         tmp = A_PCI_READ32(sc->mem+(SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS));
 
         if (tmp == 0xdeadbeef) {
-            printk(KERN_ERR "BUG(%s): SoC returns 0xdeadbeef!!\n", __func__);
-
-            pci_read_config_word(sc->pdev, PCI_VENDOR_ID, &val);
-            printk(KERN_ERR "%s: PCI Vendor ID = 0x%04x\n", __func__, val);
-
-            pci_read_config_word(sc->pdev, PCI_DEVICE_ID, &val);
-            printk(KERN_ERR "%s: PCI Device ID = 0x%04x\n", __func__, val);
-
-            pci_read_config_word(sc->pdev, PCI_COMMAND, &val);
-            printk(KERN_ERR "%s: PCI Command = 0x%04x\n", __func__, val);
-
-            pci_read_config_word(sc->pdev, PCI_STATUS, &val);
-            printk(KERN_ERR "%s: PCI Status = 0x%04x\n", __func__, val);
-
-            pci_read_config_dword(sc->pdev, PCI_BASE_ADDRESS_0, &bar0);
-            printk(KERN_ERR "%s: PCI BAR0 = 0x%08x\n", __func__, bar0);
-
-            printk(KERN_ERR "%s: RTC_STATE_ADDRESS = 0x%08x, "
-                "PCIE_SOC_WAKE_ADDRESS = 0x%08x\n", __func__,
-                A_PCI_READ32(sc->mem + PCIE_LOCAL_BASE_ADDRESS
-                    + RTC_STATE_ADDRESS),
-                A_PCI_READ32(sc->mem + PCIE_LOCAL_BASE_ADDRESS
-                    + PCIE_SOC_WAKE_ADDRESS));
-
-            pr_err("%s: 0x80008 = 0x%08x, 0x8000c = 0x%08x, "
-                "0x80010 = 0x%08x,\n0x80014 = 0x%08x, 0x80018 = 0x%08x, "
-                "0x8001c = 0x%08x\n", __func__,
-                A_PCI_READ32(sc->mem + 0x80008),
-                A_PCI_READ32(sc->mem + 0x8000c),
-                A_PCI_READ32(sc->mem + 0x80010),
-                A_PCI_READ32(sc->mem + 0x80014),
-                A_PCI_READ32(sc->mem + 0x80018),
-                A_PCI_READ32(sc->mem + 0x8001c));
-
+            pr_err("BUG(%s): SoC returns 0xdeadbeef!!\n", __func__);
+            print_config_soc_reg(sc);
             VOS_BUG(0);
         }
 
@@ -701,7 +706,11 @@ wlan_tasklet(unsigned long data)
          goto irq_handled;
     }
 
+#ifdef FEATURE_WLAN_D0WOW
+    if (adf_os_atomic_read(&sc->wow_done) && !adf_os_atomic_read(&sc->in_d0wow))
+#else
     if (adf_os_atomic_read(&sc->wow_done))
+#endif
          goto irq_handled;
 
     adf_os_atomic_set(&sc->ce_suspend, 0);
@@ -788,10 +797,12 @@ static int hif_pci_autopm_debugfs_show(struct seq_file *s, void *data)
 #define HIF_PCI_AUTOPM_STATS(_s, _sc, _name) \
 	seq_printf(_s, "%30s: %u\n", #_name, _sc->pm_stats._name)
 	struct hif_pci_softc *sc = s->private;
-	char *autopm_state[] = {"ON", "INPROGRESS", "SUSPENDED"};
+	static const char *autopm_state[] = {"NONE", "ON", "INPROGRESS",
+						"SUSPENDED"};
 	unsigned int msecs_age;
 	int pm_state = atomic_read(&sc->pm_state);
-	unsigned long timer_expires;
+	unsigned long timer_expires, flags;
+	struct hif_pm_runtime_context *ctx;
 
 	seq_printf(s, "%30s: %s\n", "Runtime PM state",
 			autopm_state[pm_state]);
@@ -807,8 +818,8 @@ static int hif_pci_autopm_debugfs_show(struct seq_file *s, void *data)
 	seq_printf(s, "%30s: %d\n", "PM Usage count",
 			atomic_read(&sc->dev->power.usage_count));
 
-	seq_printf(s, "%30s: %d\n", "prevent_suspend_cnt",
-			atomic_read(&sc->prevent_suspend_cnt));
+	seq_printf(s, "%30s: %u\n", "prevent_suspend_cnt",
+				sc->prevent_suspend_cnt);
 
 	HIF_PCI_AUTOPM_STATS(s, sc, suspended);
 	HIF_PCI_AUTOPM_STATS(s, sc, suspend_err);
@@ -820,12 +831,30 @@ static int hif_pci_autopm_debugfs_show(struct seq_file *s, void *data)
 	HIF_PCI_AUTOPM_STATS(s, sc, allow_suspend);
 	HIF_PCI_AUTOPM_STATS(s, sc, prevent_suspend_timeout);
 	HIF_PCI_AUTOPM_STATS(s, sc, allow_suspend_timeout);
+	HIF_PCI_AUTOPM_STATS(s, sc, runtime_get_err);
 	timer_expires = sc->runtime_timer_expires;
 	if (timer_expires > 0) {
 		msecs_age = jiffies_to_msecs(timer_expires - jiffies);
 		seq_printf(s, "%30s: %d.%03ds\n", "Prevent suspend timeout",
 				msecs_age / 1000, msecs_age % 1000);
 	}
+
+	spin_lock_irqsave(&sc->runtime_lock, flags);
+	if (list_empty(&sc->prevent_suspend_list)) {
+		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+		return 0;
+	}
+
+	seq_printf(s, "%30s: ", "Active Wakeup_Sources");
+	list_for_each_entry(ctx, &sc->prevent_suspend_list, list) {
+		seq_printf(s, "%s", ctx->name);
+		if (ctx->timeout)
+			seq_printf(s, "(%d ms)", ctx->timeout);
+		seq_puts(s, " ");
+	}
+	seq_puts(s, "\n");
+	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+
 	return 0;
 #undef HIF_PCI_AUTOPM_STATS
 }
@@ -835,12 +864,193 @@ static int hif_pci_autopm_open(struct inode *inode, struct file *file)
 	return single_open(file, hif_pci_autopm_debugfs_show, inode->i_private);
 }
 
+#ifdef FEATURE_RUNTIME_PM_UNIT_TEST
+/*
+ * This is global runtime context just for unit test framework.
+ * This context should not be used for other purpose.
+ */
+
+#define MAX_RUNTIME_DEBUG_CONTEXT 4
+static struct hif_pm_runtime_context rpm_data[MAX_RUNTIME_DEBUG_CONTEXT];
+
+/**
+ * hif_pm_test() - Calls the API's per context
+ * @sc:	ol_softc context
+ * @context: Runtime PM context
+ * @fn:	function Tag
+ * @delay: delay to add before executing the runtime API
+ *
+ * This API's calls the runtime API's based on the passed
+ * function tag value and adds the dealy before calling them
+ *
+ * Return: void
+ */
+static void hif_pm_test(struct ol_softc *sc,
+			struct hif_pm_runtime_context *context,
+			const char *fn, uint32_t delay)
+{
+	char func = *fn;
+
+	pr_info("%s func:%c delay:%d ctx:%s\n", __func__,
+		func, delay, context ? context->name : "NULL");
+
+	switch (func) {
+	case 'A':
+		msleep(delay * 1000);
+		hif_pm_runtime_allow_suspend(sc, context);
+		break;
+	case 'P':
+		msleep(delay * 1000);
+		hif_pm_runtime_prevent_suspend(sc, context);
+		break;
+	case 'T':
+		hif_pm_runtime_prevent_suspend_timeout(sc, context,
+							delay * 1000);
+		break;
+	default:
+		break;
+	}
+}
+
+/**
+ * hif_get_context() - Returns the context for unit test framework
+ * @c: value to choose the gloabl context for testing the runtime API's
+ *
+ * Return: void
+ */
+
+static void *hif_get_context(char *c)
+{
+	unsigned int val;
+
+	if (kstrtou32(c, 0, &val))
+		return NULL;
+
+	switch (val) {
+	case 1:
+		rpm_data[0].name = "context_1";
+		break;
+	case 2:
+		rpm_data[1].name = "context_2";
+		break;
+	case 3:
+		rpm_data[2].name = "context_3";
+		break;
+	case 4:
+		rpm_data[3].name = "context_4";
+		break;
+	default:
+		return NULL;
+	}
+	return &rpm_data[val-1];
+}
+
+/**
+ * hif_runtime_test_init() - Initialize the test framework
+ * @sc:	Global hif context
+ * Return: void
+ */
+void hif_runtime_test_init(struct hif_pci_softc *sc)
+{
+	int i;
+	struct hif_pm_runtime_context *ctx = NULL, *tmp;
+	unsigned long flags;
+
+	for (i = 0; i < MAX_RUNTIME_DEBUG_CONTEXT; i++) {
+		ctx = &rpm_data[i];
+		ctx->active = false;
+		ctx->name = NULL;
+		spin_lock_irqsave(&sc->runtime_lock, flags);
+		list_for_each_entry_safe(ctx, tmp,
+				&sc->prevent_suspend_list, list) {
+			list_del(&ctx->list);
+		}
+		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	}
+}
+
+/**
+ * hif_pci_autopm_write() - Unit Test API to verify the Runtime PM API's
+ *
+ * Usage: "Context=API:Delay:....;Context=API:Delay;"
+ * Context Can be from 1 to 4.
+ * API can be one of the following
+ * T - Prevent Suspend Timeout Version
+ * P - Prevent_suspend
+ * A - Allow Suspend
+ * Delay in sec
+ * Delimiters:
+ * "=" - Seperates context from the API calls
+ * ":" - Seperates API's/Delay
+ * ";" - Seperates two context.
+ *
+ * eg: echo "1=T:5:A:2:P:1;2=T:5;1=A:1;2=A:0" > /d/cnss_runtime_pm
+ * In the above example:
+ * 1=T:4:A:2:P:1 --> This is sequence of calls with context 1
+ * 2=T:5 --> Context 2 is used here
+ * 1=A:1 --> Context 1 can be used to allow the prevented suspend in context 1
+ * 2=A:0 --> Relax the runtime suspend from context 2.
+ *
+ * Only to be used by developers to verify if any changes done in future.
+ */
+
+static ssize_t hif_pci_autopm_write(struct file *fp, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	struct hif_pci_softc *hif_sc;
+	struct ol_softc *sc;
+	char *fmtp, *pattern, *func, *ctxp, *ctx, *data;
+	uint32_t val;
+	struct hif_pm_runtime_context *context = NULL;
+
+	hif_sc = ((struct seq_file *)fp->private_data)->private;
+	if (!hif_sc)
+		return -EINVAL;
+
+	sc = hif_sc->ol_sc;
+
+	pattern = adf_os_mem_alloc(NULL, count);
+	if (!pattern)
+		return -ENOMEM;
+
+	if (copy_from_user(pattern, buf, count)) {
+		adf_os_mem_free(pattern);
+		return -EFAULT;
+	}
+
+	hif_runtime_test_init(hif_sc);
+
+	ctxp = pattern;
+	while (ctxp) {
+		ctx = strsep(&ctxp, ";");
+		while (ctx) {
+			data = strsep(&ctx, "=");
+			context = hif_get_context(data);
+			fmtp = strsep(&ctx, "=");
+			while (fmtp) {
+				func = strsep(&fmtp, ":");
+				if (kstrtou32(strsep(&fmtp, ":"), 0, &val)) {
+					adf_os_mem_free(pattern);
+					return -EFAULT;
+				}
+				hif_pm_test(sc, context, func, val);
+			}
+		}
+	}
+	adf_os_mem_free(pattern);
+	return count;
+}
+#endif
+
 static const struct file_operations hif_pci_autopm_fops = {
 	.owner		= THIS_MODULE,
 	.open		= hif_pci_autopm_open,
 	.release	= single_release,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
+#ifdef FEATURE_RUNTIME_PM_UNIT_TEST
+	.write		= hif_pci_autopm_write,
+#endif
 };
 
 static int __hif_pci_runtime_suspend(struct pci_dev *pdev)
@@ -1046,7 +1256,8 @@ static void hif_pci_pm_runtime_pre_init(struct hif_pci_softc *sc)
 			(unsigned long)sc);
 
 	adf_os_atomic_init(&sc->pm_state);
-	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_ON);
+	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_NONE);
+	INIT_LIST_HEAD(&sc->prevent_suspend_list);
 }
 
 static void hif_pci_pm_runtime_init(struct hif_pci_softc *sc)
@@ -1072,14 +1283,13 @@ static void hif_pci_pm_runtime_init(struct hif_pci_softc *sc)
 
 	cnss_init_work(&sc->pm_work, hif_pci_pm_work);
 	cnss_runtime_init(sc->dev, ol_sc->runtime_pm_delay);
+	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_ON);
 	hif_pci_pm_debugfs(sc, true);
 }
 
 static void hif_pci_pm_runtime_exit(struct hif_pci_softc *sc)
 {
-	struct ol_softc *ol_sc;
-
-	ol_sc = sc->ol_sc;
+	struct ol_softc *ol_sc = sc->ol_sc;
 
 	if (!ol_sc->enable_runtime_pm)
 		return;
@@ -1089,22 +1299,71 @@ static void hif_pci_pm_runtime_exit(struct hif_pci_softc *sc)
 		return;
 
 	hif_pm_runtime_resume(sc->dev);
+
 	cnss_runtime_exit(sc->dev);
+	adf_os_atomic_set(&sc->pm_state, HIF_PM_RUNTIME_STATE_NONE);
+
 	hif_pci_pm_debugfs(sc, false);
-
 	del_timer_sync(&sc->runtime_timer);
-
-	if (sc->runtime_timer_expires > 0) {
-		hif_pm_runtime_put_auto(sc->dev);
-		sc->runtime_timer_expires = 0;
-	}
-
 	cnss_flush_work(&sc->pm_work);
+}
+
+/**
+ * hif_pci_pm_runtime_post_exit() - API to check the sanity of Runtime PM
+ * @sc:	hif_pci_softc context
+ *
+ * API is used to check if any mismatch in runtime usage count and
+ * to ensure we fix it before driver unload.
+ * Ideally the conditions in this API shouldn't hit
+ * This prevention is needed to ensure Runtime PM wont be disabled
+ * for ever with mismatch in usage count.
+ *
+ * Return: void
+ */
+static void hif_pci_pm_runtime_post_exit(struct hif_pci_softc *sc)
+{
+	unsigned long flags;
+	struct hif_pm_runtime_context *ctx, *tmp;
+
+	/*
+	 * The usage_count should be one at this state, as all the
+	 * HTT/WMI pkts should get tx complete and driver should
+	 * will increment the usage count to 1 to prevent any suspend
+	 */
+	if (atomic_read(&sc->dev->power.usage_count) != 1) {
+		spin_lock_irqsave(&sc->runtime_lock, flags);
+		hif_pci_runtime_pm_warn(sc, "Driver UnLoading");
+		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	} else
+		return;
+
+	spin_lock_irqsave(&sc->runtime_lock, flags);
+	list_for_each_entry_safe(ctx, tmp, &sc->prevent_suspend_list, list) {
+		spin_unlock_irqrestore(&sc->runtime_lock, flags);
+		hif_runtime_pm_prevent_suspend_deinit(ctx);
+		spin_lock_irqsave(&sc->runtime_lock, flags);
+	}
+	spin_unlock_irqrestore(&sc->runtime_lock, flags);
+	/*
+	 * This is totally a preventive measure to ensure Runtime PM
+	 * isn't disabled for life time.
+	 * To debug such scenarios, we can set dev->power.disable_depth > 0
+	 * or set dev->power.runtime_error. So Runtime PM callbacks won't
+	 * get called.
+	 * When usage_count is negative, kernel Runtime PM framework continues
+	 * to call runtime suspend, and we may see weird issues.
+	 */
+	if (atomic_read(&sc->dev->power.usage_count) <= 0)
+		atomic_set(&sc->dev->power.usage_count, 1);
+
+	while (atomic_read(&sc->dev->power.usage_count) != 1)
+		pm_runtime_put_noidle(sc->dev);
 }
 #else
 static inline void hif_pci_pm_runtime_init(struct hif_pci_softc *sc) { }
 static inline void hif_pci_pm_runtime_pre_init(struct hif_pci_softc *sc) { }
 static inline void hif_pci_pm_runtime_exit(struct hif_pci_softc *sc) { }
+static inline void hif_pci_pm_runtime_post_exit(struct hif_pci_softc *sc) { }
 #endif
 
 int
@@ -1369,6 +1628,9 @@ again:
 
     adf_os_atomic_init(&sc->tasklet_from_intr);
     adf_os_atomic_init(&sc->wow_done);
+#ifdef FEATURE_WLAN_D0WOW
+    adf_os_atomic_init(&sc->in_d0wow);
+#endif
     adf_os_atomic_init(&sc->ce_suspend);
     adf_os_atomic_init(&sc->pci_link_suspended);
     init_waitqueue_head(&ol_sc->sc_osdev->event_queue);
@@ -1700,6 +1962,9 @@ again:
 
     adf_os_atomic_init(&sc->tasklet_from_intr);
     adf_os_atomic_init(&sc->wow_done);
+#ifdef FEATURE_WLAN_D0WOW
+    adf_os_atomic_init(&sc->in_d0wow);
+#endif
     adf_os_atomic_init(&sc->ce_suspend);
     adf_os_atomic_init(&sc->pci_link_suspended);
 
@@ -2056,6 +2321,7 @@ hif_pci_remove(struct pci_dev *pdev)
 
     hif_dump_pipe_debug_count(sc->hif_device);
 
+    hif_pci_pm_runtime_post_exit(sc);
     hif_deinit_adf_ctx(scn);
     A_FREE(scn);
     A_FREE(sc->hif_device);
@@ -2093,6 +2359,11 @@ void hif_pci_shutdown(struct pci_dev *pdev)
     /* this is for cases, where shutdown invoked from CNSS */
     vos_set_logp_in_progress(VOS_MODULE_ID_HIF, TRUE);
 
+    if (!vos_is_ssr_ready(__func__))
+        pr_info("Host driver is not ready for SSR, attempting anyway\n");
+
+    hif_pci_device_reset(sc);
+
     scn = sc->ol_sc;
 
 #ifndef REMOVE_PKT_LOG
@@ -2102,9 +2373,6 @@ void hif_pci_shutdown(struct pci_dev *pdev)
 #endif
 
     hif_pci_pm_runtime_exit(sc);
-
-    if (!vos_is_ssr_ready(__func__))
-        printk("Host driver is not ready for SSR, attempting anyway\n");
 
     hif_dump_pipe_debug_count(sc->hif_device);
 
@@ -2117,6 +2385,7 @@ void hif_pci_shutdown(struct pci_dev *pdev)
 
     pci_disable_msi(pdev);
 
+    hif_pci_pm_runtime_post_exit(sc);
     hif_deinit_adf_ctx(scn);
     A_FREE(scn);
     A_FREE(sc->hif_device);
@@ -2245,10 +2514,6 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         goto out;
     }
 
-    printk("%s: %swow mode %d event %d\n", __func__,
-            runtime_pm ? "for runtime pm " : "",
-       wma_is_wow_mode_selected(temp_module), state.event);
-
     if (wma_is_wow_mode_selected(temp_module)) {
           if(wma_enable_wow_in_fw(temp_module, runtime_pm))
             goto out;
@@ -2278,7 +2543,7 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
                goto out;
             }
         }
-        printk("%s: Waiting for CE to finish access: \n", __func__);
+        pr_debug("%s: Waiting for CE to finish access: \n", __func__);
         msleep(10);
     }
 
@@ -2330,6 +2595,9 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
     cnss_pcie_shadow_control(pdev, FALSE);
 #endif
 
+    if (runtime_pm)
+	    goto skip;
+
     pci_read_config_dword(pdev, OL_ATH_PCI_PM_CONTROL, &val);
     if ((val & 0x000000ff) != 0x3) {
         pci_save_state(pdev);
@@ -2337,8 +2605,14 @@ __hif_pci_suspend(struct pci_dev *pdev, pm_message_t state, bool runtime_pm)
         pci_write_config_dword(pdev, OL_ATH_PCI_PM_CONTROL, (val & 0xffffff00) | 0x03);
     }
 
+skip:
+    pr_info("%s: Suspend completes%s in%s mode event:%d device_state:%d\n",
+                   __func__, runtime_pm ? " for runtime pm" : "",
+                   wma_is_wow_mode_selected(temp_module) ? " wow" : " pdev",
+                   state.event, val);
     printk("%s: Suspend completes%s\n", __func__,
             runtime_pm ? " for runtime pm" : "");
+
     ret = 0;
 
 out:
@@ -2369,6 +2643,7 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
     int err = 0;
     v_VOID_t * temp_module;
     u32 tmp;
+    int retry = 0;
 
     if (vos_is_logp_in_progress(VOS_MODULE_ID_HIF, NULL))
         return err;
@@ -2378,17 +2653,36 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
     /* Enable Legacy PCI line interrupts */
     if (HIFTargetSleepStateAdjust(targid, FALSE, TRUE) < 0)
         goto out;
-    A_PCI_WRITE32(sc->mem+(SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS),
-                              PCIE_INTR_FIRMWARE_MASK | PCIE_INTR_CE_MASK_ALL);
-    /* IMPORTANT: this extra read transaction is required to flush the posted write buffer */
-    tmp = A_PCI_READ32(sc->mem+(SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS));
-    if (tmp == 0xffffffff) {
-        printk(KERN_ERR "%s: PCIe link is down\n", __func__);
-        VOS_ASSERT(0);
+    for (;;) {
+        A_PCI_WRITE32(sc->mem +
+                     (SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS),
+                      PCIE_INTR_FIRMWARE_MASK | PCIE_INTR_CE_MASK_ALL);
+        /*
+         * IMPORTANT: this extra read transaction is required to
+         * flush the posted write buffer
+         */
+
+        tmp = A_PCI_READ32(sc->mem +
+                          (SOC_CORE_BASE_ADDRESS | PCIE_INTR_ENABLE_ADDRESS));
+
+        if (tmp != 0xffffffff)
+            break;
+
+        if (retry > MAX_REG_READ_RETRIES) {
+            pr_err("%s: PCIe link is possible down!\n", __func__);
+            print_config_soc_reg(sc);
+            VOS_ASSERT(0);
+            break;
+        }
+
+        A_MDELAY(1);
+        retry++;
     }
     if (HIFTargetSleepStateAdjust(targid, TRUE, FALSE) < 0)
         goto out;
 
+    if (runtime_pm)
+	    goto skip;
 
     err = pci_enable_device(pdev);
     if (err)
@@ -2418,8 +2712,7 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
     /* Set bus master bit in PCI_COMMAND to enable DMA */
     pci_set_master(pdev);
 
-    printk("%s: Rome PS: %d\n", __func__, val);
-
+skip:
 #ifdef CONFIG_CNSS
     /* Keep PCIe bus driver's shadow memory intact */
     cnss_pcie_shadow_control(pdev, TRUE);
@@ -2443,10 +2736,6 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
         goto out;
     }
 
-    printk("%s: %swow mode %d val %d\n", __func__,
-            runtime_pm ? "for runtime pm " : "",
-            wma_is_wow_mode_selected(temp_module), val);
-
     adf_os_atomic_set(&sc->wow_done, 0);
 
     if (!wma_is_wow_mode_selected(temp_module) &&
@@ -2465,12 +2754,14 @@ __hif_pci_resume(struct pci_dev *pdev, bool runtime_pm)
     }
 #endif
 
+    pr_info("%s: Resume completes%s in%s mode\n", __func__,
+                runtime_pm ? " for runtime pm" : "",
+                wma_is_wow_mode_selected(temp_module) ? " wow" : " pdev");
 out:
-    printk("%s: Resume completes%s %d\n", __func__,
-            runtime_pm ? " for runtime pm" : "", err);
-
-    if (err)
+    if (err) {
+        pr_err("%s: resume failed err:%d\n", __func__, err);
         return (-1);
+    }
 
     return (0);
 }

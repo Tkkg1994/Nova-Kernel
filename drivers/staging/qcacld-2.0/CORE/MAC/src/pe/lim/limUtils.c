@@ -673,6 +673,10 @@ limCleanupMlm(tpAniSirGlobal pMac)
         tx_timer_deactivate(&pMac->lim.limTimers.gLimPeriodicJoinProbeReqTimer);
         tx_timer_delete(&pMac->lim.limTimers.gLimPeriodicJoinProbeReqTimer);
 
+        // Deactivate and delete Auth Retry timer.
+        tx_timer_deactivate(&pMac->lim.limTimers.g_lim_periodic_auth_retry_timer);
+        tx_timer_delete(&pMac->lim.limTimers.g_lim_periodic_auth_retry_timer);
+
         // Deactivate and delete Association failure timer.
         tx_timer_deactivate(&pMac->lim.limTimers.gLimAssocFailureTimer);
         tx_timer_delete(&pMac->lim.limTimers.gLimAssocFailureTimer);
@@ -2117,6 +2121,20 @@ void limProcessChannelSwitchTimeout(tpAniSirGlobal pMac)
     }
 
     channel = psessionEntry->gLimChannelSwitch.primaryChannel;
+
+    /*
+     * If Lim allows Switch channel on same channel on which preauth
+     * is going on then LIM will not post resume link(WDA_FINISH_SCAN)
+     * during preauth rsp handling hence firmware may crash on ENTER/
+     * EXIT BMPS request.
+     */
+    if(psessionEntry->ftPEContext.pFTPreAuthReq)
+    {
+        limLog(pMac, LOGE,
+           FL("Avoid Switch Channel req during pre auth"));
+        return;
+    }
+
     /*
      *  This potentially can create issues if the function tries to set
      * channel while device is in power-save, hence putting an extra check
@@ -2828,15 +2846,6 @@ void limSwitchPrimarySecondaryChannel(tpAniSirGlobal pMac, tpPESession psessionE
         return;
     }
 #endif
-    /* Assign the callback to resume TX once channel is changed.
-     */
-    psessionEntry->currentReqChannel = newChannel;
-    psessionEntry->limRFBand = limGetRFBand(newChannel);
-
-    psessionEntry->channelChangeReasonCode=LIM_SWITCH_CHANNEL_OPERATION;
-
-    pMac->lim.gpchangeChannelCallback = limSwitchChannelCback;
-    pMac->lim.gpchangeChannelData = NULL;
 
     /* Assign the callback to resume TX once channel is changed */
     psessionEntry->currentReqChannel = newChannel;

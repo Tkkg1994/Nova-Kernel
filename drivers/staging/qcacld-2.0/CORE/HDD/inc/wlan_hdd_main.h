@@ -223,12 +223,6 @@
 #define GTK_OFFLOAD_DISABLE 1
 #endif
 
-#ifdef FEATURE_WLAN_SCAN_PNO
-#define HDD_PNO_SCAN_TIMERS_SET_ONE      1
-/* value should not be greater than PNO_MAX_SCAN_TIMERS */
-#define HDD_PNO_SCAN_TIMERS_SET_MULTIPLE 6
-#endif
-
 #define MAX_USER_COMMAND_SIZE 4096
 
 #define HDD_MAC_ADDR_LEN    6
@@ -313,6 +307,26 @@ extern spinlock_t hdd_context_lock;
 #define NUM_TX_RX_HISTOGRAM 1024
 #define NUM_TX_RX_HISTOGRAM_MASK (NUM_TX_RX_HISTOGRAM - 1)
 
+/**
+ * struct hdd_tx_rx_histogram - structure to keep track of tx and rx packets
+                                received over 100ms intervals
+ * @interval_rx        # of rx packets received in the last 100ms interval
+ * @interval_tx        # of tx packets received in the last 100ms interval
+ * @total_rx           # of total rx packets received on interface
+ * @total_rx           # of total tx packets received on interface
+ * @next_vote_level    cnss_bus_width_type voting level (high or low) determined
+                       on the basis of total tx and rx packets received in the
+                       last 100ms interval
+ * @next_rx_level      cnss_bus_width_type voting level (high or low) determined
+                       on the basis of rx packets received in the last 100ms
+                       interval
+ * @next_tx_level      cnss_bus_width_type voting level (high or low) determined
+                       on the basis of tx packets received in the last 100ms
+                       interval
+
+ * The structure keeps track of throughput requirements of wlan driver in 100ms
+ * intervals for later analysis.
+ */
 struct hdd_tx_rx_histogram
 {
    uint64_t interval_rx;
@@ -321,6 +335,7 @@ struct hdd_tx_rx_histogram
    uint64_t total_tx;
    uint32_t next_vote_level;
    uint32_t next_rx_level;
+   uint32_t next_tx_level;
 };
 
 typedef struct hdd_tx_rx_stats_s
@@ -972,6 +987,7 @@ struct hdd_adapter_s
 #endif
 
    v_S7_t rssi;
+   int8_t rssi_on_disconnect;
 #ifdef WLAN_FEATURE_LPSS
    v_BOOL_t rssi_send;
 #endif
@@ -1000,6 +1016,7 @@ struct hdd_adapter_s
 #ifdef WLAN_FEATURE_PACKET_FILTERING
    t_multicast_add_list mc_addr_list;
 #endif
+   uint8_t addr_filter_pattern;
 
    //Magic cookie for adapter sanity verification
    v_U32_t magic;
@@ -1066,6 +1083,7 @@ struct hdd_adapter_s
 	/* MAC addresses used for OCB interfaces */
 	tSirMacAddr ocb_mac_address[VOS_MAX_CONCURRENCY_PERSONA];
 	int ocb_mac_addr_count;
+	void *runtime_ctx;
 };
 
 #define WLAN_HDD_GET_STATION_CTX_PTR(pAdapter) (&(pAdapter)->sessionCtx.station)
@@ -1447,6 +1465,8 @@ struct hdd_context_s
     spinlock_t     bus_bw_lock;
     int            cur_rx_level;
     uint64_t       prev_rx;
+    int            cur_tx_level;
+    uint64_t       prev_tx;
 #endif
 
     /* VHT80 allowed*/
@@ -1512,8 +1532,8 @@ struct hdd_context_s
     struct completion ready_to_extwow;
 #endif
 
-    /* Time since boot up to WiFi turn ON (in micro seconds) */
-    v_U64_t wifi_turn_on_time_since_boot;
+    /* Time since boot up to extscan start (in micro seconds) */
+    v_U64_t ext_scan_start_since_boot;
 
     /* RoC request queue and work */
     struct delayed_work rocReqWork;
@@ -1833,6 +1853,11 @@ wlan_hdd_clean_tx_flow_control_timer(hdd_context_t *hddctx,
 {
 }
 #endif
+
+void hdd_connect_result(struct net_device *dev, const u8 *bssid,
+			const u8 *req_ie, size_t req_ie_len,
+			const u8 * resp_ie, size_t resp_ie_len,
+			u16 status, gfp_t gfp);
 
 void wlan_hdd_display_tx_rx_histogram(hdd_context_t *pHddCtx);
 void wlan_hdd_clear_tx_rx_histogram(hdd_context_t *pHddCtx);

@@ -55,7 +55,7 @@
 #endif
 
 //Number of items that can be configured
-#define MAX_CFG_INI_ITEMS   512
+#define MAX_CFG_INI_ITEMS   1024
 
 #ifdef SAP_AUTH_OFFLOAD
 /* 802.11 pre-share key length */
@@ -240,6 +240,15 @@ typedef enum
     eHDD_DOT11_MODE_11ac,
     eHDD_DOT11_MODE_11a,
 }eHddDot11Mode;
+
+enum
+{
+	WLAN_HDD_RX_HANDLE_MIN       = 0,
+	WLAN_HDD_RX_HANDLE_IRQ       = WLAN_HDD_RX_HANDLE_MIN,
+	WLAN_HDD_RX_HANDLE_RX_THREAD = 1,
+	WLAN_HDD_RX_HANDLE_RPS       = 2,
+	WLAN_HDD_RX_HANDLE_MAX       = WLAN_HDD_RX_HANDLE_RPS
+};
 
 #define CFG_DOT11_MODE_NAME                    "gDot11Mode"
 #define CFG_DOT11_MODE_MIN                     eHDD_DOT11_MODE_AUTO
@@ -629,6 +638,22 @@ typedef enum
 #define CFG_FW_RSSI_MONITORING_MAX             ( 1 )
 #define CFG_FW_RSSI_MONITORING_DEFAULT         ( 1 )
 
+/* enable use of long duration RTS-CTS protection when SAP goes off channel
+ * in MCC mode
+ */
+#define CFG_FW_MCC_RTS_CTS_PROT_NAME           "gFWMccRtsCtsProtection"
+#define CFG_FW_MCC_RTS_CTS_PROT_MIN            (0)
+#define CFG_FW_MCC_RTS_CTS_PROT_MAX            (1)
+#define CFG_FW_MCC_RTS_CTS_PROT_DEFAULT        (0)
+
+/* Enable use of broadcast probe response to increase the detectability of
+ * SAP in MCC mode
+ */
+#define CFG_FW_MCC_BCAST_PROB_RESP_NAME        "gFWMccBCastProbeResponse"
+#define CFG_FW_MCC_BCAST_PROB_RESP_MIN         (0)
+#define CFG_FW_MCC_BCAST_PROB_RESP_MAX         (1)
+#define CFG_FW_MCC_BCAST_PROB_RESP_DEFAULT     (0)
+
 #define CFG_DATA_INACTIVITY_TIMEOUT_NAME       "gDataInactivityTimeout"
 #define CFG_DATA_INACTIVITY_TIMEOUT_MIN        ( 1 )
 #define CFG_DATA_INACTIVITY_TIMEOUT_MAX        ( 255 )
@@ -934,6 +959,18 @@ typedef enum
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_MIN             (10)
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_MAX             (100)
 #define CFG_RRM_MEAS_RANDOMIZATION_INTVL_DEFAULT         (100)
+
+/**
+ * This INI is used to configure RM enabled capabilities IE.
+ * Using this INI, we can set/unset any of the bits in 5 bytes
+ * (last 4bytes are reserved). Bit details are updated as per
+ * Draft version of 11mc spec. (Draft P802.11REVmc_D4.2)
+ *
+ * Bitwise details are defined as bit mask in rrmGlobal.h
+ * Comma is used as a separator for each byte.
+ */
+#define CFG_RM_CAPABILITY_NAME            "rm_capability"
+#define CFG_RM_CAPABILITY_DEFAULT         "73,00,6D,00,04"
 #endif
 
 #define CFG_QOS_IMPLICIT_SETUP_ENABLED_NAME                 "ImplicitQosIsEnabled"
@@ -1120,6 +1157,19 @@ typedef enum
 #define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MIN                  (0)
 #define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_MAX                  (1) //Send AddTs even when ACM is not set for the AC
 #define CFG_QOS_ADDTS_WHEN_ACM_IS_OFF_DEFAULT              (0)
+
+/*
+ * This flag will take effect only when Runtime PM is active.
+ * APPS will be awake during runtime PM, if any user space application
+ * needs the broadcast packets OEM's can enable gRuntimePmEnableBcastPattern.
+ * FW will filter the broadcast packets and wakeup host to deliver them during
+ * runtime suspend.
+ */
+
+#define CFG_ENABLE_HOST_BROADCAST_NAME              "gRuntimePmEnableBcastPattern"
+#define CFG_ENABLE_HOST_BROADCAST_MIN               (0)
+#define CFG_ENABLE_HOST_BROADCAST_MAX               (1)
+#define CFG_ENABLE_HOST_BROADCAST_DEFAULT           (0)
 
 
 #define CFG_VALIDATE_SCAN_LIST_NAME                 "gValidateScanList"
@@ -1516,6 +1566,31 @@ typedef enum
 #define HDD_MCASTBCASTFILTER_FILTER_ALL_MULTICAST_BROADCAST    0x03
 #define HDD_MULTICAST_FILTER_LIST                              0x04
 #define HDD_MULTICAST_FILTER_LIST_CLEAR                        0x05
+
+/*
+ * Driver Force ACS is reintroduced for android SAP legacy configuration method.
+ * If Driver force acs is enabled, channel/ hw config from hostapd is ignored.
+ * Driver uses INI params dot11Mode, channel bonding mode and vht chan width
+ * to derive ACS HW mode and operating BW.
+ *
+ * Non android platforms shall not use force ACS method and rely on hostapd
+ * driven ACS method for concurrent SAP ACS configuration, OBSS etc.
+ */
+
+#define CFG_FORCE_SAP_ACS                  "gApAutoChannelSelection"
+#define CFG_FORCE_SAP_ACS_MIN              (0)
+#define CFG_FORCE_SAP_ACS_MAX              (1)
+#define CFG_FORCE_SAP_ACS_DEFAULT          (0)
+
+#define CFG_FORCE_SAP_ACS_START_CH         "gAPChannelSelectStartChannel"
+#define CFG_FORCE_SAP_ACS_START_CH_MIN     (0)
+#define CFG_FORCE_SAP_ACS_START_CH_MAX     (0xFF)
+#define CFG_FORCE_SAP_ACS_START_CH_DEFAULT (1)
+
+#define CFG_FORCE_SAP_ACS_END_CH           "gAPChannelSelectEndChannel"
+#define CFG_FORCE_SAP_ACS_END_CH_MIN       (0)
+#define CFG_FORCE_SAP_ACS_END_CH_MAX       (0xFF)
+#define CFG_FORCE_SAP_ACS_END_CH_DEFAULT   (11)
 
 /* ACS Scan band preference
  * 0 -- No preference
@@ -2178,9 +2253,14 @@ typedef enum
 #define CFG_PNO_SCAN_SUPPORT_DEFAULT                 ( 1 )
 
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE              "gPNOScanTimerRepeatValue"
-#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_DEFAULT      ( 6 )
+#define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_DEFAULT      ( 30 )
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MIN          ( 0 )
 #define CFG_PNO_SCAN_TIMER_REPEAT_VALUE_MAX          ( 0xffffffff )
+
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER                 "gPNOSlowScanMultiplier"
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_DEFAULT         ( 6 )
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MIN             ( 0 )
+#define CFG_PNO_SLOW_SCAN_MULTIPLIER_MAX             ( 30 )
 #endif
 
 #define CFG_MAX_AMSDU_NUM_NAME                "gMaxAmsduNum"
@@ -2208,11 +2288,19 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 
 /*
  * Power Save Offload
+ * Power Save Offload configuration:
+ * Current values of gEnablePowerSaveOffload:
+ * 0 -> Power save offload is disabled
+ * 1 -> Legacy Power save enabled + Deep sleep Disabled
+ * 2 -> QPower enabled + Deep sleep Disabled
+ * 3 -> Legacy Power save enabled + Deep sleep Enabled
+ * 4 -> QPower enabled + Deep sleep Enabled
+ * 5 -> Duty cycling QPower enabled
  */
 #define CFG_POWERSAVE_OFFLOAD_NAME                "gEnablePowerSaveOffload"
-#define CFG_POWERSAVE_OFFLOAD_MIN                 ( 0 )
-#define CFG_POWERSAVE_OFFLOAD_MAX                 ( 4 )
-#define CFG_POWERSAVE_OFFLOAD_DEFAULT             ( CFG_POWERSAVE_OFFLOAD_MIN )
+#define CFG_POWERSAVE_OFFLOAD_MIN                 (0)
+#define CFG_POWERSAVE_OFFLOAD_MAX                 (PS_DUTY_CYCLING_QPOWER)
+#define CFG_POWERSAVE_OFFLOAD_DEFAULT             (CFG_POWERSAVE_OFFLOAD_MIN)
 
 #ifdef IPA_OFFLOAD
 /*
@@ -2420,11 +2508,22 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_MAX         (0xFF)
 #define CFG_ENABLE_DEBUG_CONNECT_ISSUE_DEFAULT     (0)
 
-/* This will be used only for debugging purpose, will be removed after sometime */
-#define CFG_ENABLE_RX_THREAD                       "gEnableRxThread"
-#define CFG_ENABLE_RX_THREAD_MIN                   (0)
-#define CFG_ENABLE_RX_THREAD_MAX                   (1)
-#define CFG_ENABLE_RX_THREAD_DEFAULT               (1)
+/*
+ * RX packet handling options
+ * 0: no rx thread, no RPS, for MDM
+ * 1: RX thread
+ * 2: RPS
+ * MSM default RX thread
+ * MDM default irq
+ */
+#define CFG_RX_HANDLE                              "rxhandle"
+#define CFG_RX_HANDLE_MIN                          (WLAN_HDD_RX_HANDLE_MIN)
+#define CFG_RX_HANDLE_MAX                          (WLAN_HDD_RX_HANDLE_MAX)
+#ifdef MDM_PLATFORM
+#define CFG_RX_HANDLE_DEFAULT                      (WLAN_HDD_RX_HANDLE_IRQ)
+#else
+#define CFG_RX_HANDLE_DEFAULT                      (WLAN_HDD_RX_HANDLE_RX_THREAD)
+#endif /* MDM_PLATFORM */
 
 /* SAR Thermal limit values for 2g and 5g */
 
@@ -2590,6 +2689,18 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_TCP_DELACK_THRESHOLD_LOW_DEFAULT       ( 1000 )
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MIN           ( 0 )
 #define CFG_TCP_DELACK_THRESHOLD_LOW_MAX           ( 10000 )
+
+/* TCP_TX_HIGH_TPUT_THRESHOLD specifies the threshold of packets transmitted
+ * over a period of 100 ms beyond which TCP can be considered to have a high
+ * TX throughput requirement.The driver uses this condition to tweak TCP TX
+ * specific parameters (via cnss-daemon).
+ * default  - 500
+ */
+#define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_NAME         "gTcpTxHighTputThreshold"
+#define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_DEFAULT      ( 500 )
+#define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_MIN          ( 0 )
+#define CFG_TCP_TX_HIGH_TPUT_THRESHOLD_MAX          ( 16000 )
+
 #endif /* MSM_PLATFORM */
 
 #ifdef WLAN_FEATURE_11W
@@ -2690,6 +2801,18 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_ENABLE_LPASS_SUPPORT_DEFAULT                  ( 0 )
 #define CFG_ENABLE_LPASS_SUPPORT_MIN                      ( 0 )
 #define CFG_ENABLE_LPASS_SUPPORT_MAX                      ( 1 )
+#endif
+
+/*
+ * NaN feature support configuration
+ * gEnableNanSupport = 0 means NaN is not supported
+ * gEnableNanSupport = 1 means NaN is supported
+ */
+#ifdef WLAN_FEATURE_NAN
+#define CFG_ENABLE_NAN_SUPPORT                          "gEnableNanSupport"
+#define CFG_ENABLE_NAN_SUPPORT_DEFAULT                  (0)
+#define CFG_ENABLE_NAN_SUPPORT_MIN                      (0)
+#define CFG_ENABLE_NAN_SUPPORT_MAX                      (1)
 #endif
 
 #define CFG_ENABLE_SELF_RECOVERY                   "gEnableSelfRecovery"
@@ -3087,6 +3210,49 @@ enum dot11p_mode {
 #define CFG_CONNECT_BLOCK_DURATION_MAX           ( 0xffffffff )
 #define CFG_CONNECT_BLOCK_DURATION_DEFAULT       ( 60000      )
 
+
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/*
+ * Enable/Disable  UDP response offload feature
+ * Default : Disable
+ */
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_NAME           "gudp_resp_offload_support"
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_MIN            (0)
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_MAX            (1)
+#define CFG_UDP_RESP_OFFLOAD_SUPPORT_DEFAULT        (CFG_UDP_RESP_OFFLOAD_SUPPORT_MIN)
+
+/* Dest port of specific UDP packet */
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_NAME         "gudp_resp_offload_dest_port"
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_MIN          (0)
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_MAX          (65535)
+#define CFG_UDP_RESP_OFFLOAD_DEST_PORT_DEFAULT      (CFG_UDP_RESP_OFFLOAD_DEST_PORT_MAX)
+
+/*
+ * Payload filter of specific UDP packet
+ * Firmware will use this filter to identify the specific UDP packet
+ */
+#define CFG_UDP_RESP_OFFLOAD_PAYLOAD_FILTER_NAME       "gudp_resp_offload_payload_filter"
+#define CFG_UDP_RESP_OFFLOAD_PAYLOAD_FILTER_DEFAULT    ""
+
+/*
+ * Payload of the response UDP
+ * The specific response UDP packet payload
+ */
+#define CFG_UDP_RESP_OFFLOAD_RESPONSE_PAYLOAD_NAME     "gudp_resp_offload_response_payload"
+#define CFG_UDP_RESP_OFFLOAD_RESPONSE_PAYLOAD_DEFAULT  "status=off"
+#endif
+
+/*
+ * Debug configuration variable to inject firmware crash on
+ * consecutive management tx failure.
+ * Value set as 0 will disable the feature.
+ */
+#define CFG_DBG_MAX_MGMT_TX_FAILURE_COUNT_NAME    "gmax_mgmt_tx_failure_count"
+#define CFG_DBG_MAX_MGMT_TX_FAILURE_COUNT_MIN     (0)
+#define CFG_DBG_MAX_MGMT_TX_FAILURE_COUNT_MAX     (500)
+#define CFG_DBG_MAX_MGMT_TX_FAILURE_COUNT_DEFAULT (0)
+
 /*---------------------------------------------------------------------------
   Type declarations
   -------------------------------------------------------------------------*/
@@ -3168,6 +3334,8 @@ typedef struct
    v_U8_t        nInChanMeasMaxDuration;
    v_U8_t        nOutChanMeasMaxDuration;
    v_U16_t       nRrmRandnIntvl;
+   /* length includes separator */
+   char          rm_capability[3 * DOT11F_IE_RRMENABLEDCAP_MAX_LEN];
 #endif
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
@@ -3235,6 +3403,8 @@ typedef struct
    v_U8_t         fEnableFwHeartBeatMonitoring;
    v_U8_t         fEnableFwBeaconFiltering;
    v_BOOL_t       fEnableFwRssiMonitoring;
+   bool           mcc_rts_cts_prot_enable;
+   bool           mcc_bcast_prob_resp_enable;
    v_U8_t         nDataInactivityTimeout;
    v_U8_t         nthBeaconFilter;
 
@@ -3312,6 +3482,7 @@ typedef struct
    v_BOOL_t                    bSingleTidRc;
    v_U8_t                      mcastBcastFilterSetting;
    v_BOOL_t                    fhostArpOffload;
+   bool                        bcastptrn;
    v_BOOL_t                    ssdp;
 
 #ifdef FEATURE_RUNTIME_PM
@@ -3513,6 +3684,7 @@ typedef struct
 #ifdef FEATURE_WLAN_SCAN_PNO
    v_BOOL_t                    configPNOScanSupport;
    v_U32_t                     configPNOScanTimerRepeatValue;
+   uint32_t                    pno_slow_scan_multiplier;
 #endif
    v_U8_t                      max_amsdu_num;
    v_U8_t                      nSelect5GHzMargin;
@@ -3569,7 +3741,7 @@ typedef struct
    v_U32_t                     TxPower2g;
    v_U32_t                     TxPower5g;
    v_U32_t                     gEnableDebugLog;
-   v_U8_t                      enableRxThread;
+   v_U8_t                      rxhandle;
    v_BOOL_t                    fDfsPhyerrFilterOffload;
    v_U8_t                      gSapPreferredChanLocation;
    v_U8_t                      gDisableDfsJapanW53;
@@ -3587,6 +3759,9 @@ typedef struct
    v_U32_t                     TxHbwFlowHighWaterMarkOffset;
    v_U32_t                     TxHbwFlowMaxQueueDepth;
 #endif /* QCA_LL_TX_FLOW_CT */
+   uint8_t                     force_sap_acs;
+   uint8_t                     force_sap_acs_st_ch;
+   uint8_t                     force_sap_acs_end_ch;
    v_U16_t                     acsBandSwitchThreshold;
    v_U8_t                      apMaxOffloadPeers;
    v_U8_t                      apMaxOffloadReorderBuffs;
@@ -3608,6 +3783,7 @@ typedef struct
    v_U32_t                     busBandwidthComputeInterval;
    v_U32_t                     tcpDelackThresholdHigh;
    v_U32_t                     tcpDelackThresholdLow;
+   v_U32_t                     tcp_tx_high_tput_thres;
 #endif /* MSM_PLATFORM */
 
    /* FW debug log parameters */
@@ -3654,6 +3830,9 @@ typedef struct
 
 #ifdef WLAN_FEATURE_LPSS
    v_BOOL_t                    enablelpasssupport;
+#endif
+#ifdef WLAN_FEATURE_NAN
+   bool                        enable_nan_support;
 #endif
    v_BOOL_t                    enableSelfRecovery;
 #ifdef FEATURE_WLAN_FORCE_SAP_SCC
@@ -3747,6 +3926,14 @@ typedef struct
    uint32_t                    extscan_active_max_chn_time;
    uint32_t                    extscan_active_min_chn_time;
 #endif
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+   bool                        udp_resp_offload_support;
+   uint32_t                    dest_port;
+   char                        payload_filter[MAX_LEN_UDP_RESP_OFFLOAD];
+   char                        response_payload[MAX_LEN_UDP_RESP_OFFLOAD];
+#endif
+   uint16_t                    max_mgmt_tx_fail_count;
 } hdd_config_t;
 
 #ifdef WLAN_FEATURE_MBSSID
@@ -3886,7 +4073,9 @@ void hdd_update_tgt_cfg(void *context, void *param);
 bool hdd_dfs_indicate_radar(void *context, void *param);
 
 VOS_STATUS hdd_string_to_u8_array( char *str, tANI_U8 *intArray, tANI_U8 *len,
-               tANI_U8 intArrayMaxLen );
+               tANI_U8 intArrayMaxLen);
+VOS_STATUS hdd_hex_string_to_u8_array(char *str, uint8_t *array, uint8_t *len,
+				      uint8_t array_max_len);
 
 #ifdef MDNS_OFFLOAD
 VOS_STATUS hdd_string_to_string_array(char *data, uint8_t *datalist,

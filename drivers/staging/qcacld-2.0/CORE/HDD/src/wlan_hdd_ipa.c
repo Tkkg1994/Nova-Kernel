@@ -1878,10 +1878,11 @@ int hdd_ipa_uc_ssr_deinit()
 	if (!hdd_ipa_uc_is_enabled(hdd_ipa))
 		return 0;
 
-	/*Clean up HDD IPA interfaces */
-	for (idx = 0; idx < HDD_IPA_MAX_IFACE; idx++) {
+	/* Clean up HDD IPA interfaces */
+	for (idx = 0; (hdd_ipa->num_iface > 0) &&
+		(idx < HDD_IPA_MAX_IFACE); idx++) {
 		iface_context = &hdd_ipa->iface_context[idx];
-		if (iface_context)
+		if (iface_context && iface_context->adapter)
 			hdd_ipa_cleanup_iface(iface_context);
 	}
 
@@ -2482,7 +2483,7 @@ static void hdd_ipa_send_skb_to_network(adf_nbuf_t skb, hdd_adapter_t *adapter)
 #ifdef QCA_CONFIG_SMP
 	result = netif_rx_ni(skb);
 #else
-	if (adapter->stats.rx_packets % IPA_WLAN_RX_SOFTIRQ_THRESH == 0)
+	if (hdd_ipa->stats.num_rx_excep % IPA_WLAN_RX_SOFTIRQ_THRESH == 0)
 		result = netif_rx_ni(skb);
 	else
 		result = netif_rx(skb);
@@ -4000,12 +4001,11 @@ int hdd_ipa_wlan_evt(hdd_adapter_t *adapter, uint8_t sta_id,
 			&& (VOS_TRUE == hdd_ipa->uc_loaded)
 		) {
 			ret = hdd_ipa_uc_handle_first_con(hdd_ipa);
-			if (!ret) {
+			if (ret) {
+				vos_lock_release(&hdd_ipa->event_lock);
 				HDD_IPA_LOG(VOS_TRACE_LEVEL_ERROR,
 					"%s: handle 1st con ret %d",
-					msg_ex->name, ret);
-			} else {
-				vos_lock_release(&hdd_ipa->event_lock);
+					adapter->dev->name, ret);
 				return ret;
 			}
 		}

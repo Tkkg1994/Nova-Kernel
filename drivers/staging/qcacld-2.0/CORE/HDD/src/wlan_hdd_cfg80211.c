@@ -967,6 +967,11 @@ static int __wlan_hdd_cfg80211_nan_request(struct wiphy *wiphy,
         return -EPERM;
     }
 
+    if (!hdd_ctx->cfg_ini->enable_nan_support) {
+        hddLog(LOGE, FL("NaN is not suported"));
+        return -EPERM;
+    }
+
     nan_req.request_data_len = data_len;
     nan_req.request_data = data;
 
@@ -3334,7 +3339,16 @@ static int __wlan_hdd_cfg80211_extscan_get_valid_channels(struct wiphy *wiphy,
 
     num_channels = VOS_MIN(num_channels, maxChannels);
 
-    num_chan_new = num_channels;
+    /* remove the DSRC channels from the list */
+    num_chan_new = 0;
+    for (i = 0; i < num_channels; i++) {
+        if (!vos_is_dsrc_channel(chan_list[i])) {
+            chan_list[num_chan_new] = chan_list[i];
+            num_chan_new++;
+        }
+    }
+
+    num_channels = num_chan_new;
 
     /* remove the indoor only channels if iface is SAP */
     if ((WLAN_HDD_SOFTAP == pAdapter->device_mode) ||
@@ -4059,6 +4073,10 @@ static int __wlan_hdd_cfg80211_extscan_start(struct wiphy *wiphy,
 			FL("sme_ExtScanStart failed(err=%d)"), status);
 		goto fail;
 	}
+
+	pHddCtx->ext_scan_start_since_boot = vos_get_monotonic_boottime();
+	hddLog(LOG1, FL("Timestamp since boot: %llu"),
+			pHddCtx->ext_scan_start_since_boot);
 
 	/* request was sent -- wait for the response */
 	rc = wait_for_completion_timeout(&context->response_event,
@@ -6440,11 +6458,9 @@ static int __wlan_hdd_cfg80211_ll_stats_get(struct wiphy *wiphy,
     if (0 != status)
         return -EINVAL ;
 
-    if (!pAdapter->isLinkLayerStatsSet)
-    {
-        hddLog(VOS_TRACE_LEVEL_FATAL,
-               "%s: isLinkLayerStatsSet : %d",
-               __func__, pAdapter->isLinkLayerStatsSet);
+    if (!pAdapter->isLinkLayerStatsSet) {
+        hddLog(LOGW, FL("isLinkLayerStatsSet : %d"),
+               pAdapter->isLinkLayerStatsSet);
         return -EINVAL;
     }
 
@@ -8020,6 +8036,11 @@ static int __wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	if (hdd_ctx->cfg_ini->force_sap_acs) {
+		hddLog(LOGE, FL("Hostapd ACS rejected as driver INI force ACS is enabled"));
+		return -EPERM;
+	}
+
 	/* ***Note*** Donot set SME config related to ACS operation here because
 	 * ACS operation is not synchronouse and ACS for Second AP may come when
 	 * ACS operation for first AP is going on. So only do_acs is split to
@@ -8649,7 +8670,7 @@ static int __wlan_hdd_cfg80211_wifi_logger_start(struct wiphy *wiphy,
 	}
 	start_log.ring_id = nla_get_u32(
 			tb[QCA_WLAN_VENDOR_ATTR_WIFI_LOGGER_RING_ID]);
-	hddLog(LOGE, FL("Ring ID=%d"), start_log.ring_id);
+	hddLog(LOG1, FL("Ring ID=%d"), start_log.ring_id);
 
 	/* Parse and fetch verbose level */
 	if (!tb[QCA_WLAN_VENDOR_ATTR_WIFI_LOGGER_VERBOSE_LEVEL]) {
@@ -8658,7 +8679,7 @@ static int __wlan_hdd_cfg80211_wifi_logger_start(struct wiphy *wiphy,
 	}
 	start_log.verbose_level = nla_get_u32(
 			tb[QCA_WLAN_VENDOR_ATTR_WIFI_LOGGER_VERBOSE_LEVEL]);
-	hddLog(LOGE, FL("verbose_level=%d"), start_log.verbose_level);
+	hddLog(LOG1, FL("verbose_level=%d"), start_log.verbose_level);
 
 	/* Parse and fetch flag */
 	if (!tb[QCA_WLAN_VENDOR_ATTR_WIFI_LOGGER_FLAGS]) {
@@ -8667,7 +8688,7 @@ static int __wlan_hdd_cfg80211_wifi_logger_start(struct wiphy *wiphy,
 	}
 	start_log.flag = nla_get_u32(
 			tb[QCA_WLAN_VENDOR_ATTR_WIFI_LOGGER_FLAGS]);
-	hddLog(LOGE, FL("flag=%d"), start_log.flag);
+	hddLog(LOG1, FL("flag=%d"), start_log.flag);
 
 	vos_set_ring_log_level(start_log.ring_id, start_log.verbose_level);
 
@@ -10158,11 +10179,7 @@ int wlan_hdd_cfg80211_update_band(struct wiphy *wiphy, eCsrBand eBand)
     {
 
         if (NULL == wiphy->bands[i])
-        {
-           hddLog(VOS_TRACE_LEVEL_ERROR,"%s: wiphy->bands[i] is NULL, i = %d",
-                  __func__, i);
            continue;
-        }
 
         for (j = 0; j < wiphy->bands[i]->n_channels; j++)
         {
@@ -10366,11 +10383,7 @@ int wlan_hdd_cfg80211_init(struct device *dev,
    {
 
        if (NULL == wiphy->bands[i])
-       {
-          hddLog(VOS_TRACE_LEVEL_ERROR,"%s: wiphy->bands[i] is NULL, i = %d",
-                 __func__, i);
           continue;
-       }
 
        for (j = 0; j < wiphy->bands[i]->n_channels; j++)
        {
@@ -11039,6 +11052,23 @@ static void wlan_hdd_add_extra_ie(hdd_adapter_t* pHostapdAdapter,
     return;
 }
 
+#ifdef QCA_HT_2040_COEX
+static void wlan_hdd_add_sap_obss_scan_ie(
+	hdd_adapter_t *pHostapdAdapter, v_U8_t *ie_buf, v_U8_t *ie_len)
+{
+	if (WLAN_HDD_SOFTAP == pHostapdAdapter->device_mode) {
+		if (wlan_hdd_get_sap_obss(pHostapdAdapter))
+			wlan_hdd_add_extra_ie(pHostapdAdapter, ie_buf, ie_len,
+					WLAN_EID_OVERLAP_BSS_SCAN_PARAM);
+	}
+}
+#else
+static void wlan_hdd_add_sap_obss_scan_ie(
+	hdd_adapter_t* pHostapdAdapter, v_U8_t *ie_buf, v_U8_t *ie_len)
+{
+}
+#endif
+
 int wlan_hdd_cfg80211_update_apies(hdd_adapter_t* pHostapdAdapter)
 {
     v_U8_t *genie;
@@ -11090,17 +11120,7 @@ int wlan_hdd_cfg80211_update_apies(hdd_adapter_t* pHostapdAdapter)
         wlan_hdd_add_hostapd_conf_vsie(pHostapdAdapter, genie, &total_ielen);
     }
 
-#ifdef QCA_HT_2040_COEX
-    if (WLAN_HDD_SOFTAP == pHostapdAdapter->device_mode) {
-        tSmeConfigParams smeConfig;
-
-        vos_mem_zero(&smeConfig, sizeof(smeConfig));
-        sme_GetConfigParam(WLAN_HDD_GET_HAL_CTX(pHostapdAdapter), &smeConfig);
-        if (smeConfig.csrConfig.obssEnabled)
-            wlan_hdd_add_extra_ie(pHostapdAdapter, genie, &total_ielen,
-                    WLAN_EID_OVERLAP_BSS_SCAN_PARAM);
-    }
-#endif
+    wlan_hdd_add_sap_obss_scan_ie(pHostapdAdapter, genie, &total_ielen);
 
     vos_mem_copy(updateIE.bssid, pHostapdAdapter->macAddressCurrent.bytes,
                    sizeof(tSirMacAddr));
@@ -11134,9 +11154,17 @@ int wlan_hdd_cfg80211_update_apies(hdd_adapter_t* pHostapdAdapter)
     }
 
     /* Added for Probe Response IE */
+    total_ielen = 0;
+    if (pBeacon->proberesp_ies_len > 0 &&
+        pBeacon->proberesp_ies_len <= MAX_GENIE_LEN) {
+        vos_mem_copy(genie, pBeacon->proberesp_ies, pBeacon->proberesp_ies_len);
+        total_ielen = pBeacon->proberesp_ies_len;
+    }
+    wlan_hdd_add_sap_obss_scan_ie(pHostapdAdapter, genie, &total_ielen);
+
     if (test_bit(SOFTAP_BSS_STARTED, &pHostapdAdapter->event_flags)) {
-        updateIE.ieBufferlength = pBeacon->proberesp_ies_len;
-        updateIE.pAdditionIEBuffer = (tANI_U8*)pBeacon->proberesp_ies;
+        updateIE.ieBufferlength = total_ielen;
+        updateIE.pAdditionIEBuffer = genie;
         updateIE.append = VOS_FALSE;
         updateIE.notify = VOS_FALSE;
         if (sme_UpdateAddIE(WLAN_HDD_GET_HAL_CTX(pHostapdAdapter),
@@ -11147,9 +11175,7 @@ int wlan_hdd_cfg80211_update_apies(hdd_adapter_t* pHostapdAdapter)
         }
         WLANSAP_ResetSapConfigAddIE(pConfig, eUPDATE_IE_PROBE_RESP);
     } else {
-        WLANSAP_UpdateSapConfigAddIE(pConfig,
-                             pBeacon->proberesp_ies,
-                             pBeacon->proberesp_ies_len,
+        WLANSAP_UpdateSapConfigAddIE(pConfig, genie, total_ielen,
                              eUPDATE_IE_PROBE_RESP);
     }
 
@@ -11541,6 +11567,221 @@ end:
     return;
 }
 #endif /* DHCP_SERVER_OFFLOAD */
+
+
+/**
+ * wlan_hdd_setup_driver_overrides : Overrides SAP / P2P GO Params
+ * @adapter: pointer to adapter struct
+ *
+ * This function overrides SAP / P2P Go configuration based on driver INI
+ * parameters for 11AC override and ACS. This overrides are done to support
+ * android legacy configuration method.
+ *
+ * NOTE: Non android platform supports concurrency and these overrides shall
+ * not be used. Also future driver based overrides shall be consolidated in this
+ * function only. Avoid random overrides in other location based on ini.
+ *
+ * Return: 0 for Success or Negative error codes.
+ */
+int wlan_hdd_setup_driver_overrides(hdd_adapter_t *ap_adapter)
+{
+	tsap_Config_t *sap_cfg = &ap_adapter->sessionCtx.ap.sapConfig;
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(ap_adapter);
+	tHalHandle h_hal = WLAN_HDD_GET_HAL_CTX(ap_adapter);
+
+	if (ap_adapter->device_mode == WLAN_HDD_SOFTAP &&
+				hdd_ctx->cfg_ini->force_sap_acs)
+		goto setup_acs_overrides;
+
+	/* Fixed channel 11AC override:
+	 * 11AC override in qcacld is introduced for following reasons:
+	 * 1. P2P GO also follows start_bss and since p2p GO could not be
+	 *    configured to setup VHT channel width in wpa_supplicant
+	 * 2. Android UI does not provide advanced configuration options for SAP
+	 *
+	 * Default override enabled (for android). MDM shall disable this in ini
+	 */
+	if (hdd_ctx->cfg_ini->sap_p2p_11ac_override &&
+			(sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac_ONLY)) {
+		hddLog(LOG1, FL("** Driver force 11AC override for SAP/Go **"));
+
+		/* 11n only shall not be overridden since it may be on purpose*/
+		if (sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n)
+			sap_cfg->SapHw_mode = eCSR_DOT11_MODE_11ac;
+
+		if (sap_cfg->channel >= 36)
+			sap_cfg->ch_width_orig =
+					hdd_ctx->cfg_ini->vhtChannelWidth;
+		else
+			sap_cfg->ch_width_orig =
+				hdd_ctx->cfg_ini->nChannelBondingMode24GHz ?
+				eHT_CHANNEL_WIDTH_40MHZ :
+				eHT_CHANNEL_WIDTH_20MHZ;
+
+	}
+
+	sap_cfg->vht_channel_width = sap_cfg->ch_width_orig;
+
+	sme_SelectCBMode(h_hal, sap_cfg->SapHw_mode, sap_cfg->channel,
+			sap_cfg->sec_ch, &sap_cfg->vht_channel_width,
+						sap_cfg->ch_width_orig);
+	return 0;
+
+setup_acs_overrides:
+	hddLog(LOGE, FL("** Driver force ACS override **"));
+
+	sap_cfg->channel = AUTO_CHANNEL_SELECT;
+	sap_cfg->acs_cfg.acs_mode = true;
+	sap_cfg->acs_cfg.start_ch = hdd_ctx->cfg_ini->force_sap_acs_st_ch;
+	sap_cfg->acs_cfg.end_ch = hdd_ctx->cfg_ini->force_sap_acs_end_ch;
+
+	if (sap_cfg->acs_cfg.start_ch > sap_cfg->acs_cfg.end_ch) {
+		hddLog(LOGE, FL("Driver force ACS start ch (%d) > end ch (%d)"),
+			sap_cfg->acs_cfg.start_ch,  sap_cfg->acs_cfg.end_ch);
+		return -EINVAL;
+	}
+
+	/* Derive ACS HW mode */
+	sap_cfg->SapHw_mode = hdd_cfg_xlate_to_csr_phy_mode(
+						hdd_ctx->cfg_ini->dot11Mode);
+	if (sap_cfg->SapHw_mode == eCSR_DOT11_MODE_AUTO)
+		sap_cfg->SapHw_mode = eCSR_DOT11_MODE_11ac;
+
+	if ((sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11b ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11g ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11g_ONLY) &&
+			sap_cfg->acs_cfg.start_ch > 14) {
+		hddLog(LOGE, FL("Invalid ACS Dot11Mode %d & CH range <%d - %d> Combination"),
+			sap_cfg->SapHw_mode, sap_cfg->acs_cfg.start_ch,
+			sap_cfg->acs_cfg.end_ch);
+		return -EINVAL;
+	}
+	sap_cfg->acs_cfg.hw_mode = sap_cfg->SapHw_mode;
+
+	/* Derive ACS BW */
+	sap_cfg->ch_width_orig = eHT_CHANNEL_WIDTH_20MHZ;
+	if (sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11ac_ONLY) {
+
+		sap_cfg->ch_width_orig = hdd_ctx->cfg_ini->vhtChannelWidth;
+		/* VHT in 2.4G depends on gChannelBondingMode24GHz INI param */
+		if (sap_cfg->acs_cfg.end_ch <= 14)
+			sap_cfg->ch_width_orig =
+				hdd_ctx->cfg_ini->nChannelBondingMode24GHz ?
+				eHT_CHANNEL_WIDTH_40MHZ :
+				eHT_CHANNEL_WIDTH_20MHZ;
+	}
+
+	if (sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n ||
+			sap_cfg->SapHw_mode == eCSR_DOT11_MODE_11n_ONLY) {
+		if (sap_cfg->acs_cfg.end_ch <= 14)
+			sap_cfg->ch_width_orig =
+				hdd_ctx->cfg_ini->nChannelBondingMode24GHz ?
+				eHT_CHANNEL_WIDTH_40MHZ :
+				eHT_CHANNEL_WIDTH_20MHZ;
+		else
+			sap_cfg->ch_width_orig =
+				hdd_ctx->cfg_ini->nChannelBondingMode5GHz ?
+				eHT_CHANNEL_WIDTH_40MHZ :
+				eHT_CHANNEL_WIDTH_20MHZ;
+	}
+	sap_cfg->acs_cfg.ch_width = sap_cfg->ch_width_orig;
+
+	hddLog(LOGE, FL("Force ACS Config: HW_MODE: %d ACS_BW: %d ST_CH: %d END_CH: %d"),
+		sap_cfg->acs_cfg.hw_mode, sap_cfg->acs_cfg.ch_width,
+		sap_cfg->acs_cfg.start_ch, sap_cfg->acs_cfg.end_ch);
+
+	return 0;
+}
+
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+/**
+ * wlan_hdd_set_udp_resp_offload() - get specific udp and response udp info from
+ * ini file
+ * @padapter: hdd adapter pointer
+ * @enable: enable or disable the specific udp and response behaviour
+ *
+ * This function reads specific udp and response udp related info from ini file,
+ * these configurations will be sent to fw through wmi.
+ *
+ * Return: 0 on success, otherwise error value
+ */
+static int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter, bool enable)
+{
+	hdd_context_t *phddctx = WLAN_HDD_GET_CTX(padapter);
+	hdd_config_t *pcfg_ini = phddctx->cfg_ini;
+	struct udp_resp_offload udp_resp_cmd_info;
+	VOS_STATUS status;
+	uint8 udp_payload_filter_len;
+	uint8 udp_response_payload_len;
+
+	hddLog(LOG1, FL("udp_resp_offload enable flag is %d"), enable);
+
+	/* prepare the request to send to SME */
+	if ((enable == TRUE) &&
+	    (pcfg_ini->udp_resp_offload_support)) {
+		if (pcfg_ini->response_payload[0] != '\0') {
+			udp_resp_cmd_info.vdev_id = padapter->sessionId;
+			udp_resp_cmd_info.enable = 1;
+			udp_resp_cmd_info.dest_port =
+					pcfg_ini->dest_port;
+
+			udp_payload_filter_len =
+				strlen(pcfg_ini->payload_filter);
+			hddLog(LOG2, "payload_filter[%s]",
+				pcfg_ini->payload_filter);
+			udp_response_payload_len =
+				strlen(pcfg_ini->response_payload);
+			hddLog(LOG2, "response_payload[%s]",
+				pcfg_ini->response_payload);
+
+			vos_mem_copy(udp_resp_cmd_info.udp_payload_filter,
+					pcfg_ini->payload_filter,
+					udp_payload_filter_len + 1);
+
+			vos_mem_copy(udp_resp_cmd_info.udp_response_payload,
+					pcfg_ini->response_payload,
+					udp_response_payload_len + 1);
+
+			status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
+			if (VOS_STATUS_E_FAILURE == status) {
+				hddLog(VOS_TRACE_LEVEL_ERROR,
+					"%s: sme_set_udp_resp_offload failure!",
+					__func__);
+				return -EIO;
+			}
+			hddLog(VOS_TRACE_LEVEL_INFO_HIGH,
+				"%s: sme_set_udp_resp_offload success!",
+				__func__);
+		}
+	} else {
+		udp_resp_cmd_info.vdev_id = padapter->sessionId;
+		udp_resp_cmd_info.enable = 0;
+		udp_resp_cmd_info.dest_port = 0;
+		udp_resp_cmd_info.udp_payload_filter[0] = '\0';
+		udp_resp_cmd_info.udp_response_payload[0] = '\0';
+		status = sme_set_udp_resp_offload(&udp_resp_cmd_info);
+		if (VOS_STATUS_E_FAILURE == status) {
+			hddLog(VOS_TRACE_LEVEL_ERROR,
+			"%s: sme_set_udp_resp_offload fialure!", __func__);
+			return -EIO;
+		}
+		hddLog(VOS_TRACE_LEVEL_INFO_HIGH,
+			"%s: sme_set_udp_resp_offload success!", __func__);
+	}
+	return 0;
+}
+#else
+static inline int wlan_hdd_set_udp_resp_offload(hdd_adapter_t *padapter,
+				bool enable)
+{
+	return 0;
+}
+#endif
+
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)) && !defined(WITH_BACKPORTS)
 static int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
@@ -12018,32 +12259,9 @@ static int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
     else
         pConfig->ch_width_orig = eHT_CHANNEL_WIDTH_20MHZ;
 
-    /* 11AC override in qcacld is introduced for following reasons:
-     * 1. P2P GO also follows start_bss and since p2p GO could not be configured
-     *    to setup VHT channel width in wpa_supplicant
-     * 2. Android UI does not provide advanced configuration options for SoftAP
-     *
-     * Default override enabled (for android). MDM shall disable this in ini
-     */
-    if (iniConfig->sap_p2p_11ac_override &&
-                         (pConfig->SapHw_mode == eCSR_DOT11_MODE_11n ||
-                         pConfig->SapHw_mode == eCSR_DOT11_MODE_11ac ||
-                         pConfig->SapHw_mode == eCSR_DOT11_MODE_11ac_ONLY)) {
-        hddLog(LOG1, FL("Start BSS Config override for 11AC"));
-        /* 11n only shall not be overridden since it may be set on purpose*/
-        if (pConfig->SapHw_mode == eCSR_DOT11_MODE_11n)
-            pConfig->SapHw_mode = eCSR_DOT11_MODE_11ac;
+    if (wlan_hdd_setup_driver_overrides(pHostapdAdapter))
+	return -EINVAL;
 
-        /* For 2.4G ch width shall not be overridden due to hostapd obss */
-        if (pConfig->channel >= 36)
-            pConfig->ch_width_orig = iniConfig->vhtChannelWidth;
-    }
-
-    pConfig->vht_channel_width = pConfig->ch_width_orig;
-
-    sme_SelectCBMode(hHal, pConfig->SapHw_mode, pConfig->channel,
-            pConfig->sec_ch,
-            &pConfig->vht_channel_width, pConfig->ch_width_orig);
     // ht_capab is not what the name conveys,this is used for protection bitmap
     pConfig->ht_capab = iniConfig->apProtection;
 
@@ -12662,9 +12880,15 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
         pAdapter->sessionCtx.ap.sapConfig.ch_width_orig =
                                              params->chandef.width;
 #endif
-
         status = wlan_hdd_cfg80211_start_bss(pAdapter, &params->beacon, params->ssid,
                                              params->ssid_len, params->hidden_ssid);
+	if (status == 0) {
+		if (0 != wlan_hdd_set_udp_resp_offload(pAdapter, TRUE)) {
+			hddLog(VOS_TRACE_LEVEL_ERROR,
+				"%s: set udp resp cmd failed %d",
+				__func__, status);
+		}
+	}
     }
 
     EXIT();
@@ -15085,7 +15309,7 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
          aborted = true;
     }
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-    if (!pHddCtx->isUnloadInProgress)
+    if (pAdapter->dev->flags & IFF_UP)
 #endif
         cfg80211_scan_done(req, aborted);
 
@@ -16095,7 +16319,7 @@ int wlan_hdd_cfg80211_connect_start( hdd_adapter_t  *pAdapter,
         }
 #endif
 
-        vos_runtime_pm_prevent_suspend_timeout(WLAN_HDD_CONNECTION_TIME);
+        vos_runtime_pm_prevent_suspend(pAdapter->runtime_ctx);
 
         status = sme_RoamConnect( WLAN_HDD_GET_HAL_CTX(pAdapter),
                             pAdapter->sessionId, pRoamProfile, &roamId);
@@ -16110,6 +16334,7 @@ int wlan_hdd_cfg80211_connect_start( hdd_adapter_t  *pAdapter,
             /* change back to NotAssociated */
             hdd_connSetConnectionState(pAdapter,
                                        eConnectionState_NotConnected);
+            vos_runtime_pm_allow_suspend(pAdapter->runtime_ctx);
         }
 
         pRoamProfile->ChannelInfo.ChannelList = NULL;
@@ -16262,14 +16487,10 @@ static int wlan_hdd_cfg80211_set_cipher( hdd_adapter_t *pAdapter,
 
     ENTER();
 
-    if (!cipher)
-    {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: received cipher %d - considering none",
-                __func__, cipher);
+    if (!cipher) {
+        hddLog(LOG1, FL("received cipher %d - considering none"), cipher);
         encryptionType = eCSR_ENCRYPT_TYPE_NONE;
-    }
-    else
-    {
+    } else {
 
         /*set encryption method*/
         switch (cipher)
@@ -16934,9 +17155,10 @@ static int __wlan_hdd_cfg80211_connect( struct wiphy *wiphy,
         channel = req->channel->hw_value;
     else
         channel = 0;
+
     status = wlan_hdd_cfg80211_connect_start(pAdapter, req->ssid,
-                                             req->ssid_len, req->bssid,
-                                             bssid_hint, channel);
+                                       req->ssid_len, req->bssid,
+                                       bssid_hint, channel);
 
     if (0 != status) {
         //ReEnable BMPS if disabled
@@ -17033,6 +17255,69 @@ disconnected:
     return result;
 }
 
+/**
+ * hdd_ieee80211_reason_code_to_str() - return string conversion of reason code
+ * @reason: ieee80211 reason code.
+ *
+ * This utility function helps log string conversion of reason code.
+ *
+ * Return: string conversion of reason code, if match found;
+ *         "Unknown" otherwise.
+ */
+static const char *hdd_ieee80211_reason_code_to_str(uint16_t reason)
+{
+	switch (reason) {
+	CASE_RETURN_STRING(WLAN_REASON_UNSPECIFIED);
+	CASE_RETURN_STRING(WLAN_REASON_PREV_AUTH_NOT_VALID);
+	CASE_RETURN_STRING(WLAN_REASON_DEAUTH_LEAVING);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_AP_BUSY);
+	CASE_RETURN_STRING(WLAN_REASON_CLASS2_FRAME_FROM_NONAUTH_STA);
+	CASE_RETURN_STRING(WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_STA_HAS_LEFT);
+	CASE_RETURN_STRING(WLAN_REASON_STA_REQ_ASSOC_WITHOUT_AUTH);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_BAD_POWER);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_BAD_SUPP_CHAN);
+	CASE_RETURN_STRING(WLAN_REASON_INVALID_IE);
+	CASE_RETURN_STRING(WLAN_REASON_MIC_FAILURE);
+	CASE_RETURN_STRING(WLAN_REASON_4WAY_HANDSHAKE_TIMEOUT);
+	CASE_RETURN_STRING(WLAN_REASON_GROUP_KEY_HANDSHAKE_TIMEOUT);
+	CASE_RETURN_STRING(WLAN_REASON_IE_DIFFERENT);
+	CASE_RETURN_STRING(WLAN_REASON_INVALID_GROUP_CIPHER);
+	CASE_RETURN_STRING(WLAN_REASON_INVALID_PAIRWISE_CIPHER);
+	CASE_RETURN_STRING(WLAN_REASON_INVALID_AKMP);
+	CASE_RETURN_STRING(WLAN_REASON_UNSUPP_RSN_VERSION);
+	CASE_RETURN_STRING(WLAN_REASON_INVALID_RSN_IE_CAP);
+	CASE_RETURN_STRING(WLAN_REASON_IEEE8021X_FAILED);
+	CASE_RETURN_STRING(WLAN_REASON_CIPHER_SUITE_REJECTED);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_UNSPECIFIED_QOS);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_QAP_NO_BANDWIDTH);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_LOW_ACK);
+	CASE_RETURN_STRING(WLAN_REASON_DISASSOC_QAP_EXCEED_TXOP);
+	CASE_RETURN_STRING(WLAN_REASON_QSTA_LEAVE_QBSS);
+	CASE_RETURN_STRING(WLAN_REASON_QSTA_NOT_USE);
+	CASE_RETURN_STRING(WLAN_REASON_QSTA_REQUIRE_SETUP);
+	CASE_RETURN_STRING(WLAN_REASON_QSTA_TIMEOUT);
+	CASE_RETURN_STRING(WLAN_REASON_QSTA_CIPHER_NOT_SUPP);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_PEER_CANCELED);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_MAX_PEERS);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_CONFIG);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_CLOSE);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_MAX_RETRIES);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_CONFIRM_TIMEOUT);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_INVALID_GTK);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_INCONSISTENT_PARAM);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_INVALID_SECURITY);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_PATH_ERROR);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_PATH_NOFORWARD);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_PATH_DEST_UNREACHABLE);
+	CASE_RETURN_STRING(WLAN_REASON_MAC_EXISTS_IN_MBSS);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_CHAN_REGULATORY);
+	CASE_RETURN_STRING(WLAN_REASON_MESH_CHAN);
+	default:
+		return "Unknown";
+	}
+}
 
 /*
  * FUNCTION: __wlan_hdd_cfg80211_disconnect
@@ -17138,7 +17423,9 @@ static int __wlan_hdd_cfg80211_disconnect( struct wiphy *wiphy,
             }
         }
 #endif
-        hddLog(LOG1, FL("Disconnecting with reasoncode:%u"), reasonCode);
+        hddLog(LOGE,
+               FL("Disconnect request from user space with reason: %s"),
+               hdd_ieee80211_reason_code_to_str(reason));
         status = wlan_hdd_disconnect(pAdapter, reasonCode);
         if (0 != status) {
             hddLog(VOS_TRACE_LEVEL_ERROR, FL("failure, returned %d"), status);
@@ -18395,6 +18682,7 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_DEBUG,
                   "%s: DHCP start indicated through power save", __func__);
+        vos_runtime_pm_prevent_suspend(pAdapter->runtime_ctx);
         sme_DHCPStartInd(pHddCtx->hHal, pAdapter->device_mode,
                          pAdapter->macAddressCurrent.bytes, pAdapter->sessionId);
     }
@@ -18402,6 +18690,7 @@ static int __wlan_hdd_cfg80211_set_power_mgmt(struct wiphy *wiphy,
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_DEBUG,
                   "%s: DHCP stop indicated through power save", __func__);
+        vos_runtime_pm_allow_suspend(pAdapter->runtime_ctx);
         sme_DHCPStopInd(pHddCtx->hHal, pAdapter->device_mode,
                         pAdapter->macAddressCurrent.bytes, pAdapter->sessionId);
     }
@@ -19111,7 +19400,7 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
     tpSirPNOScanReq pPnoRequest = NULL;
     hdd_context_t *pHddCtx;
     tHalHandle hHal;
-    v_U32_t i, indx, num_ch, tempInterval, j;
+    v_U32_t i, indx, num_ch, j;
     u8 valid_ch[WNI_CFG_VALID_CHANNEL_LIST_LEN] = {0};
     u8 channels_allowed[WNI_CFG_VALID_CHANNEL_LIST_LEN] = {0};
     v_U32_t num_channels_allowed = WNI_CFG_VALID_CHANNEL_LIST_LEN;
@@ -19329,41 +19618,28 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
                 pPnoRequest->us5GProbeTemplateLen);
     }
 
-    /* Driver gets only one time interval which is hard coded in
-     * supplicant for 10000ms. Taking power consumption into account 6 timers
-     * will be used, Timer value is increased exponentially i.e 10,20,40,
-     * 80,160,320 secs. And number of scan cycle for each timer
-     * is configurable through INI param gPNOScanTimerRepeatValue.
-     * If it is set to 0 only one timer will be used and PNO scan cycle
-     * will be repeated after each interval specified by supplicant
-     * till PNO is disabled.
+    /*
+     * Driver gets only one time interval which is hard coded in
+     * supplicant for 10000ms. Taking power consumption into account
+     * firmware after gPNOScanTimerRepeatValue times fast_scan_period switches
+     * slow_scan_period. This is less frequent scans and firmware shall be
+     * in slow_scan_period mode until next PNO Start.
      */
-    if (0 == pHddCtx->cfg_ini->configPNOScanTimerRepeatValue)
-        pPnoRequest->scanTimers.ucScanTimersCount = HDD_PNO_SCAN_TIMERS_SET_ONE;
-    else
-        pPnoRequest->scanTimers.ucScanTimersCount =
-                                               HDD_PNO_SCAN_TIMERS_SET_MULTIPLE;
+    pPnoRequest->fast_scan_period = request->interval;
+    pPnoRequest->fast_scan_max_cycles =
+                              pHddCtx->cfg_ini->configPNOScanTimerRepeatValue;
+    pPnoRequest->slow_scan_period = pHddCtx->cfg_ini->pno_slow_scan_multiplier *
+                                        pPnoRequest->fast_scan_period;
 
-    tempInterval = (request->interval)/1000;
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-              "Base scan interval = %d PNOScanTimerRepeatValue = %d",
-              tempInterval, pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
-    for ( i = 0; i < pPnoRequest->scanTimers.ucScanTimersCount; i++)
-    {
-        pPnoRequest->scanTimers.aTimerValues[i].uTimerRepeat =
-                                 pHddCtx->cfg_ini->configPNOScanTimerRepeatValue;
-        pPnoRequest->scanTimers.aTimerValues[i].uTimerValue = tempInterval;
-        tempInterval *= 2;
-    }
-    //Repeat last timer until pno disabled.
-    pPnoRequest->scanTimers.aTimerValues[i-1].uTimerRepeat = 0;
+    hddLog(LOG1, "Base scan interval: %d sec PNOScanTimerRepeatValue: %d",
+           (request->interval / 1000),
+            pHddCtx->cfg_ini->configPNOScanTimerRepeatValue);
 
     pPnoRequest->modePNO = SIR_PNO_MODE_IMMEDIATE;
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-             "SessionId %d, enable %d, modePNO %d, ucScanTimersCount %d",
-             pAdapter->sessionId, pPnoRequest->enable, pPnoRequest->modePNO,
-             pPnoRequest->scanTimers.ucScanTimersCount);
+             "SessionId %d, enable %d, modePNO %d",
+             pAdapter->sessionId, pPnoRequest->enable, pPnoRequest->modePNO);
 
     status = sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter),
                               pPnoRequest, pAdapter->sessionId,
@@ -20975,11 +21251,7 @@ static int __wlan_hdd_cfg80211_dump_survey(struct wiphy *wiphy,
     for (i = 0; i < IEEE80211_NUM_BANDS; i++)
     {
         if (NULL == wiphy->bands[i])
-        {
-           VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
-                     "%s: wiphy->bands[i] is NULL, i = %d", __func__, i);
            continue;
-        }
 
         for (j = 0; j < wiphy->bands[i]->n_channels; j++)
         {
@@ -21752,13 +22024,13 @@ wlan_hdd_cfg80211_extscan_cached_results_ind(void *ctx,
 		ap = &result->ap[0];
 		for (j = 0; j < result->num_results; j++) {
 			/*
-			 * Firmware returns timestamp from WiFi turn ON till
-			 * BSSID was cached (in seconds). Add this with
-			 * time gap between system boot up to WiFi turn ON
+			 * Firmware returns timestamp from ext scan start till
+			 * BSSID was cached (in micro seconds). Add this with
+			 * time gap between system boot up to ext scan start
 			 * to derive the time since boot when the
 			 * BSSID was cached.
 			 */
-			ap->ts += pHddCtx->wifi_turn_on_time_since_boot;
+			ap->ts += pHddCtx->ext_scan_start_since_boot;
 			hddLog(LOG1, "Timestamp %llu "
 				"Ssid: %s "
 				"Bssid (" MAC_ADDRESS_STR ") "
@@ -21915,12 +22187,13 @@ wlan_hdd_cfg80211_extscan_hotlist_match_ind(void *ctx,
 		hddLog(LOGE, FL("cfg80211_vendor_event_alloc failed"));
 		return;
 	}
-	hddLog(LOG1, "Req Id  %u Num results %u",
-			data->requestId, data->numOfAps);
-	hddLog(LOG1, "More Data %u ap_found %u",
-			data->moreData, data->ap_found);
+	hddLog(LOG1, "Req Id: %u Num_APs: %u MoreData: %u ap_found: %u",
+			data->requestId, data->numOfAps, data->moreData,
+			data->ap_found);
 
 	for (i = 0; i < data->numOfAps; i++) {
+		data->ap[i].ts = vos_get_monotonic_boottime();
+
 		hddLog(LOG1, "[i=%d] Timestamp %llu "
 				"Ssid: %s "
 				"Bssid (" MAC_ADDRESS_STR ") "
@@ -22902,6 +23175,7 @@ void wlan_hdd_cfg80211_extscan_callback(void *ctx, const tANI_U16 evType,
 }
 
 #endif /* FEATURE_WLAN_EXTSCAN */
+
 
 /* cfg80211_ops */
 static struct cfg80211_ops wlan_hdd_cfg80211_ops =

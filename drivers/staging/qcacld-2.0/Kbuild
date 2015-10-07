@@ -39,6 +39,10 @@ ifeq ($(KERNEL_BUILD), 0)
 	CONFIG_MOBILE_ROUTER := y
 	endif
 
+	ifeq ($(CONFIG_ARCH_MDMCALIFORNIUM), y)
+	CONFIG_MOBILE_ROUTER := y
+	endif
+
 	#Flag to enable Legacy Fast Roaming3(LFR3)
 	CONFIG_QCACLD_WLAN_LFR3 := y
 
@@ -1060,6 +1064,10 @@ CDEFINES += -DHIF_USB_TASKLET
 endif
 endif
 
+ifneq ($(TARGET_BUILD_VARIANT),user)
+CDEFINES += -DDEBUG_RX_RING_BUFFER
+endif
+
 # enable the MAC Address auto-generation feature
 CDEFINES += -DWLAN_AUTOGEN_MACADDR_FEATURE
 
@@ -1242,6 +1250,11 @@ ifeq ($(CONFIG_SMP),y)
 CDEFINES += -DQCA_CONFIG_SMP
 endif
 
+#rps feature
+ifeq ($(CONFIG_RPS),y)
+CDEFINES += -DQCA_FEATURE_RPS
+endif
+
 #Enable Channel Matrix restriction for all targets
 CDEFINES += -DWLAN_ENABLE_CHNL_MATRIX_RESTRICTION
 
@@ -1393,6 +1406,12 @@ endif
 ifeq ($(CONFIG_WLAN_OFFLOAD_PACKETS),y)
 CDEFINES += -DWLAN_FEATURE_OFFLOAD_PACKETS
 endif
+
+
+ifeq ($(CONFIG_WLAN_UDP_RESPONSE_OFFLOAD),y)
+CDEFINES += -DWLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+endif
+
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 

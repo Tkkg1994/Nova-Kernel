@@ -89,9 +89,6 @@
     reg_info_2 |= ((val & 0xff) << 8);   \
 } while(0)
 
-/* Macro to indicate invalid no of tspecs */
-#define INVALID_TSPEC 100
-
 #define NUM_OF_BANDS 2
 /*--------------------------------------------------------------------------
   Type declarations
@@ -100,7 +97,7 @@ typedef struct _smeConfigParams
 {
    tCsrConfigParam  csrConfig;
 #if defined WLAN_FEATURE_VOWIFI
-   tRrmConfigParam  rrmConfig;
+   struct rrm_config_param rrmConfig;
 #endif
 #if defined FEATURE_WLAN_LFR
     tANI_U8   isFastRoamIniFeatureEnabled;
@@ -4378,5 +4375,22 @@ sme_get_opclass(tHalHandle hal, uint8_t channel, uint8_t bw_offset,
 {
 }
 #endif
+
+
+
+#ifdef WLAN_FEATURE_UDP_RESPONSE_OFFLOAD
+VOS_STATUS sme_set_udp_resp_offload(struct udp_resp_offload *pudp_resp_cmd);
+#else
+static inline VOS_STATUS sme_set_udp_resp_offload(struct udp_resp_offload
+							*pudp_resp_cmd)
+{
+	return VOS_STATUS_E_FAILURE;
+}
+#endif
+
+
+eHalStatus sme_set_lost_link_info_cb(tHalHandle hal,
+                                     void (*cb)(void *,
+                                                struct sir_lost_link_info *));
 
 #endif //#if !defined( __SME_API_H )

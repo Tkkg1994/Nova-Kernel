@@ -43,7 +43,7 @@
 #include "vos_utils.h"
 #include "wdi_out.h"
 
-#define TLSHIM_PEER_AUTHORIZE_WAIT 10
+#define TLSHIM_PEER_AUTHORIZE_WAIT 50
 
 #define ENTER() VOS_TRACE(VOS_MODULE_ID_TL, VOS_TRACE_LEVEL_INFO, "Enter:%s", __func__)
 
@@ -770,6 +770,11 @@ static int tlshim_mgmt_rx_wmi_handler(void *context, u_int8_t *data,
 
 	if (vos_is_logp_in_progress(VOS_MODULE_ID_TL, NULL)) {
 			TLSHIM_LOGE("%s: LOPG in progress\n", __func__);
+			return (-1);
+	}
+
+	if (vos_is_load_unload_in_progress(VOS_MODULE_ID_TL, NULL)) {
+			TLSHIM_LOGE("%s: load/unload in progress\n", __func__);
 			return (-1);
 	}
 
@@ -1630,8 +1635,11 @@ VOS_STATUS WLANTL_ChangeSTAState(void *vos_ctx, u_int8_t sta_id,
 			 * set fix it cleanly later.
 			 */
 			/* wait for event from firmware to set the event */
-			vos_wait_single_event(&tl_shim->peer_authorized_events[peer->vdev->vdev_id],
+			err = vos_wait_single_event(&tl_shim->peer_authorized_events[peer->vdev->vdev_id],
 					      TLSHIM_PEER_AUTHORIZE_WAIT);
+			if (err != VOS_STATUS_SUCCESS)
+				TLSHIM_LOGE("%s:timeout for peer_authorized_event",
+							__func__);
 			wdi_in_vdev_unpause(peer->vdev,
 				    OL_TXQ_PAUSE_REASON_PEER_UNAUTHORIZED);
 #endif
@@ -1934,6 +1942,9 @@ VOS_STATUS WLANTL_Open(void *vos_ctx, WLANTL_ConfigInfoType *tl_cfg)
 	tl_shim->ip_checksum_offload = tl_cfg->ip_checksum_offload;
 	tl_shim->delay_interval = tl_cfg->uDelayedTriggerFrmInt;
 	tl_shim->enable_rxthread = tl_cfg->enable_rxthread;
+	if (tl_shim->enable_rxthread)
+		TLSHIM_LOGD("TL Shim RX thread enabled");
+
 	return status;
 }
 
@@ -2061,6 +2072,10 @@ void WLANTL_Get_llStats
 	}
 
 	vdev = tl_shim->session_flow_control[sessionId].vdev;
+	if (!vdev) {
+		TLSHIM_LOGE("%s, vdev is NULL", __func__);
+		return;
+	}
 	ol_txrx_stats(vdev, buffer, (unsigned)length);
 	return;
 
