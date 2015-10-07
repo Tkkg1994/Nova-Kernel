@@ -230,6 +230,7 @@ typedef enum {
     WMI_GRP_OCB,
     WMI_GRP_SOC,
     WMI_GRP_PKT_FILTER,
+    WMI_GRP_MAWC,
 } WMI_GRP_ID;
 
 #define WMI_CMD_GRP_START_ID(grp_id) (((grp_id) << 12) | 0x1)
@@ -448,6 +449,8 @@ typedef enum {
     WMI_ROAM_FILTER_CMDID,
     /** set gateway ip, mac and retries for subnet change detection */
     WMI_ROAM_SUBNET_CHANGE_CONFIG_CMDID,
+    /** configure thresholds for MAWC */
+    WMI_ROAM_CONFIGURE_MAWC_CMDID,
 
     /** offload scan specific commands */
     /** set offload scan AP profile   */
@@ -598,6 +601,8 @@ typedef enum {
 
     /** Passpoint list config  */
     WMI_PASSPOINT_LIST_CONFIG_CMDID,
+    /** configure supprssing parameters for MAWC */
+    WMI_NLO_CONFIGURE_MAWC_CMDID,
 
     /* GTK offload Specific WMI commands*/
     WMI_GTK_OFFLOAD_CMDID=WMI_CMD_GRP_START_ID(WMI_GRP_GTK_OFL),
@@ -672,6 +677,8 @@ typedef enum {
     WMI_OCB_SET_SCHED_CMDID,
     /** Set rssi monitoring config command */
     WMI_RSSI_BREACH_MONITOR_CONFIG_CMDID,
+    /** Enable/disable Large Receive Offload processing; provide cfg params */
+    WMI_LRO_CONFIG_CMDID,
     /* GPIO Configuration */
     WMI_GPIO_CONFIG_CMDID=WMI_CMD_GRP_START_ID(WMI_GRP_GPIO),
     WMI_GPIO_OUTPUT_CMDID,
@@ -784,6 +791,7 @@ typedef enum {
     WMI_EXTSCAN_SET_CAPABILITIES_CMDID,
     WMI_EXTSCAN_GET_CAPABILITIES_CMDID,
     WMI_EXTSCAN_CONFIGURE_HOTLIST_SSID_MONITOR_CMDID,
+    WMI_EXTSCAN_CONFIGURE_MAWC_CMDID,
 
     /** DHCP server offload commands */
     WMI_SET_DHCP_SERVER_OFFLOAD_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_DHCP_OFL),
@@ -820,6 +828,8 @@ typedef enum {
     WMI_PACKET_FILTER_CONFIG_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_PKT_FILTER),
     WMI_PACKET_FILTER_ENABLE_CMDID,
 
+     /** Motion Aided WiFi Connectivity (MAWC) commands */
+    WMI_MAWC_SENSOR_REPORT_IND_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_MAWC),
 } WMI_CMD_ID;
 
 typedef enum {
@@ -854,6 +864,9 @@ typedef enum {
 
     /** Report current temprature of the chip in Celcius degree */
     WMI_PDEV_TEMPERATURE_EVENTID,
+
+    /** Extension of WMI_SERVICE_READY msg with extra target capability info */
+    WMI_SERVICE_READY_EXT_EVENTID,
 
     /* VDEV specific events */
     /** VDEV started event in response to VDEV_START request */
@@ -1118,6 +1131,8 @@ typedef enum {
     WMI_SOC_SET_HW_MODE_RESP_EVENTID = WMI_EVT_GRP_START_ID(WMI_GRP_SOC),
     WMI_SOC_HW_MODE_TRANSITION_EVENTID,
     WMI_SOC_SET_DUAL_MAC_CONFIG_RESP_EVENTID,
+    /** Motion Aided WiFi Connectivity (MAWC) events */
+    WMI_MAWC_ENABLE_SENSOR_EVENTID = WMI_EVT_GRP_START_ID(WMI_GRP_MAWC),
 } WMI_EVT_ID;
 
 /* defines for OEM message sub-types */
@@ -1406,26 +1421,6 @@ WMI_CHANNEL_CHANGE_CAUSE_CSA,
 #define WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_GET(scan_cfg)    \
     ((scan_cfg & WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_MASK) >> WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_BITPOS)
 
-/* TEMPORARY - retain deprecated name as an alias */
-#define WMI_DBS_CONC_SCAN_CFG_DBS_PLUS_AGILE_SCAN_BITPOS \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_SCAN_BITPOS
-#define WMI_DBS_CONC_SCAN_CFG_SINGLE_MAC_SCAN_WITH_DFS_BITPOS \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_BITPOS
-#define WMI_DBS_CONC_SCAN_CFG_DBS_PLUS_AGILE_SCAN_MASK \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_SCAN_MASK
-#define WMI_DBS_CONC_SCAN_CFG_SINGLE_MAC_SCAN_WITH_DFS_MASK \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_MASK
-#define WMI_DBS_CONC_SCAN_CFG_DBS_PLUS_AGILE_SCAN_SET \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_SCAN_SET(scan_cfg, value)
-#define WMI_DBS_CONC_SCAN_CFG_SINGLE_MAC_SCAN_WITH_DFS_SET \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_SET(scan_cfg, value)
-#define WMI_DBS_CONC_SCAN_CFG_DBS_PLUS_AGILE_SCAN_GET \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_SCAN_GET(scan_cfg)
-#define WMI_DBS_CONC_SCAN_CFG_SINGLE_MAC_SCAN_WITH_DFS_GET \
-    WMI_DBS_CONC_SCAN_CFG_AGILE_DFS_SCAN_GET(scan_cfg)
-/* End of TEMPORARY */
-
-
 #define WMI_DBS_FW_MODE_CFG_DBS_BITPOS          (31)
 #define WMI_DBS_FW_MODE_CFG_AGILE_DFS_BITPOS    (30)
 
@@ -1548,6 +1543,14 @@ typedef struct {
          *     wlan_dbs_hw_mode_list[];
          */
 } wmi_service_ready_event_fixed_param;
+
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_SERVICE_EXT_READY_EVENT */
+    /* which WMI_DBS_CONC_SCAN_CFG setting the FW is initialized with */
+    A_UINT32 default_conc_scan_config_bits;
+    /* which WMI_DBS_FW_MODE_CFG setting the FW is initialized with */
+    A_UINT32 default_fw_config_bits;
+} wmi_service_ready_ext_event_fixed_param;
 
 typedef enum {
     WMI_FW_STA_RTT_INITR =     0x00000001,
@@ -4279,6 +4282,10 @@ typedef enum {
      * protection when a SAP goes off channel in MCC mode */
     WMI_VDEV_PARAM_MCC_RTSCTS_PROTECTION_ENABLE,
 
+    /** This parameter indicates whether using a broadcast probe response
+     * to increase the detectability of SAP in MCC mode */
+    WMI_VDEV_PARAM_MCC_BROADCAST_PROBE_ENABLE,
+
 } WMI_VDEV_PARAM;
 
 /* Length of ATIM Window in TU */
@@ -4353,10 +4360,6 @@ typedef struct {
     A_UINT32    tlv_header;     /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_vdev_stopped_event_fixed_param  */
     /** unique id identifying the VDEV, generated by the caller */
     A_UINT32 vdev_id;
-    /** RSSI averaged over recent beacons, units are dB above noise floor
-     * Only applies to STA vdevs; AP vdevs should fill RSSI as 0x0.
-     */
-    A_UINT32 rssi;
 } wmi_vdev_stopped_event_fixed_param;
 
 /** common structure used for simple events (stopped, resume_req, standby response) */
@@ -6431,6 +6434,11 @@ typedef enum wake_reason_e {
     WOW_REASON_IOAC_REV_KA_FAIL_EVENT,
     WOW_REASON_IOAC_SOCK_EVENT,
     WOW_REASON_NLO_SCAN_COMPLETE,
+    WOW_REASON_PACKET_FILTER_MATCH,
+    WOW_REASON_ASSOC_RES_RECV,
+    WOW_REASON_REASSOC_REQ_RECV,
+    WOW_REASON_REASSOC_RES_RECV,
+    WOW_REASON_ACTION_FRAME_RECV,
     WOW_REASON_DEBUG_TEST = 0xFF,
 } WOW_WAKE_REASON_TYPE;
 
@@ -6689,6 +6697,7 @@ typedef enum extend_wow_type_e {
     EXTWOW_TYPE_APP_TYPE1,   /* extend wow type: only enable wakeup for app type1 */
     EXTWOW_TYPE_APP_TYPE2,   /* extend wow type: only enable wakeup for app type2 */
     EXTWOW_TYPE_APP_TYPE1_2, /* extend wow type: enable wakeup for app type1&2 */
+    EXTWOW_DISABLED = 255,
 } EXTWOW_TYPE;
 
 typedef struct {
@@ -6734,6 +6743,41 @@ typedef struct {
     wmi_mac_addr gateway_mac;
     A_UINT32 tcp_tx_timeout_val;
     A_UINT32 tcp_rx_timeout_val;
+
+    /** add extra parameter for backward-compatible */
+    /*
+     * For all byte arrays, natural order is used.  E.g.
+     * rc4_write_sandbox[0] holds the 1st RC4 S-box byte,
+     * rc4_write_sandbox[1] holds the 2nd RC4 S-box byte, etc.
+     */
+
+    /* used to encrypt transmit packet such as keep-alive */
+    A_UINT8  rc4_write_sandbox[256];
+    A_UINT32 rc4_write_x;
+    A_UINT32 rc4_write_y;
+
+    /* used to decrypt received packet such as wow data */
+    A_UINT8  rc4_read_sandbox[256];
+    A_UINT32 rc4_read_x;
+    A_UINT32 rc4_read_y;
+
+    /* used to caculate HMAC hash for transmit packet such as keep-alive */
+    A_UINT8  ssl_write_seq[8];
+    A_UINT8  ssl_sha1_write_key[64];
+    A_UINT32 ssl_sha1_write_key_len;
+
+    /* used to calculate HAMC hash for receive packet such as wow data */
+    A_UINT8  ssl_read_seq[8];
+    A_UINT8  ssl_sha1_read_key[64];
+    A_UINT32 ssl_sha1_read_key_len;
+
+    /* optional element for specifying TCP options data to include in
+     * transmit packets such as keep-alive
+     */
+    A_UINT32 tcp_options_len;
+    A_UINT8  tcp_options[40];
+
+    A_UINT32 async_id; /* keep-alive request id */
 } wmi_extwow_set_app_type2_params_cmd_fixed_param;
 
 
@@ -6754,7 +6798,8 @@ typedef enum {
     PKT_PWR_SAVE_GID_NSTS_ZERO =      0x0080,
     PKT_PWR_SAVE_RSSI_CHECK =         0x0100,
     PKT_PWR_SAVE_5G_EBT =             0x0200,
-    WMI_PKT_PWR_SAVE_MAX =            0x0400,
+    PKT_PWR_SAVE_2G_EBT =             0x0400,
+    WMI_PKT_PWR_SAVE_MAX =            0x0800,
 } WMI_PKT_PWR_SAVE_TYPE;
 
 typedef struct {
@@ -6809,13 +6854,15 @@ typedef struct {
 } WMI_NS_OFFLOAD_TUPLE;
 
 typedef struct {
-    A_UINT32                tlv_header;      /** TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_SET_ARP_NS_OFFLOAD_CMD_fixed_param */
-    A_UINT32                flags;
-    A_UINT32                vdev_id;
+    A_UINT32 tlv_header;      /** TLV tag and len; tag equals WMITLV_TAG_STRUC_WMI_SET_ARP_NS_OFFLOAD_CMD_fixed_param */
+    A_UINT32 flags;
+    A_UINT32 vdev_id;
+    A_UINT32 num_ns_ext_tuples;
     /* Following this structure are the TLVs:
-         *     WMI_NS_OFFLOAD_TUPLE    ns_tuples[WMI_MAX_NS_OFFLOADS];
-         *     WMI_ARP_OFFLOAD_TUPLE   arp_tuples[WMI_MAX_ARP_OFFLOADS];
-         */
+     *  WMI_NS_OFFLOAD_TUPLE    ns_tuples[WMI_MAX_NS_OFFLOADS];
+     *  WMI_ARP_OFFLOAD_TUPLE   arp_tuples[WMI_MAX_ARP_OFFLOADS];
+     *  WMI_NS_OFFLOAD_TUPLE  ns_ext_tuples[]; //size based on num_ns_ext_tuples
+     */
 } WMI_SET_ARP_NS_OFFLOAD_CMD_fixed_param;
 
 typedef struct {
@@ -7107,6 +7154,7 @@ typedef struct nlo_configured_parameters {
  * if stationary_threshold is met.
  */
 typedef struct nlo_channel_prediction_cfg {
+    A_UINT32 tlv_header;
     /* Enable or disable this feature. */
     A_UINT32 enable;
     /* Top K channels will be scanned before deciding whether to further scan
@@ -7770,7 +7818,7 @@ typedef struct {
     A_UINT32 vdev_id;
     /** Enable/Disable TDLS (wmi_tdls_state) */
     A_UINT32 state;
-    /** Duration (in ms) over which to calculate tx threshold and rate values */
+    /** Duration (in ms) over which to calculate tx/rx threshold to trigger TDLS Discovery */
     A_UINT32 notification_interval_ms;
     /** number of packets OVER which notify/suggest TDLS Discovery:
      *  if current tx pps counter / notification interval >= threshold
@@ -7797,6 +7845,8 @@ typedef struct {
     A_UINT32 tdls_puapsd_inactivity_time_ms;
     /* Max of rx frame during SP */
     A_UINT32 tdls_puapsd_rx_frame_threshold;
+    /**Duration (in ms) over which to check whether TDLS link needs to be torn down */
+    A_UINT32 teardown_notification_ms;
 } wmi_tdls_set_state_cmd_fixed_param;
 
 /* WMI_TDLS_PEER_UPDATE_CMDID */
@@ -11357,6 +11407,83 @@ typedef struct {
 
 } wmi_soc_set_dual_mac_config_response_event_fixed_param;
 
+typedef enum {
+    MAWC_MOTION_STATE_UNKNOWN,
+    MAWC_MOTION_STATE_STATIONARY,
+    MAWC_MOTION_STATE_WALK,
+    MAWC_MOTION_STATE_TRANSIT,
+} MAWC_MOTION_STATE;
+
+typedef enum {
+    MAWC_SENSOR_STATUS_OK,
+    MAWC_SENSOR_STATUS_FAILED_TO_ENABLE,
+    MAWC_SENSOR_STATUS_SHUTDOWN,
+} MAWC_SENSOR_STATUS;
+
+typedef struct {
+    /* TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_mawc_sensor_report_ind_cmd_fixed_param */
+    A_UINT32 tlv_header;
+    /** new motion state, MAWC_MOTION_STATE */
+    A_UINT32 motion_state;
+    /** status code of sensor, MAWC_SENSOR_STATUS */
+    A_UINT32 sensor_status;
+} wmi_mawc_sensor_report_ind_cmd_fixed_param;
+
+typedef struct {
+    /* TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_mawc_enable_sensor_event_fixed_param */
+    A_UINT32 tlv_header;
+    /* enable(1) or disable(0) */
+    A_UINT32 enable;
+} wmi_mawc_enable_sensor_event_fixed_param;
+
+typedef struct {
+    /* TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_extscan_configure_mawc_cmd_fixed_param */
+    A_UINT32 tlv_header;
+    /* Unique id identifying the VDEV */
+    A_UINT32 vdev_id;
+    /* enable(1) or disable(0) MAWC */
+    A_UINT32 enable;
+    /* ratio of skipping suppressing scan, skip one out of x */
+    A_UINT32 suppress_ratio;
+} wmi_extscan_configure_mawc_cmd_fixed_param;
+
+typedef struct {
+    /* TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_nlo_configure_mawc_cmd_fixed_param */
+    A_UINT32 tlv_header;
+    /* Unique id identifying the VDEV */
+    A_UINT32 vdev_id;
+    /* enable(1) or disable(0) MAWC */
+    A_UINT32 enable;
+    /* ratio of exponential backoff, next = current + current*ratio/100 */
+    A_UINT32 exp_backoff_ratio;
+    /* initial scan interval(msec) */
+    A_UINT32 init_scan_interval;
+    /* max scan interval(msec) */
+    A_UINT32 max_scan_interval;
+} wmi_nlo_configure_mawc_cmd_fixed_param;
+
+typedef struct {
+    /* TLV tag and len; tag equals
+     * WMITLV_TAG_STRUC_wmi_roam_configure_mawc_cmd_fixed_param */
+    A_UINT32 tlv_header;
+    /* Unique id identifying the VDEV */
+    A_UINT32 vdev_id;
+    /* enable(1) or disable(0) MAWC */
+    A_UINT32 enable;
+    /* data traffic load (kBps) to register CMC */
+    A_UINT32 traffic_load_threshold;
+    /* RSSI threshold (dBm) to scan for Best AP */
+    A_UINT32 best_ap_rssi_threshold;
+    /* high RSSI threshold adjustment in Stationary to suppress scan */
+    A_UINT32 rssi_stationary_high_adjust;
+    /* low RSSI threshold adjustment in Stationary to suppress scan */
+    A_UINT32 rssi_stationary_low_adjust;
+} wmi_roam_configure_mawc_cmd_fixed_param;
+
 #define WMI_PACKET_FILTER_COMPARE_DATA_LEN_DWORD     2
 #define WMI_PACKET_FILTER_MAX_CMP_PER_PACKET_FILTER  10
 
@@ -11434,6 +11561,172 @@ typedef struct {
     A_UINT32  vdev_id;
     A_UINT32  enable; /* WMI_PACKET_FILTER_RUNTIME_ENABLE */
 } WMI_PACKET_FILTER_ENABLE_CMD_fixed_param;
+
+#define WMI_LRO_INFO_TCP_FLAG_VALS_BITPOS  0
+#define WMI_LRO_INFO_TCP_FLAG_VALS_NUMBITS 9
+
+#define WMI_LRO_INFO_TCP_FLAG_VALS_SET(tcp_flag_u32, tcp_flag_values) \
+    WMI_SET_BITS(tcp_flag_u32, \
+    WMI_LRO_INFO_TCP_FLAG_VALS_BITPOS, \
+    WMI_LRO_INFO_TCP_FLAG_VALS_NUMBITS, \
+    tcp_flag_values)
+#define WMI_LRO_INFO_TCP_FLAG_VALS_GET(tcp_flag_u32) \
+    WMI_SET_BITS(tcp_flag_u32, \
+    WMI_LRO_INFO_TCP_FLAG_VALS_BITPOS, \
+    WMI_LRO_INFO_TCP_FLAG_VALS_NUMBITS)
+
+#define WMI_LRO_INFO_TCP_FLAGS_MASK_BITPOS  9
+#define WMI_LRO_INFO_TCP_FLAGS_MASK_NUMBITS 9
+
+#define WMI_LRO_INFO_TCP_FLAGS_MASK_SET(tcp_flag_u32, tcp_flags_mask) \
+    WMI_SET_BITS(tcp_flag_u32, \
+    WMI_LRO_INFO_TCP_FLAGS_MASK_BITPOS, \
+    WMI_LRO_INFO_TCP_FLAGS_MASK_NUMBITS, \
+    tcp_flags_mask)
+#define WMI_LRO_INFO_TCP_FLAGS_MASK_GET(tcp_flag_u32) \
+    WMI_SET_BITS(tcp_flag_u32, \
+    WMI_LRO_INFO_TCP_FLAGS_MASK_BITPOS, \
+    WMI_LRO_INFO_TCP_FLAGS_MASK_NUMBITS)
+
+typedef struct {
+    A_UINT32 tlv_header;
+    /**
+     * @brief lro_enable - indicates whether lro is enabled
+     * [0] LRO Enable
+     */
+    A_UINT32 lro_enable;
+    /**
+     * @brief tcp_flag_u32 - mask of which TCP flags to check and
+     *      values to check for
+     * [8:0] TCP flag values - If the TCP flags from the packet do not match
+     *       the values in this field after masking with TCP flags mask below,
+     *       LRO eligible will not be set
+     * [17:9] TCP flags mask - Mask field for comparing the TCP values
+     *       provided above with the TCP flags field in the received packet
+     * Use WMI_LRO_INFO_TCP_FLAG_VALS and WMI_LRO_INFO_TCP_FLAGS_MASK
+     * macros to isolate the mask field and values field that are packed
+     * into this u32 "word".
+     */
+    A_UINT32 tcp_flag_u32;
+    /**
+     * @brief toeplitz_hash_ipv4 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv4 packets. Contains
+     * bytes 0 to 3
+     *
+     * In this and all the below toeplitz_hash fields, the bytes are
+     * specified in little-endian order.  For example:
+     *     toeplitz_hash_ipv4_0_3 bits 7:0   holds seed byte 0
+     *     toeplitz_hash_ipv4_0_3 bits 15:8  holds seed byte 1
+     *     toeplitz_hash_ipv4_0_3 bits 23:16 holds seed byte 2
+     *     toeplitz_hash_ipv4_0_3 bits 31:24 holds seed byte 3
+     */
+    A_UINT32 toeplitz_hash_ipv4_0_3;
+
+    /**
+     * @brief toeplitz_hash_ipv4 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv4 packets. Contains
+     * bytes 4 to 7
+     */
+    A_UINT32 toeplitz_hash_ipv4_4_7;
+
+    /**
+     * @brief toeplitz_hash_ipv4 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv4 packets. Contains
+     * bytes 8 to 11
+     */
+    A_UINT32 toeplitz_hash_ipv4_8_11;
+
+    /**
+     * @brief toeplitz_hash_ipv4 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv4 packets. Contains
+     * bytes 12 to 15
+     */
+    A_UINT32 toeplitz_hash_ipv4_12_15;
+
+    /**
+     * @brief toeplitz_hash_ipv4 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv4 packets. Contains
+     * byte 16
+     */
+    A_UINT32 toeplitz_hash_ipv4_16;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 0 to 3
+     */
+    A_UINT32 toeplitz_hash_ipv6_0_3;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 4 to 7
+     */
+    A_UINT32 toeplitz_hash_ipv6_4_7;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 8 to 11
+     */
+    A_UINT32 toeplitz_hash_ipv6_8_11;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 12 to 15
+     */
+    A_UINT32 toeplitz_hash_ipv6_12_15;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 16 to 19
+     */
+    A_UINT32 toeplitz_hash_ipv6_16_19;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 20 to 22
+     */
+    A_UINT32 toeplitz_hash_ipv6_20_23;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 24 to 27
+     */
+    A_UINT32 toeplitz_hash_ipv6_24_27;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 28 to 31
+     */
+    A_UINT32 toeplitz_hash_ipv6_28_31;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 32 to 35
+     */
+    A_UINT32 toeplitz_hash_ipv6_32_35;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * bytes 36 to 39
+     */
+    A_UINT32 toeplitz_hash_ipv6_36_39;
+
+    /**
+     * @brief toeplitz_hash_ipv6 - contains seed needed to compute
+     * the flow id 5-tuple toeplitz hash for IPv6 packets. Contains
+     * byte 40
+     */
+    A_UINT32 toeplitz_hash_ipv6_40;
+} wmi_lro_info_cmd_fixed_param;
 
 /* ADD NEW DEFS HERE */
 

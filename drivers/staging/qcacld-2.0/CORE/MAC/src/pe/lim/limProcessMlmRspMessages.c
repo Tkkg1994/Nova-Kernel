@@ -540,6 +540,12 @@ limSendMlmAssocReq( tpAniSirGlobal pMac,
     PELOG1(limLog(pMac, LOG1, FL("SessionId:%d Authenticated with BSS"),
            psessionEntry->peSessionId);)
 
+    if (NULL == psessionEntry->pLimJoinReq) {
+        limLog(pMac, LOGE, FL("Join Request is NULL."));
+        /* No need to Assert. JOIN timeout will handle this error */
+        return;
+    }
+
     pMlmAssocReq = vos_mem_malloc(sizeof(tLimMlmAssocReq));
     if ( NULL == pMlmAssocReq ) {
         limLog(pMac, LOGP, FL("call to AllocateMemory failed for mlmAssocReq"));
@@ -1587,9 +1593,9 @@ limProcessMlmDeauthCnf(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
     if (LIM_IS_STA_ROLE(psessionEntry) ||
         LIM_IS_BT_AMP_STA_ROLE(psessionEntry)) {
         // Deauth Confirm from MLM
-        if (psessionEntry->limSmeState != eLIM_SME_WT_DEAUTH_STATE)
-        {
-            /**
+        if ((psessionEntry->limSmeState != eLIM_SME_WT_DISASSOC_STATE) &&
+            (psessionEntry->limSmeState != eLIM_SME_WT_DEAUTH_STATE)) {
+            /*
              * Should not have received Deauth confirm
              * from MLM in other states.
              * Log error

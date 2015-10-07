@@ -384,6 +384,7 @@ typedef struct sLimTimers
     TX_TIMER           gLimPeriodicJoinProbeReqTimer;
     TX_TIMER           gLimDisassocAckTimer;
     TX_TIMER           gLimDeauthAckTimer;
+    TX_TIMER           g_lim_periodic_auth_retry_timer;
     // This timer is started when single shot NOA insert msg is sent to FW for scan in P2P GO mode
     TX_TIMER           gLimP2pSingleShotNoaInsertTimer;
     /* This timer is used to convert active channel to
@@ -1069,6 +1070,7 @@ typedef struct sMacOpenParameters
  */
     tANI_U8 olIniInfo;
     v_BOOL_t ssdp;
+    bool enable_bcst_ptrn;
     /*
      * DFS Phyerror Filtering offload status from ini
      * 0 indicates offload disabled
@@ -1109,6 +1111,13 @@ typedef struct sMacOpenParameters
 
     bool      tx_chain_mask_cck;
     uint16_t  self_gen_frm_pwr;
+#ifdef WLAN_FEATURE_LPSS
+    bool is_lpass_enabled;
+#endif
+#ifdef WLAN_FEATURE_NAN
+    bool is_nan_enabled;
+#endif
+    uint16_t  max_mgmt_tx_fail_count;
 } tMacOpenParameters;
 
 typedef struct sHalMacStartParameters
@@ -1142,6 +1151,14 @@ struct vdev_type_nss {
     uint8_t tdls;
     uint8_t ocb;
 };
+
+typedef enum
+{
+	LIM_AUTH_ACK_NOT_RCD,
+	LIM_AUTH_ACK_RCD_SUCCESS,
+	LIM_AUTH_ACK_RCD_FAILURE,
+} t_auth_ack_status;
+
 // -------------------------------------------------------------------
 /// MAC Sirius parameter structure
 typedef struct sAniSirGlobal
@@ -1233,6 +1250,8 @@ typedef struct sAniSirGlobal
     bool per_band_chainmask_supp;
     struct vdev_type_nss vdev_type_nss_2g;
     struct vdev_type_nss vdev_type_nss_5g;
+    t_auth_ack_status auth_ack_status;
+    bool first_scan_done;
 } tAniSirGlobal;
 
 typedef enum

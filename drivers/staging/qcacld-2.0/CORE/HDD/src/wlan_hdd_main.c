@@ -614,6 +614,42 @@ done:
 
 #endif /* FEATURE_GREEN_AP */
 
+/**
+ * hdd_lost_link_info_cb() - callback function to get lost link information
+ * @context: HDD context
+ * @lost_link_info: lost link information
+ *
+ * Return: none
+ */
+static void hdd_lost_link_info_cb(void *context,
+				  struct sir_lost_link_info *lost_link_info)
+{
+	hdd_context_t *hdd_ctx = (hdd_context_t *)context;
+	int status;
+	hdd_adapter_t *adapter;
+
+	status = wlan_hdd_validate_context(hdd_ctx);
+	if (0 != status) {
+		hddLog(LOGE, "%s: HDD context is not valid", __func__);
+		return;
+	}
+
+	if (NULL == lost_link_info) {
+		hddLog(LOGE, "%s: lost_link_info is NULL", __func__);
+		return;
+	}
+
+	adapter = hdd_get_adapter_by_vdev(hdd_ctx, lost_link_info->vdev_id);
+	if (NULL == adapter) {
+		hddLog(LOGE, "%s: invalid adapter", __func__);
+		return;
+	}
+
+	adapter->rssi_on_disconnect = lost_link_info->rssi;
+	hddLog(LOG1, "%s: rssi on disconnect %d",
+		     __func__, adapter->rssi_on_disconnect);
+}
+
 #if defined (FEATURE_WLAN_MCC_TO_SCC_SWITCH) || defined (FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE)
 /**---------------------------------------------------------------------------
 
@@ -3936,6 +3972,146 @@ static int drv_cmd_set_fcc_channel(hdd_context_t *hdd_ctx, uint8_t *cmd,
 	return ret;
 }
 
+/**
+ * hdd_set_rx_filter() - set RX filter
+ * @adapter: Pointer to adapter
+ * @action: Filter action
+ * @pattern: Address pattern
+ *
+ * Address pattern is most significant byte of address for example
+ * 0x01 for IPV4 multicast address
+ * 0x33 for IPV6 multicast address
+ * 0xFF for broadcast address
+ *
+ * Return: 0 for success, non-zero for failure
+ */
+static int hdd_set_rx_filter(hdd_adapter_t *adapter, bool action,
+			uint8_t pattern)
+{
+	int ret;
+	uint8_t i;
+	tHalHandle handle;
+	tSirRcvFltMcAddrList *filter;
+	hdd_context_t* hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (0 != ret)
+		return ret;
+
+	handle = hdd_ctx->hHal;
+
+	if (NULL == handle) {
+		hddLog(LOGE, FL("HAL Handle is NULL"));
+		return -EINVAL;
+	}
+
+	/*
+	 * If action is false it means start dropping packets
+	 * Set addr_filter_pattern which will be used when sending
+	 * MC/BC address list to target
+	 */
+	if (!action)
+		adapter->addr_filter_pattern = pattern;
+	else
+		adapter->addr_filter_pattern = 0;
+
+	if (((adapter->device_mode == WLAN_HDD_INFRA_STATION) ||
+		(adapter->device_mode == WLAN_HDD_P2P_CLIENT)) &&
+		adapter->mc_addr_list.mc_cnt &&
+		hdd_connIsConnected(WLAN_HDD_GET_STATION_CTX_PTR(adapter))) {
+
+
+		filter = vos_mem_malloc(sizeof(*filter));
+		if (NULL == filter) {
+			hddLog(LOGE, FL("Could not allocate Memory"));
+			return -ENOMEM;
+		}
+		vos_mem_zero(filter, sizeof(*filter));
+		filter->action = action;
+		for (i = 0; i < adapter->mc_addr_list.mc_cnt; i++) {
+			if (!memcmp(adapter->mc_addr_list.addr[i],
+				&pattern, 1)) {
+				memcpy(filter->multicastAddr[i],
+					adapter->mc_addr_list.addr[i],
+					sizeof(adapter->mc_addr_list.addr[i]));
+				filter->ulMulticastAddrCnt++;
+				hddLog(LOG1, "%s RX filter : addr ="
+				    MAC_ADDRESS_STR,
+				    action ? "setting" : "clearing",
+				    MAC_ADDR_ARRAY(filter->multicastAddr[i]));
+			}
+		}
+		/* Set rx filter */
+		sme_8023MulticastList(handle, adapter->sessionId, filter);
+		vos_mem_free(filter);
+	} else {
+		hddLog(LOGW, FL("mode %d mc_cnt %d"),
+			adapter->device_mode, adapter->mc_addr_list.mc_cnt);
+	}
+
+	return 0;
+}
+
+/**
+ * hdd_driver_rxfilter_comand_handler() - RXFILTER driver command handler
+ * @command: Pointer to input string driver command
+ * @adapter: Pointer to adapter
+ * @action: Action to enable/disable filtering
+ *
+ * If action == false
+ * Start filtering out data packets based on type
+ * RXFILTER-REMOVE 0 -> Start filtering out unicast data packets
+ * RXFILTER-REMOVE 1 -> Start filtering out broadcast data packets
+ * RXFILTER-REMOVE 2 -> Start filtering out IPV4 mcast data packets
+ * RXFILTER-REMOVE 3 -> Start filtering out IPV6 mcast data packets
+ *
+ * if action == true
+ * Stop filtering data packets based on type
+ * RXFILTER-ADD 0 -> Stop filtering unicast data packets
+ * RXFILTER-ADD 1 -> Stop filtering broadcast data packets
+ * RXFILTER-ADD 2 -> Stop filtering IPV4 mcast data packets
+ * RXFILTER-ADD 3 -> Stop filtering IPV6 mcast data packets
+ *
+ * Current implementation only supports IPV4 address filtering by
+ * selectively allowing IPV4 multicast data packest based on
+ * address list received in .ndo_set_rx_mode
+ *
+ * Return: 0 for success, non-zero for failure
+ */
+static int hdd_driver_rxfilter_comand_handler(uint8_t *command,
+						hdd_adapter_t *adapter,
+						bool action)
+{
+	int ret = 0;
+	uint8_t *value;
+	uint8_t type;
+
+	value = command;
+	/* Skip space after RXFILTER-REMOVE OR RXFILTER-ADD based on action */
+	if (!action)
+		value = command + 16;
+	else
+		value = command + 13;
+	ret = kstrtou8(value, 10, &type);
+	if (ret < 0) {
+		hddLog(LOGE,
+			FL("kstrtou8 failed invalid input value %d"), type);
+		return -EINVAL;
+	}
+
+	switch (type) {
+	case 2:
+		/* Set rx filter for IPV4 multicast data packets */
+		ret = hdd_set_rx_filter(adapter, action, 0x01);
+		break;
+	default:
+		hddLog(LOG1, FL("Unsupported RXFILTER type %d"), type);
+		break;
+	}
+
+	return ret;
+}
+
 static int hdd_driver_command(hdd_adapter_t *pAdapter,
                               hdd_priv_data_t *ppriv_data)
 {
@@ -6120,6 +6296,14 @@ static int hdd_driver_command(hdd_adapter_t *pAdapter,
 
            ret = drv_cmd_set_fcc_channel(pHddCtx, command, 15);
 
+       } else if (strncmp(command, "RXFILTER-REMOVE", 15) == 0) {
+
+           ret = hdd_driver_rxfilter_comand_handler(command, pAdapter, false);
+
+       } else if (strncmp(command, "RXFILTER-ADD", 12) == 0) {
+
+           ret = hdd_driver_rxfilter_comand_handler(command, pAdapter, true);
+
        } else {
            MTRACE(vos_trace(VOS_MODULE_ID_HDD,
                             TRACE_CODE_HDD_UNSUPPORTED_IOCTL,
@@ -7759,9 +7943,18 @@ static void __hdd_set_multicast_list(struct net_device *dev)
       netdev_for_each_mc_addr(ha, dev) {
          if (i == mc_count)
             break;
-         /* Skip IPv6 router solicitation address */
-         if (!memcmp(ha->addr, ipv6_router_solicitation, ETH_ALEN)) {
-                hddLog(LOG1, FL("skip ipv6 router solicitation address"));
+         /*
+          * Skip following addresses:
+          * 1)IPv6 router solicitation address
+          * 2)Any other address pattern if its set during RXFILTER REMOVE
+          *   driver command based on addr_filter_pattern
+          */
+         if ((!memcmp(ha->addr, ipv6_router_solicitation, ETH_ALEN)) ||
+             (pAdapter->addr_filter_pattern && (!memcmp(ha->addr,
+                                 &pAdapter->addr_filter_pattern, 1)))) {
+                hddLog(LOG1, FL("MC/BC filtering Skip addr ="MAC_ADDRESS_STR),
+                     MAC_ADDR_ARRAY(ha->addr));
+
                 pAdapter->mc_addr_list.mc_cnt--;
                 continue;
          }
@@ -7944,6 +8137,7 @@ static hdd_adapter_t* hdd_alloc_station_adapter( hdd_context_t *pHddCtx, tSirMac
       /* set pWlanDev's parent to underlying device */
       SET_NETDEV_DEV(pWlanDev, pHddCtx->parent_dev);
       hdd_wmm_init( pAdapter );
+      pAdapter->runtime_ctx = vos_runtime_pm_prevent_suspend_init(name);
    }
 
    return pAdapter;
@@ -8284,6 +8478,8 @@ void hdd_cleanup_adapter(hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
       return;
    }
 
+   vos_runtime_pm_prevent_suspend_deinit(pAdapter->runtime_ctx);
+   pAdapter->runtime_ctx = NULL;
    /* The adapter is marked as closed. When hdd_wlan_exit() call returns,
     * the driver is almost closed and cannot handle either control
     * messages or data. However, unregister_netdevice() call above will
@@ -8994,7 +9190,7 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
      hdd_string_to_u8_array( pHddCtx->cfg_ini->enableFwModuleLogLevel,
                              moduleLoglevel,
                              &numEntries,
-                             FW_MODULE_LOG_LEVEL_STRING_LENGTH );
+                             FW_MODULE_LOG_LEVEL_STRING_LENGTH);
      while (count < numEntries)
      {
          /* FW module log level input string looks like below:
@@ -9032,6 +9228,8 @@ hdd_adapter_t* hdd_open_adapter( hdd_context_t *pHddCtx, tANI_U8 session_type,
    return pAdapter;
 
 err_free_netdev:
+   vos_runtime_pm_prevent_suspend_deinit(pAdapter->runtime_ctx);
+   pAdapter->runtime_ctx = NULL;
    free_netdev(pAdapter->dev);
    wlan_hdd_release_intf_addr( pHddCtx,
                                pAdapter->macAddressCurrent.bytes );
@@ -9439,6 +9637,41 @@ VOS_STATUS hdd_reset_all_adapters( hdd_context_t *pHddCtx )
    return VOS_STATUS_SUCCESS;
 }
 
+/**
+ * hdd_connect_result() - API to send connection status to supplicant
+ * @dev: network device
+ * @bssid: bssid to which we want to associate
+ * @req_ie: Request Information Element
+ * @req_ie_len: len of the req IE
+ * @resp_ie: Response IE
+ * @resp_ie_len: len of ht response IE
+ * @status: status
+ * @gfp: Kernel Flag
+ *
+ * The API is a wrapper to send connection status to supplicant
+ * and allow runtime suspend
+ *
+ * Return: Void
+ */
+
+void hdd_connect_result(struct net_device *dev,
+			const u8 *bssid,
+			const u8 *req_ie,
+			size_t req_ie_len,
+			const u8 * resp_ie,
+			size_t resp_ie_len,
+			u16 status,
+			gfp_t gfp)
+{
+	hdd_adapter_t *padapter = (hdd_adapter_t *) netdev_priv(dev);
+
+	cfg80211_connect_result(dev, bssid, req_ie, req_ie_len,
+				resp_ie, resp_ie_len, status, gfp);
+
+	vos_runtime_pm_allow_suspend(padapter->runtime_ctx);
+}
+
+
 VOS_STATUS hdd_start_all_adapters( hdd_context_t *pHddCtx )
 {
    hdd_adapter_list_node_t *pAdapterNode = NULL, *pNext = NULL;
@@ -9497,7 +9730,7 @@ VOS_STATUS hdd_start_all_adapters( hdd_context_t *pHddCtx )
                * Indicate connect failure to supplicant if we were in the
                * process of connecting
                */
-               cfg80211_connect_result(pAdapter->dev, NULL,
+               hdd_connect_result(pAdapter->dev, NULL,
                                        NULL, 0, NULL, 0,
                                        WLAN_STATUS_ASSOC_DENIED_UNSPEC,
                                        GFP_KERNEL);
@@ -9569,6 +9802,9 @@ VOS_STATUS hdd_reconnect_all_adapters( hdd_context_t *pHddCtx )
          hddLog(VOS_TRACE_LEVEL_INFO,
             "%s: Set HDD connState to eConnectionState_NotConnected",
                    __func__);
+         if (eConnectionState_Associated == pHddStaCtx->conn_info.connState) {
+             wlan_hdd_decr_active_session(pHddCtx, pAdapter->device_mode);
+         }
          pHddStaCtx->conn_info.connState = eConnectionState_NotConnected;
          init_completion(&pAdapter->disconnect_comp_var);
          sme_RoamDisconnect(pHddCtx->hHal, pAdapter->sessionId,
@@ -9720,7 +9956,7 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
                                         pHddCtx->cfg_ini->TxFlowMaxQueueDepth);
              /* Temporary set log level as error
               * TX Flow control feature settled down, will lower log level */
-             hddLog(VOS_TRACE_LEVEL_ERROR,
+             hddLog(LOG1,
                     "MODE %s(%d), CH %d, LWM %d, HWM %d, TXQDEP %d",
                     hdd_device_mode_to_string(pAdapter->device_mode),
                     pAdapter->device_mode,
@@ -9746,7 +9982,7 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
                 WLANTL_SetAdapterMaxQDepth(pHddCtx->pvosContext,
                                            pAdapter->sessionId,
                                            pHddCtx->cfg_ini->TxHbwFlowMaxQueueDepth);
-                hddLog(LOGE,
+                hddLog(LOG1,
                       "SCC: MODE %s(%d), CH %d, LWM %d, HWM %d, TXQDEP %d",
                       hdd_device_mode_to_string(pAdapter->device_mode),
                       pAdapter->device_mode,
@@ -9771,7 +10007,7 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
                                            pHddCtx->cfg_ini->TxHbwFlowMaxQueueDepth);
                 /* Temporary set log level as error
                  * TX Flow control feature settled down, will lower log level */
-                hddLog(VOS_TRACE_LEVEL_ERROR,
+                hddLog(LOG1,
                       "SCC: MODE %s(%d), CH %d, LWM %d, HWM %d, TXQDEP %d",
                       hdd_device_mode_to_string(preAdapterContext->device_mode),
                       preAdapterContext->device_mode,
@@ -9816,7 +10052,7 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
                                         pHddCtx->cfg_ini->TxHbwFlowMaxQueueDepth);
                 /* Temporary set log level as error
                  * TX Flow control feature settled down, will lower log level */
-                hddLog(LOGE,
+                hddLog(LOG1,
                     "MCC: MODE %s(%d), CH %d, LWM %d, HWM %d, TXQDEP %d",
                     hdd_device_mode_to_string(pAdapter5->device_mode),
                     pAdapter5->device_mode,
@@ -9841,7 +10077,7 @@ void hdd_dump_concurrency_info(hdd_context_t *pHddCtx)
                                         pHddCtx->cfg_ini->TxLbwFlowMaxQueueDepth);
                 /* Temporary set log level as error
                  * TX Flow control feature settled down, will lower log level */
-                hddLog(LOGE,
+                hddLog(LOG1,
                     "MCC: MODE %s(%d), CH %d, LWM %d, HWM %d, TXQDEP %d",
                     hdd_device_mode_to_string(pAdapter2_4->device_mode),
                     pAdapter2_4->device_mode,
@@ -10438,7 +10674,7 @@ static void hdd_wlan_register_ip6_notifier(hdd_context_t *hdd_ctx)
 	if (ret)
 		hddLog(LOGE, FL("Failed to register IPv6 notifier"));
 	else
-		hddLog(LOGE, FL("Registered IPv6 notifier"));
+		hddLog(LOG1, FL("Registered IPv6 notifier"));
 
 	return;
 }
@@ -11177,14 +11413,16 @@ static VOS_STATUS wlan_hdd_reg_init(hdd_context_t *hdd_ctx)
 
 #ifdef MSM_PLATFORM
 void hdd_cnss_request_bus_bandwidth(hdd_context_t *pHddCtx,
-        uint64_t tx_packets, uint64_t rx_packets)
+        const uint64_t tx_packets, const uint64_t rx_packets)
 {
 #ifdef CONFIG_CNSS
     uint64_t total = tx_packets + rx_packets;
+    uint64_t temp_rx = 0;
+    uint64_t temp_tx = 0;
     enum cnss_bus_width_type next_vote_level = CNSS_BUS_WIDTH_NONE;
+    enum wlan_tp_level next_rx_level = WLAN_SVC_TP_NONE;
+    enum wlan_tp_level next_tx_level = WLAN_SVC_TP_NONE;
 
-    uint64_t temp_rx = (rx_packets + pHddCtx->prev_rx)/2;
-    enum cnss_bus_width_type next_rx_level = CNSS_BUS_WIDTH_NONE;
 
     if (total > pHddCtx->cfg_ini->busBandwidthHighThreshold)
         next_vote_level = CNSS_BUS_WIDTH_HIGH;
@@ -11212,11 +11450,13 @@ void hdd_cnss_request_bus_bandwidth(hdd_context_t *pHddCtx,
         }
     }
 
+    /* fine-tuning parameters for RX Flows */
+    temp_rx = (rx_packets + pHddCtx->prev_rx) / 2;
     pHddCtx->prev_rx = rx_packets;
     if (temp_rx > pHddCtx->cfg_ini->tcpDelackThresholdHigh)
-        next_rx_level = CNSS_BUS_WIDTH_HIGH;
+        next_rx_level = WLAN_SVC_TP_HIGH;
     else
-        next_rx_level = CNSS_BUS_WIDTH_LOW;
+        next_rx_level = WLAN_SVC_TP_LOW;
 
     pHddCtx->hdd_txrx_hist[pHddCtx->hdd_txrx_hist_idx].next_rx_level
                                                           = next_rx_level;
@@ -11230,6 +11470,27 @@ void hdd_cnss_request_bus_bandwidth(hdd_context_t *pHddCtx,
                                     &next_rx_level,
                                     sizeof(next_rx_level));
     }
+
+    /* fine-tuning parameters for TX Flows */
+    temp_tx = (tx_packets + pHddCtx->prev_tx) / 2;
+    pHddCtx->prev_tx = tx_packets;
+    if (temp_tx > pHddCtx->cfg_ini->tcp_tx_high_tput_thres)
+        next_tx_level = WLAN_SVC_TP_HIGH;
+    else
+        next_tx_level = WLAN_SVC_TP_LOW;
+
+    if (pHddCtx->cur_tx_level != next_tx_level) {
+        hddLog(VOS_TRACE_LEVEL_DEBUG,
+               "%s: change TCP TX trigger level %d, average_tx: %llu ",
+               __func__, next_tx_level, temp_tx);
+        pHddCtx->cur_tx_level = next_tx_level;
+        wlan_hdd_send_svc_nlink_msg(WLAN_SVC_WLAN_TP_TX_IND,
+                                    &next_tx_level,
+                                    sizeof(next_tx_level));
+    }
+
+    pHddCtx->hdd_txrx_hist[pHddCtx->hdd_txrx_hist_idx].next_tx_level
+                                                          = next_tx_level;
 
     pHddCtx->hdd_txrx_hist_idx++;
     pHddCtx->hdd_txrx_hist_idx &= NUM_TX_RX_HISTOGRAM_MASK;
@@ -11347,16 +11608,18 @@ void wlan_hdd_display_tx_rx_histogram(hdd_context_t *pHddCtx)
 #endif
 
     hddLog(VOS_TRACE_LEVEL_ERROR,"index, total_rx, interval_rx,"
-		   "total_tx, interval_tx, next_vote_level, next_rx_level");
+           "total_tx, interval_tx, next_vote_level, next_rx_level, "
+           "next_tx_level");
     for (i=0; i < NUM_TX_RX_HISTOGRAM; i++){
         hddLog(VOS_TRACE_LEVEL_ERROR,
-               "%d: %llu, %llu, %llu, %llu, %d, %d",
+               "%d: %llu, %llu, %llu, %llu, %d, %d, %d",
                i, pHddCtx->hdd_txrx_hist[i].total_rx,
                pHddCtx->hdd_txrx_hist[i].interval_rx,
                pHddCtx->hdd_txrx_hist[i].total_tx,
                pHddCtx->hdd_txrx_hist[i].interval_tx,
                pHddCtx->hdd_txrx_hist[i].next_vote_level,
-               pHddCtx->hdd_txrx_hist[i].next_rx_level);
+               pHddCtx->hdd_txrx_hist[i].next_rx_level,
+               pHddCtx->hdd_txrx_hist[i].next_tx_level);
     }
     return;
 }
@@ -12268,9 +12531,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
 
    mutex_init(&pHddCtx->sap_lock);
 
-   pHddCtx->isLoadInProgress = FALSE;
-   pHddCtx->wifi_turn_on_time_since_boot = adf_get_boottime();
-
 #if defined(CONFIG_HDD_INIT_WITH_RTNL_LOCK)
    if (rtnl_lock_enable == TRUE) {
       rtnl_lock_enable = FALSE;
@@ -12296,8 +12556,6 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
            "qcom_sap_wakelock");
 
    hdd_hostapd_channel_wakelock_init(pHddCtx);
-
-   vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, FALSE);
 
    // Initialize the restart logic
    wlan_hdd_restart_init(pHddCtx);
@@ -12421,6 +12679,15 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
                              pHddCtx->target_hw_name);
 #endif
 
+   if (WLAN_HDD_RX_HANDLE_RPS == pHddCtx->cfg_ini->rxhandle)
+      hdd_dp_util_send_rps_ind(pHddCtx);
+
+   hal_status = sme_set_lost_link_info_cb(pHddCtx->hHal,
+                                          hdd_lost_link_info_cb);
+   /* print error and not block the startup process */
+   if (eHAL_STATUS_SUCCESS != hal_status)
+       hddLog(LOGE, "%s: set lost link info callback failed", __func__);
+
    /* Initialize the RoC Request queue and work. */
    hdd_list_init((&pHddCtx->hdd_roc_req_q), MAX_ROC_REQ_QUEUE_ENTRY);
 #ifdef CONFIG_CNSS
@@ -12446,9 +12713,11 @@ int hdd_wlan_startup(struct device *dev, v_VOID_t *hif_sc)
    if (ret)
       hddLog(LOGE, FL("Failed to register IPv4 notifier"));
    else
-      hddLog(LOGE, FL("Registered IPv4 notifier"));
+      hddLog(LOG1, FL("Registered IPv4 notifier"));
 
    ol_pktlog_init(hif_sc);
+   pHddCtx->isLoadInProgress = FALSE;
+   vos_set_load_unload_in_progress(VOS_MODULE_ID_VOSS, FALSE);
    complete(&wlan_start_comp);
    goto success;
 
@@ -12608,6 +12877,14 @@ static int hdd_driver_init( void)
 
    ENTER();
 
+#ifdef TIMER_MANAGER
+      vos_timer_manager_init();
+#endif
+
+#ifdef MEMORY_DEBUG
+      vos_mem_init();
+#endif
+
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
    hdd_prevent_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
    /*
@@ -12647,14 +12924,6 @@ static int hdd_driver_init( void)
          }
          return ret_status;
       }
-#endif
-
-#ifdef TIMER_MANAGER
-      vos_timer_manager_init();
-#endif
-
-#ifdef MEMORY_DEBUG
-      vos_mem_init();
 #endif
 
       /* Preopen VOSS so that it is ready to start at least SAL */
@@ -13876,6 +14145,8 @@ void wlan_hdd_send_svc_nlink_msg(int type, void *data, int len)
     case WLAN_SVC_DFS_RADAR_DETECT_IND:
     case WLAN_SVC_DFS_ALL_CHANNEL_UNAVAIL_IND:
     case WLAN_SVC_WLAN_TP_IND:
+    case WLAN_SVC_WLAN_TP_TX_IND:
+    case WLAN_SVC_RPS_ENABLE_IND:
         ani_hdr->length = len;
         nlh->nlmsg_len = NLMSG_LENGTH((sizeof(tAniMsgHdr) + len));
         nl_data = (char *)ani_hdr + sizeof(tAniMsgHdr);

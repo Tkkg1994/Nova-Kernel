@@ -251,6 +251,26 @@ static inline void vos_fw_hash_check_config(struct ol_softc *scn,
 					hdd_context_t *pHddCtx) { }
 #endif
 
+#ifdef WLAN_FEATURE_NAN
+/**
+ * vos_set_nan_enable() - set nan enable flag in mac open param
+ * @wma_handle: Pointer to mac open param
+ * @hdd_ctx: Pointer to hdd context
+ *
+ * Return: none
+ */
+static void vos_set_nan_enable(tMacOpenParameters *param,
+					hdd_context_t *hdd_ctx)
+{
+	param->is_nan_enabled = hdd_ctx->cfg_ini->enable_nan_support;
+}
+#else
+static void vos_set_nan_enable(tMacOpenParameters *param,
+					hdd_context_t *pHddCtx)
+{
+}
+#endif
+
 /*---------------------------------------------------------------------------
 
   \brief vos_open() - Open the vOSS Module
@@ -452,8 +472,10 @@ VOS_STATUS vos_open( v_CONTEXT_t *pVosContext, v_SIZE_t hddContextSize )
    */
   macOpenParms.dfsPhyerrFilterOffload =
                         pHddCtx->cfg_ini->fDfsPhyerrFilterOffload;
-  if (pHddCtx->cfg_ini->ssdp)
-      macOpenParms.ssdp = pHddCtx->cfg_ini->ssdp;
+
+  macOpenParms.ssdp = pHddCtx->cfg_ini->ssdp;
+  macOpenParms.enable_bcst_ptrn = pHddCtx->cfg_ini->bcastptrn;
+
 #ifdef FEATURE_WLAN_RA_FILTERING
    macOpenParms.RArateLimitInterval = pHddCtx->cfg_ini->RArateLimitInterval;
    macOpenParms.IsRArateLimitEnabled = pHddCtx->cfg_ini->IsRArateLimitEnabled;
@@ -480,6 +502,14 @@ VOS_STATUS vos_open( v_CONTEXT_t *pVosContext, v_SIZE_t hddContextSize )
 
     macOpenParms.tx_chain_mask_cck = pHddCtx->cfg_ini->tx_chain_mask_cck;
     macOpenParms.self_gen_frm_pwr = pHddCtx->cfg_ini->self_gen_frm_pwr;
+    macOpenParms.max_mgmt_tx_fail_count =
+                     pHddCtx->cfg_ini->max_mgmt_tx_fail_count;
+
+#ifdef WLAN_FEATURE_LPSS
+    macOpenParms.is_lpass_enabled = pHddCtx->cfg_ini->enablelpasssupport;
+#endif
+
+   vos_set_nan_enable(&macOpenParms, pHddCtx);
 
    vStatus = WDA_open( gpVosContext, gpVosContext->pHDDContext,
                        hdd_update_tgt_cfg,
@@ -993,6 +1023,12 @@ VOS_STATUS vos_close( v_CONTEXT_t vosContext )
 {
   VOS_STATUS vosStatus;
 
+  vosStatus = wma_wmi_work_close( vosContext );
+  if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+     VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+         "%s: Failed to close wma_wmi_work", __func__);
+     VOS_ASSERT( VOS_IS_STATUS_SUCCESS( vosStatus ) );
+  }
 
   if (gpVosContext->htc_ctx)
   {
@@ -1147,12 +1183,6 @@ v_VOID_t* vos_get_context( VOS_MODULE_ID moduleId,
       break;
     }
 #endif
-
-    case VOS_MODULE_ID_HDD_SOFTAP:
-    {
-      pModContext = gpVosContext->pHDDSoftAPContext;
-      break;
-    }
 
     case VOS_MODULE_ID_HDD:
     {
@@ -2054,8 +2084,8 @@ vos_fetch_tl_cfg_parms
   pTLConfig->uDelayedTriggerFrmInt = pConfig->DelayedTriggerFrmInt;
   pTLConfig->uMinFramesProcThres = pConfig->MinFramesProcThres;
   pTLConfig->ip_checksum_offload = pConfig->enableIPChecksumOffload;
-  pTLConfig->enable_rxthread = pConfig->enableRxThread;
-
+  pTLConfig->enable_rxthread =
+    (WLAN_HDD_RX_HANDLE_RX_THREAD == pConfig->rxhandle) ? 1 : 0;
 }
 
 /*---------------------------------------------------------------------------
@@ -2145,6 +2175,13 @@ VOS_STATUS vos_shutdown(v_CONTEXT_t vosContext)
                 "%s: Failed to close WDA!", __func__);
       VOS_ASSERT(VOS_IS_STATUS_SUCCESS(vosStatus));
     }
+  }
+
+  vosStatus = wma_wmi_work_close(vosContext);
+  if (!VOS_IS_STATUS_SUCCESS(vosStatus)) {
+     VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+               "%s: Failed to close wma_wmi_work!", __func__);
+     VOS_ASSERT(VOS_IS_STATUS_SUCCESS(vosStatus));
   }
 
   if (gpVosContext->htc_ctx)

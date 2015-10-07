@@ -879,8 +879,12 @@ eNVChannelEnabledType vos_nv_getChannelEnabledState
 static int bw20_ch_index_to_bw40_ch_index(int k)
 {
    int m = -1;
-   if (k >= RF_CHAN_1 && k <= RF_CHAN_14)
+   if (k >= RF_CHAN_1 && k <= RF_CHAN_13)
    {
+       /*
+        * Channel bonding not valid for channel 14,
+        * So dont consider it
+        */
       m = k - RF_CHAN_1 + RF_CHAN_BOND_3 ;
       if (m > RF_CHAN_BOND_11)
          m = RF_CHAN_BOND_11;
@@ -1160,8 +1164,16 @@ VOS_STATUS vos_nv_getRegDomainFromCountryCode( v_REGDOMAIN_t *pRegDomain,
 
 #ifdef FEATURE_STATICALLY_ADD_11P_CHANNELS
 #define DEFAULT_11P_POWER (30)
-// Returns whether a channel is valid for DSRC.
-static int is_dsrc_channel(v_U16_t center_freq)
+#endif
+
+/* vos_is_dsrc_channel() - is the channel DSRC
+ *
+ * @center_freq: center freq of the channel
+ *
+ * Return: true if dsrc channel
+ *         false otherwise
+ */
+bool vos_is_dsrc_channel(uint16_t center_freq)
 {
     switch (center_freq) {
     case 5852:
@@ -1178,7 +1190,7 @@ static int is_dsrc_channel(v_U16_t center_freq)
     }
     return 0;
 }
-#endif
+
 
 /* create_linux_regulatory_entry to populate internal structures from wiphy */
 static int create_linux_regulatory_entry(struct wiphy *wiphy,
@@ -1230,12 +1242,7 @@ static int create_linux_regulatory_entry(struct wiphy *wiphy,
             continue;
 
         if (wiphy->bands[i] == NULL)
-        {
-
-            VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
-                      "error: wiphy->bands is NULL, i = %d", i);
             continue;
-        }
 
         /* internal channels[] is one continous array for both 2G and 5G bands
            m is internal starting channel index for each band */
@@ -1319,7 +1326,7 @@ static int create_linux_regulatory_entry(struct wiphy *wiphy,
             }
 
 #ifdef FEATURE_STATICALLY_ADD_11P_CHANNELS
-            if (is_dsrc_channel(wiphy->bands[i]->channels[j].center_freq))
+            if (vos_is_dsrc_channel(wiphy->bands[i]->channels[j].center_freq))
             {
                 pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].
                     channels[k].enabled = NV_CHANNEL_ENABLE;
@@ -1341,8 +1348,15 @@ static int create_linux_regulatory_entry(struct wiphy *wiphy,
 
             /* nv cannot distinguish between DFS and passive channels */
             else if (wiphy->bands[i]->channels[j].flags &
-                    (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_PASSIVE_SCAN))
+                     (IEEE80211_CHAN_RADAR | IEEE80211_CHAN_PASSIVE_SCAN |
+                      IEEE80211_CHAN_INDOOR_ONLY))
             {
+
+                if (wiphy->bands[i]->channels[j].flags &
+                    IEEE80211_CHAN_INDOOR_ONLY)
+                    wiphy->bands[i]->channels[j].flags |=
+                        IEEE80211_CHAN_PASSIVE_SCAN;
+
                 pnvEFSTable->halnv.tables.regDomains[temp_reg_domain].channels[k].enabled =
                     NV_CHANNEL_DFS;
 
@@ -1812,10 +1826,7 @@ VOS_STATUS vos_init_wiphy_from_nv_bin(void)
     {
 
         if (wiphy->bands[i] == NULL)
-        {
-            pr_info("error: wiphy->bands[i] is NULL, i = %d\n", i);
             continue;
-        }
 
         /* internal channels[] is one continous array for both 2G and 5G bands
            m is internal starting channel index for each band */

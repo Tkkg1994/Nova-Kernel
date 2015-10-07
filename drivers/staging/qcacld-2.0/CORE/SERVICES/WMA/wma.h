@@ -77,10 +77,10 @@
 /** Private **/
 #define WMA_CFG_NV_DNLD_TIMEOUT            500
 #define WMA_READY_EVENTID_TIMEOUT          2000
-#define WMA_TGT_SUSPEND_COMPLETE_TIMEOUT   3000
+#define WMA_TGT_SUSPEND_COMPLETE_TIMEOUT   6000
 #define WMA_WAKE_LOCK_TIMEOUT              1000
-#define WMA_MAX_RESUME_RETRY               10
-#define WMA_RESUME_TIMEOUT                 3000
+#define WMA_MAX_RESUME_RETRY               100
+#define WMA_RESUME_TIMEOUT                 6000
 #define WMA_TGT_WOW_TX_COMPLETE_TIMEOUT    2000
 #define MAX_MEM_CHUNKS                     32
 #define WMA_CRASH_INJECT_TIMEOUT           5000
@@ -624,6 +624,7 @@ typedef struct wma_handle {
 	void *htc_handle;
 	void *vos_context;
 	void *mac_context;
+	void *runtime_pm_ctx;
 
 	vos_event_t wma_ready_event;
 	vos_event_t wma_resume_event;
@@ -740,6 +741,7 @@ typedef struct wma_handle {
 	 */
 	u_int8_t ol_ini_info;
 	v_BOOL_t ssdp;
+	bool enable_bcst_ptrn;
 #ifdef FEATURE_RUNTIME_PM
 	v_BOOL_t runtime_pm;
 	u_int32_t auto_time;
@@ -765,6 +767,10 @@ typedef struct wma_handle {
 
 	u_int8_t dfs_phyerr_filter_offload;
 	v_BOOL_t suitable_ap_hb_failure;
+	/* record the RSSI when suitable_ap_hb_failure for later usage to
+	 * report RSSI at beacon miss scenario
+	 */
+	uint32_t suitable_ap_hb_failure_rssi;
 
 	/* IBSS Power Save config Parameters */
 	ibss_power_save_params wma_ibss_power_save_params;
@@ -772,7 +778,13 @@ typedef struct wma_handle {
 	v_BOOL_t IsRArateLimitEnabled;
 	u_int16_t RArateLimitInterval;
 #endif
+#ifdef WLAN_FEATURE_LPSS
+	bool is_lpass_enabled;
+#endif
 
+#ifdef WLAN_FEATURE_NAN
+	bool is_nan_enabled;
+#endif
 
 	/* Powersave Configuration Parameters */
 	u_int8_t staMaxLIModDtim;
@@ -815,6 +827,7 @@ typedef struct wma_handle {
 	uint32_t wow_ipv6_mcast_na_stats;
 	uint32_t wow_wakeup_enable_mask;
 	uint32_t wow_wakeup_disable_mask;
+	uint16_t max_mgmt_tx_fail_count;
 }t_wma_handle, *tp_wma_handle;
 
 struct wma_target_cap {
@@ -1198,6 +1211,7 @@ u_int16_t get_regdmn_5g(u_int32_t reg_dmn);
 #define WMA_FW_TX_RC_STATS	0x6
 #define WMA_FW_RX_REM_RING_BUF 0xc
 #define WMA_FW_RX_TXBF_MUSU_NDPA 0xf
+#define WMA_FW_TXRX_FWSTATS_RESET 0x1f
 
 /*
  * Setting the Tx Comp Timeout to 1 secs.
@@ -1451,13 +1465,6 @@ struct wma_decap_info_t {
 	int32_t hdr_len;
 };
 
-enum powersave_mode {
-	PS_NOT_SUPPORTED = 0,
-	PS_LEGACY_NODEEPSLEEP = 1,
-	PS_QPOWER_NODEEPSLEEP = 2,
-	PS_LEGACY_DEEPSLEEP = 3,
-	PS_QPOWER_DEEPSLEEP = 4
-};
 
 #define WMA_DEFAULT_MAX_PSPOLL_BEFORE_WAKE 1
 

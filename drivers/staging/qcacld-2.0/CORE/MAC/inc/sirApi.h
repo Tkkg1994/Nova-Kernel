@@ -90,6 +90,8 @@ typedef tANI_U8 tSirVersionString[SIR_VERSION_STRING_LEN];
 
 #define WIFI_SCANNING_MAC_OUI_LENGTH 3
 
+#define MAX_LEN_UDP_RESP_OFFLOAD 128
+
 #ifdef FEATURE_WLAN_EXTSCAN
 
 #define WLAN_EXTSCAN_MAX_CHANNELS                 36
@@ -356,6 +358,15 @@ typedef enum eSirResultCodes
     eSIR_SME_SAP_AUTH_OFFLOAD_PEER_UPDATE_STATUS,
     eSIR_DONOT_USE_RESULT_CODE = SIR_MAX_ENUM_SIZE
 } tSirResultCodes;
+
+#define RMENABLEDCAP_MAX_LEN 5
+
+struct rrm_config_param
+{
+	uint8_t rrm_enabled;
+	uint8_t max_randn_interval;
+	uint8_t rm_capability[RMENABLEDCAP_MAX_LEN];
+};
 
 /* each station added has a rate mode which specifies the sta attributes */
 typedef enum eStaRateMode {
@@ -1090,6 +1101,7 @@ typedef struct sSirSmeJoinReq
     tAniBool            isWMEenabled;
     tAniBool            isQosEnabled;
     tAniBool            isOSENConnection;
+    struct rrm_config_param rrm_config;
     tAniBool            spectrumMgtIndicator;
     tSirMacPowerCapInfo powerCap;
     tSirSupChnl         supportedChannels;
@@ -3367,9 +3379,8 @@ typedef struct sSirUpdateAPWPARSNIEsReq
 typedef struct sSirNsOffloadReq
 {
     tANI_U8 srcIPv6Addr[16];
-    tANI_U8 selfIPv6Addr[16];
-    //Only support 2 possible Network Advertisement IPv6 address
-    tANI_U8 targetIPv6Addr[SIR_MAC_NUM_TARGET_IPV6_NS_OFFLOAD_NA][16];
+    tANI_U8 selfIPv6Addr[SIR_MAC_NUM_TARGET_IPV6_NS_OFFLOAD_NA][SIR_MAC_IPV6_ADDR_LEN];
+    tANI_U8 targetIPv6Addr[SIR_MAC_NUM_TARGET_IPV6_NS_OFFLOAD_NA][SIR_MAC_IPV6_ADDR_LEN];
     tANI_U8 selfMacAddr[6];
     tANI_U8 srcIPv6AddrValid;
     tANI_U8 targetIPv6AddrValid[SIR_MAC_NUM_TARGET_IPV6_NS_OFFLOAD_NA];
@@ -3381,6 +3392,7 @@ typedef struct sSirHostOffloadReq
 {
     tANI_U8 offloadType;
     tANI_U8 enableOrDisable;
+    uint32_t num_ns_offload_count;
     union
     {
         tANI_U8 hostIpv4Addr [4];
@@ -3589,7 +3601,6 @@ typedef struct sSirWlanSetRxpFilters
 #define SIR_PNO_MAX_NETW_CHANNELS  26
 #define SIR_PNO_MAX_NETW_CHANNELS_EX  60
 #define SIR_PNO_MAX_SUPP_NETWORKS  16
-#define SIR_PNO_MAX_SCAN_TIMERS    10
 
 /*size based of dot11 declaration without extra IEs as we will not carry those for PNO*/
 #define SIR_PNO_MAX_PB_REQ_SIZE    450
@@ -3616,31 +3627,35 @@ typedef struct
   tANI_S32    rssiThreshold;
 } tSirNetworkType;
 
-typedef struct
-{
-  tANI_U32    uTimerValue;
-  tANI_U32    uTimerRepeat;
-}tSirScanTimer;
+/**
+ * struct sSirPNOScanReq - PNO Scan request structure
+ * @enable: flag to enable or disable
+ * @modePNO: PNO Mode
+ * @ucNetworksCount: Number of networks
+ * @aNetworks: Preferred network list
+ * @sessionId: Session identifier
+ * @fast_scan_period: Fast Scan period
+ * @slow_scan_period: Slow scan period
+ * @fast_scan_max_cycles: Fast scan max cycles
+ * @us24GProbeTemplateLen: 2.4G probe template length
+ * @p24GProbeTemplate: 2.4G probe template
+ * @us5GProbeTemplateLen: 5G probe template length
+ * @p5GProbeTemplate: 5G probe template
+ */
+typedef struct sSirPNOScanReq {
+	uint8_t         enable;
+	eSirPNOMode     modePNO;
+	uint8_t         ucNetworksCount;
+	tSirNetworkType aNetworks[SIR_PNO_MAX_SUPP_NETWORKS];
+	uint8_t         sessionId;
+	uint32_t        fast_scan_period;
+	uint32_t        slow_scan_period;
+	uint8_t         fast_scan_max_cycles;
 
-typedef struct
-{
-  tANI_U8        ucScanTimersCount;
-  tSirScanTimer  aTimerValues[SIR_PNO_MAX_SCAN_TIMERS];
-} tSirScanTimersType;
-
-typedef struct sSirPNOScanReq
-{
-  tANI_U8             enable;
-  eSirPNOMode         modePNO;
-  tANI_U8             ucNetworksCount;
-  tSirNetworkType     aNetworks[SIR_PNO_MAX_SUPP_NETWORKS];
-  tSirScanTimersType  scanTimers;
-  tANI_U8             sessionId;
-
-  tANI_U16  us24GProbeTemplateLen;
-  tANI_U8   p24GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
-  tANI_U16  us5GProbeTemplateLen;
-  tANI_U8   p5GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
+	uint16_t        us24GProbeTemplateLen;
+	uint8_t         p24GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
+	uint16_t        us5GProbeTemplateLen;
+	uint8_t         p5GProbeTemplate[SIR_PNO_MAX_PB_REQ_SIZE];
 } tSirPNOScanReq, *tpSirPNOScanReq;
 
 typedef struct sSirSetRSSIFilterReq
@@ -3701,6 +3716,9 @@ typedef struct
   tANI_U8     mcencryption;
   tANI_U8     ChannelCount;
   tANI_U8     ChannelCache[SIR_ROAM_MAX_CHANNELS];
+#ifdef WLAN_FEATURE_11W
+  tANI_BOOLEAN MFPEnabled;
+#endif
 
 } tSirRoamNetworkType;
 
@@ -5883,6 +5901,21 @@ typedef struct
 } tSirMDNSResponseInfo, *tpSirMDNSResponseInfo;
 #endif /* MDNS_OFFLOAD */
 
+/**
+ * struct sir_lost_link_info - lost link information structure.
+ *
+ * @vdev_id: vdev_id from WMA. some modules call sessionId.
+ * @rssi: rssi at disconnection time.
+ *
+ * driver uses this structure to communicate information collected at
+ * disconnection time.
+ */
+struct sir_lost_link_info
+{
+	uint32_t vdev_id;
+	int8_t rssi;
+};
+
 /* find the size of given member within a structure */
 #ifndef member_size
 #define member_size(type, member) (sizeof(((type *)0)->member))
@@ -6340,6 +6373,57 @@ struct sir_sme_ext_cng_chan_ind
 {
 	uint8_t  session_id;
 	uint8_t  new_channel;
+};
+
+/**
+ * enum powersave_qpower_mode: QPOWER modes
+ * @QPOWER_DISABLED: Qpower is disabled
+ * @QPOWER_ENABLED: Qpower is enabled
+ * @QPOWER_DUTY_CYCLING: Qpower is enabled with duty cycling
+ */
+enum powersave_qpower_mode {
+	QPOWER_DISABLED = 0,
+	QPOWER_ENABLED = 1,
+	QPOWER_DUTY_CYCLING = 2
+};
+
+/**
+ * enum powersave_qpower_mode: powersave_mode
+ * @PS_NOT_SUPPORTED: Power save is not supported
+ * @PS_LEGACY_NODEEPSLEEP: Legacy power save enabled and deep sleep disabled
+ * @PS_QPOWER_NODEEPSLEEP: QPOWER enabled and deep sleep disabled
+ * @PS_LEGACY_DEEPSLEEP: Legacy power save enabled and deep sleep enabled
+ * @PS_QPOWER_DEEPSLEEP: QPOWER enabled and deep sleep enabled
+ * @PS_DUTY_CYCLING_QPOWER: QPOWER enabled in duty cycling mode
+ */
+enum powersave_mode {
+	PS_NOT_SUPPORTED = 0,
+	PS_LEGACY_NODEEPSLEEP = 1,
+	PS_QPOWER_NODEEPSLEEP = 2,
+	PS_LEGACY_DEEPSLEEP = 3,
+	PS_QPOWER_DEEPSLEEP = 4,
+	PS_DUTY_CYCLING_QPOWER = 5
+};
+
+
+/*
+ * struct udp_resp_offload - the basic info structure
+ *
+ * @vdev_id: vdev id
+ * @dest_port: specific UDP dest port
+ * @udp_payload_filter: specific UDP payload filter
+ * @udp_response_payload: response UDP oayload
+ *
+ * driver use this structure to configure fw specific
+ * udp offload filter and response udp info
+ */
+struct udp_resp_offload {
+	uint32_t   vdev_id;
+	uint32_t   enable;
+	uint32_t   dest_port;
+	char       udp_payload_filter[MAX_LEN_UDP_RESP_OFFLOAD];
+	char       udp_response_payload[MAX_LEN_UDP_RESP_OFFLOAD];
+
 };
 
 #endif /* __SIR_API_H */

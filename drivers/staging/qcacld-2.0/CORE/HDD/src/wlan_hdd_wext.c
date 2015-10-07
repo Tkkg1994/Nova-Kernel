@@ -151,7 +151,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WE_WOWL              2
 #define WE_SET_POWER         3
 #define WE_SET_MAX_ASSOC     4
-/* 5 is unused */
+#define WE_SET_SAP_AUTO_CHANNEL_SELECTION     5
 #define WE_SET_DATA_INACTIVITY_TO  6
 #define WE_SET_MAX_TX_POWER  7
 #define WE_SET_HIGHER_DTIM_TRANSITION   8
@@ -252,11 +252,11 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WLAN_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
 #define WE_GET_11D_STATE     1
 #define WE_IBSS_STATUS       2
-
+#define WE_SET_SAP_CHANNELS  3
 #define WE_GET_WLAN_DBG      4
 #define WE_GET_MAX_ASSOC     6
 /* 7 is unused */
-/* 8 is unused */
+#define WE_GET_SAP_AUTO_CHANNEL_SELECTION 8
 #define WE_GET_CONCURRENCY_MODE 9
 #define WE_GET_NSS           11
 #define WE_GET_LDPC          12
@@ -325,7 +325,8 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_THREE_INT_GET_NONE   (SIOCIWFIRSTPRIV + 4)
 #define WE_SET_WLAN_DBG      1
-/* 2,3 is unused */
+/* 2 is unused */
+#define WE_SET_SAP_CHANNELS  3
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_GET_CHAR_SET_NONE   (SIOCIWFIRSTPRIV + 5)
@@ -1154,8 +1155,9 @@ VOS_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, v_S7_t *rssi_value)
    pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 
    if (eConnectionState_Associated != pHddStaCtx->conn_info.connState) {
-       hddLog(LOG1, FL("Not associated!, return last connected AP rssi"));
-       *rssi_value = pAdapter->rssi;
+       hddLog(LOG1, "%s: Not associated, rssi on disconnect %d",
+                    __func__, pAdapter->rssi_on_disconnect);
+       *rssi_value = pAdapter->rssi_on_disconnect;
        return VOS_STATUS_SUCCESS;
    }
 
@@ -4321,9 +4323,9 @@ static int __iw_set_priv(struct net_device *dev, struct iw_request_info *info,
     else if( strncasecmp(cmd, "pno",3) == 0 ) {
 
         hddLog( VOS_TRACE_LEVEL_INFO, "pno");
-        vos_status = iw_set_pno(dev, info, wrqu, cmd, 3);
+        ret = iw_set_pno(dev, info, wrqu, cmd, 3);
         kfree(cmd);
-        return (vos_status == VOS_STATUS_SUCCESS) ? 0 : -EINVAL;
+        return ret;
     }
 #endif /*FEATURE_WLAN_SCAN_PNO*/
     else if( strncasecmp(cmd, "powerparams",11) == 0 ) {
@@ -6070,6 +6072,14 @@ static int __iw_setint_getnone(struct net_device *dev,
             break;
         }
 
+        case WE_SET_SAP_AUTO_CHANNEL_SELECTION:
+            if (set_value == 0 || set_value == 1)
+                (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->force_sap_acs =
+                                                                    set_value;
+            else
+                ret = -EINVAL;
+            break;
+
         case  WE_SET_DATA_INACTIVITY_TO:
         {
            if  ((set_value < CFG_DATA_INACTIVITY_TIMEOUT_MIN) ||
@@ -6695,6 +6705,10 @@ static int __iw_setint_getnone(struct net_device *dev,
     case WE_TXRX_FWSTATS_RESET:
     {
            hddLog(LOG1, "WE_TXRX_FWSTATS_RESET val %d", set_value);
+           if (set_value != WMA_FW_TXRX_FWSTATS_RESET) {
+               hddLog(LOGE, "Invalid arg %d in FWSTATS_RESET IOCTL",
+                      set_value);
+           }
            ret = process_wma_set_command((int)pAdapter->sessionId,
                (int)WMA_VDEV_TXRX_FWSTATS_RESET_CMDID,
                set_value, VDEV_CMD);
@@ -7345,6 +7359,11 @@ static int __iw_setnone_getint(struct net_device *dev,
             }
             break;
         }
+        case WE_GET_SAP_AUTO_CHANNEL_SELECTION:
+            *value = (WLAN_HDD_GET_CTX(
+                                   pAdapter))->cfg_ini->force_sap_acs;
+            break;
+
         case WE_GET_CONCURRENCY_MODE:
         {
            *value = hdd_get_concurrency_mode ( );
@@ -7845,6 +7864,7 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
                                        char *extra)
 {
     hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+    hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
     int *value = (int *)extra;
     int sub_cmd = value[0];
     int ret = 0;
@@ -7861,6 +7881,22 @@ static int __iw_set_three_ints_getnone(struct net_device *dev,
     case WE_SET_WLAN_DBG:
        vos_trace_setValue( value[1], value[2], value[3]);
        break;
+
+    case WE_SET_SAP_CHANNELS:
+        /* value[3] the acs band is not required as start and end channels are
+         * enough but this cmd is maintained under set three ints for historic
+         * reasons.
+         */
+        if (wlan_hdd_validate_operation_channel(pAdapter, value[1]) !=
+                                        VOS_STATUS_SUCCESS ||
+            wlan_hdd_validate_operation_channel(pAdapter, value[2]) !=
+                                        VOS_STATUS_SUCCESS) {
+            ret = -EINVAL;
+        } else {
+            hdd_ctx->cfg_ini->force_sap_acs_st_ch = value[1];
+            hdd_ctx->cfg_ini->force_sap_acs_end_ch = value[2];
+        }
+        break;
 
     default:
        hddLog(LOGE, "%s: Invalid IOCTL command %d", __func__, sub_cmd );
@@ -10213,8 +10249,8 @@ void found_pref_network_cb (void *callbackContext,
 
 
 /*string based input*/
-VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
-                      union iwreq_data *wrqu, char *extra, int nOffset)
+int iw_set_pno(struct net_device *dev, struct iw_request_info *info,
+               union iwreq_data *wrqu, char *extra, int nOffset)
 {
   hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
   /* pnoRequest is a large struct, so we make it static to avoid stack
@@ -10234,7 +10270,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
   if (wrqu->data.length <= nOffset )
   {
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN, "PNO input is not correct");
-    return VOS_STATUS_E_FAILURE;
+    return -EINVAL;
   }
 
   pnoRequest.enable = 0;
@@ -10273,7 +10309,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
   {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                 "PNO enable input is not valid %s",ptr);
-      return VOS_STATUS_E_FAILURE;
+      return -EINVAL;
   }
 
   if ( 0 == pnoRequest.enable )
@@ -10283,7 +10319,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter), &pnoRequest,
                                 pAdapter->sessionId,
                                 found_pref_network_cb, pAdapter);
-    return VOS_STATUS_SUCCESS;
+    return 0;
   }
 
   ptr += nOffset;
@@ -10292,8 +10328,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
   {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                 "PNO count input not valid %s",ptr);
-      return VOS_STATUS_E_FAILURE;
-
+      return -EINVAL;
   }
 
   VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
@@ -10308,7 +10343,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
       ( pnoRequest.ucNetworksCount > SIR_PNO_MAX_SUPP_NETWORKS ))
   {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN, "Network input is not correct");
-      return VOS_STATUS_E_FAILURE;
+      return -EINVAL;
   }
 
   ptr += nOffset;
@@ -10325,7 +10360,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                   "PNO ssid length input is not valid %s",ptr);
-        return VOS_STATUS_E_FAILURE;
+        return -EINVAL;
     }
 
     if (( 0 == pnoRequest.aNetworks[i].ssId.length ) ||
@@ -10334,7 +10369,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                 "SSID Len %d is not correct for network %d",
                 pnoRequest.aNetworks[i].ssId.length, i);
-      return VOS_STATUS_E_FAILURE;
+      return -EINVAL;
     }
 
     /*Advance to SSID*/
@@ -10354,7 +10389,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
                 "Incorrect cmd %s",ptr);
-      return VOS_STATUS_E_FAILURE;
+      return -EINVAL;
     }
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
@@ -10381,7 +10416,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     {
       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
                 "Incorrect number of channels");
-      return VOS_STATUS_E_FAILURE;
+      return -EINVAL;
     }
 
     if ( 0 !=  pnoRequest.aNetworks[i].ucChannelCount)
@@ -10393,7 +10428,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
                            &nOffset))
             {    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                            "PNO network channel input is not valid %s",ptr);
-                  return VOS_STATUS_E_FAILURE;
+               return -EINVAL;
             }
             /*Advance to next channel number*/
             ptr += nOffset;
@@ -10406,7 +10441,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                   "PNO broadcast network type input is not valid %s",ptr);
-        return VOS_STATUS_E_FAILURE;
+        return -EINVAL;
     }
 
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
@@ -10422,7 +10457,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                   "PNO rssi threshold input is not valid %s",ptr);
-        return VOS_STATUS_E_FAILURE;
+        return -EINVAL;
     }
     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
             "PNO rssi %d offset %d",
@@ -10431,63 +10466,6 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
     /*Advance to next network*/
     ptr += nOffset;
   }/*For ucNetworkCount*/
-
-  ucParams = sscanf(ptr,"%hhu %n",
-                    &(pnoRequest.scanTimers.ucScanTimersCount),
-                    &nOffset);
-
-  /*Read the scan timers*/
-  if (( 1 == ucParams ) && ( pnoRequest.scanTimers.ucScanTimersCount > 0 ))
-  {
-     ptr += nOffset;
-
-     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-        "Scan timer count %d offset %d",
-        pnoRequest.scanTimers.ucScanTimersCount,
-        nOffset );
-
-     if ( SIR_PNO_MAX_SCAN_TIMERS < pnoRequest.scanTimers.ucScanTimersCount )
-     {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    "Incorrect cmd - too many scan timers");
-       return VOS_STATUS_E_FAILURE;
-     }
-
-     for ( i = 0; i < pnoRequest.scanTimers.ucScanTimersCount; i++ )
-     {
-        ucParams = sscanf(ptr,"%u %u %n",
-           &(pnoRequest.scanTimers.aTimerValues[i].uTimerValue),
-           &( pnoRequest.scanTimers.aTimerValues[i].uTimerRepeat),
-           &nOffset);
-
-        if (2 != ucParams)
-        {
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    "Incorrect cmd - diff params then expected %d", ucParams);
-            return VOS_STATUS_E_FAILURE;
-        }
-
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO Timer value %d Timer repeat %d offset %d",
-            pnoRequest.scanTimers.aTimerValues[i].uTimerValue,
-            pnoRequest.scanTimers.aTimerValues[i].uTimerRepeat,
-            nOffset );
-
-        ptr += nOffset;
-     }
-
-  }
-  else
-  {
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-       "No scan timers provided param count %d scan timers %d",
-        ucParams,  pnoRequest.scanTimers.ucScanTimersCount );
-
-    /*Scan timers defaults to 5 minutes*/
-    pnoRequest.scanTimers.ucScanTimersCount = 1;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerValue  = 60;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerRepeat = 0;
-  }
 
   ucParams = sscanf(ptr,"%hhu %n",&(ucMode), &nOffset);
 
@@ -10502,7 +10480,7 @@ VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
                                 pAdapter->sessionId,
                                 found_pref_network_cb, pAdapter);
 
-  return VOS_STATUS_SUCCESS;
+  return 0;
 }/*iw_set_pno*/
 
 static int __iw_set_pno_priv(struct net_device *dev,
@@ -11100,6 +11078,11 @@ static const struct iw_priv_args we_private_args[] = {
         0,
         "setMaxAssoc" },
 
+    {   WE_SET_SAP_AUTO_CHANNEL_SELECTION,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+        0,
+        "setAutoChannel" },
+
     {   WE_SET_DATA_INACTIVITY_TO,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         0,
@@ -11525,6 +11508,11 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         "getMaxAssoc" },
 
+    {   WE_GET_SAP_AUTO_CHANNEL_SELECTION,
+        0,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+        "getAutoChannel" },
+
     {   WE_GET_CONCURRENCY_MODE,
         0,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
@@ -11823,6 +11811,11 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
         0,
         "setwlandbg" },
+
+    {   WE_SET_SAP_CHANNELS,
+        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
+        0,
+        "setsapchannels" },
 
      /* handlers for main ioctl */
     {   WLAN_PRIV_SET_NONE_GET_THREE_INT,

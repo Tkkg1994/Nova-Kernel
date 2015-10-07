@@ -1313,7 +1313,10 @@ static void pmcProcessResponse( tpAniSirGlobal pMac, tSirSmeRsp *pMsg )
                 pmcLog(pMac, LOGP,
                        FL("Response message to request to exit BMPS indicates failure, status %x"),
                        pMsg->statusCode);
+                /*Status is not succes, so set back the pmc state as BMPS*/
+                pMac->pmc.pmcState = BMPS;
             }
+            else
             pmcEnterFullPowerState(pMac);
         break;
 
@@ -1966,7 +1969,7 @@ eHalStatus pmcDeregisterDeviceStateUpdateInd (tHalHandle hHal,
     tListElem *pEntry;
     tpDeviceStateUpdateIndEntry pDeviceStateUpdateIndEntry;
 
-    pmcLog(pMac, LOG2, FL("Entering pmcDeregisterDeviceStateUpdateInd"));
+    pmcLog(pMac, LOG2, FL("Enter"));
 
     /* Find entry in the power save update routine list that matches
        the specified routine and remove it. */
@@ -3540,7 +3543,7 @@ eHalStatus PmcOffloadEnableStaModePowerSave(tHalHandle hHal,
         else
         {
             /* Failed to Queue Sta Mode Ps Request */
-            smsLog(pMac, LOGE,
+            smsLog(pMac, LOGW,
                    FL("Failed to Queue Sta Mode Ps Request"));
             return eHAL_STATUS_FAILURE;
         }
@@ -3553,7 +3556,7 @@ eHalStatus PmcOffloadEnableStaModePowerSave(tHalHandle hHal,
          * If it is already set Auto Power save Timer
          * will take care of enabling Power Save
          */
-        smsLog(pMac, LOGE,
+        smsLog(pMac, LOGW,
                FL("sta mode power save already enabled"));
         return eHAL_STATUS_SUCCESS;
     }
@@ -3566,19 +3569,16 @@ eHalStatus PmcOffloadDisableStaModePowerSave(tHalHandle hHal,
     tpPsOffloadPerSessionInfo pmc = &pMac->pmcOffloadInfo.pmc[sessionId];
     eHalStatus status = eHAL_STATUS_SUCCESS;
 
-    if(pmc->configStaPsEnabled)
-    {
+    if (pmc->configStaPsEnabled) {
         status = pmcOffloadDisableStaPsHandler(pMac, sessionId);
-    }
-    else
-    {
+    } else {
         /*
          * configStaPsEnabled is the master flag
          * to enable sta mode power save
          * If it is already cleared then no need to
          * do anything
          */
-        smsLog(pMac, LOGE,
+        smsLog(pMac, LOGW,
                FL("sta mode power save already disabled"));
         /* Stop the Auto Sta Ps Timer if running */
         pmcOffloadStopAutoStaPsTimer(pMac, sessionId);

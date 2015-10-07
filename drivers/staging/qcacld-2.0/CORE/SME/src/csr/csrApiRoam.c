@@ -72,8 +72,10 @@
 
 #define CSR_NUM_IBSS_START_CHANNELS_50      4
 #define CSR_NUM_IBSS_START_CHANNELS_24      3
-#define CSR_WAIT_FOR_KEY_TIMEOUT_PERIOD         ( 5 * VOS_TIMER_TO_SEC_UNIT )  // 5 seconds, for WPA, WPA2, CCKM
-#define CSR_WAIT_FOR_WPS_KEY_TIMEOUT_PERIOD         ( 120 * VOS_TIMER_TO_SEC_UNIT )  // 120 seconds, for WPS
+/* 15 seconds, for WPA, WPA2, CCKM */
+#define CSR_WAIT_FOR_KEY_TIMEOUT_PERIOD         (15 * VOS_TIMER_TO_SEC_UNIT)
+/* 120 seconds, for WPS */
+#define CSR_WAIT_FOR_WPS_KEY_TIMEOUT_PERIOD     (120 * VOS_TIMER_TO_SEC_UNIT)
 /*---------------------------------------------------------------------------
   OBIWAN recommends [8 10]% : pick 9%
 ---------------------------------------------------------------------------*/
@@ -1639,6 +1641,11 @@ eHalStatus csrChangeDefaultConfigParam(tpAniSirGlobal pMac, tCsrConfigParam *pPa
         pMac->roam.configParam.Is11hSupportEnabled = pParam->Is11hSupportEnabled;
 
         pMac->roam.configParam.fenableMCCMode = pParam->fEnableMCCMode;
+        pMac->roam.configParam.mcc_rts_cts_prot_enable =
+                                          pParam->mcc_rts_cts_prot_enable;
+        pMac->roam.configParam.mcc_bcast_prob_resp_enable =
+                                          pParam->mcc_bcast_prob_resp_enable;
+
         pMac->roam.configParam.fAllowMCCGODiffBI = pParam->fAllowMCCGODiffBI;
 
         /* channelBondingMode5GHz plays a dual role right now
@@ -3708,11 +3715,13 @@ static eHalStatus csrGetRateSet( tpAniSirGlobal pMac,  tCsrRoamProfile *pProfile
         {
             for ( i = 0; i < pIes->SuppRates.num_rates; i++ )
             {
-                if ( csrRatesIsDot11RateSupported( pMac, pIes->SuppRates.rates[ i ] ) )
-                {
-                    csrAddRateBitmap(pIes->SuppRates.rates[ i ], &rateBitmap);
-                    *pDstRate++ = pIes->SuppRates.rates[ i ];
-                    pOpRateSet->numRates++;
+                if (csrRatesIsDot11RateSupported(pMac,
+                                                 pIes->SuppRates.rates[i])) {
+                    if (!csrCheckRateBitmap(pIes->SuppRates.rates[i], rateBitmap)) {
+                        csrAddRateBitmap(pIes->SuppRates.rates[i], &rateBitmap);
+                        *pDstRate++ = pIes->SuppRates.rates[i];
+                        pOpRateSet->numRates++;
+                    }
                 }
             }
         }
@@ -13414,6 +13423,14 @@ eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDe
             *pBuf = 0;
             pBuf++;
         }
+        smsLog(pMac, LOGE,
+               "Connecting to ssid:%.*s bssid: "
+               MAC_ADDRESS_STR" rssi: %d channel: %d country_code: %c%c",
+               pIes->SSID.num_ssid, pIes->SSID.ssid,
+               MAC_ADDR_ARRAY(pBssDescription->bssId),
+               pBssDescription->rssi, pBssDescription->channelId,
+               pMac->scan.countryCodeCurrent[0],
+               pMac->scan.countryCodeCurrent[1]);
         // selfMacAddr
         vos_mem_copy((tSirMacAddr *)pBuf, &pSession->selfMacAddr,
                      sizeof(tSirMacAddr));
@@ -13988,6 +14005,11 @@ eHalStatus csrSendJoinReqMsg( tpAniSirGlobal pMac, tANI_U32 sessionId, tSirBssDe
             vos_mem_copy(pBuf, &dwTmp, sizeof(tAniBool));
             pBuf += sizeof(tAniBool);
         }
+        /* Fill rrm config parameters */
+        vos_mem_copy(pBuf, &pMac->rrm.rrmSmeContext.rrmConfig,
+                     sizeof(struct rrm_config_param));
+        pBuf += sizeof(struct rrm_config_param);
+
         //BssDesc
         csrPrepareJoinReassocReqBuffer( pMac, pBssDescription, pBuf,
                 (tANI_U8)pProfile->uapsd_mask);
@@ -17078,6 +17100,10 @@ eHalStatus csrRoamOffloadScan(tpAniSirGlobal pMac, tANI_U8 sessionId,
             pMac->roam.roamSession[sessionId].connectedProfile.EncryptionType;
     pRequestBuf->ConnectedNetwork.mcencryption =
             pMac->roam.roamSession[sessionId].connectedProfile.mcEncryptionType;
+#ifdef WLAN_FEATURE_11W
+    pRequestBuf->ConnectedNetwork.MFPEnabled =
+           pMac->roam.roamSession[sessionId].connectedProfile.MFPEnabled;
+#endif
     pRequestBuf->delay_before_vdev_stop =
             pNeighborRoamInfo->cfgParams.delay_before_vdev_stop;
     pRequestBuf->OpportunisticScanThresholdDiff =
@@ -18467,6 +18493,9 @@ void csrRoamFTPreAuthRspProcessor( tHalHandle hHal, tpSirFTPreAuthRsp pFTPreAuth
       pMac->roam.roamSession[sessionId].connectedProfile.AuthType;
 
    pSession->ftSmeContext.addMDIE = FALSE;
+   // Done with it, init it.
+   pSession->ftSmeContext.psavedFTPreAuthRsp = NULL;
+
    if (csrRoamIs11rAssoc(pMac, pFTPreAuthRsp->smeSessionId) &&
       (conn_Auth_type == eCSR_AUTH_TYPE_OPEN_SYSTEM))
    {
@@ -18497,9 +18526,6 @@ void csrRoamFTPreAuthRspProcessor( tHalHandle hHal, tpSirFTPreAuthRsp pFTPreAuth
          pSession->ftSmeContext.addMDIE = TRUE;
       }
    }
-
-   // Done with it, init it.
-   pSession->ftSmeContext.psavedFTPreAuthRsp = NULL;
 }
 #endif
 

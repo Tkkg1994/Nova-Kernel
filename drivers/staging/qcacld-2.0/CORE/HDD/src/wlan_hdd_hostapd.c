@@ -1021,7 +1021,12 @@ VOS_STATUS hdd_chan_change_notify(hdd_adapter_t *hostapd_adapter,
 		return VOS_STATUS_E_FAILURE;
 	}
 
-	phy_mode = sme_GetPhyMode(hal);
+#ifdef WLAN_FEATURE_MBSSID
+	phy_mode = wlansap_get_phymode(WLAN_HDD_GET_SAP_CTX_PTR(hostapd_adapter));
+#else
+	phy_mode = wlansap_get_phymode(
+			(WLAN_HDD_GET_CTX(hostapd_adapter))->pvosContext);
+#endif
 
 	if (oper_chan <= 14)
 		cb_mode = sme_GetCBPhyStateFromCBIniValue(
@@ -1048,6 +1053,10 @@ VOS_STATUS hdd_chan_change_notify(hdd_adapter_t *hostapd_adapter,
 		channel_type = NL80211_CHAN_NO_HT;
 		break;
 	}
+
+	VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
+			"%s: phy_mode %d cb_mode %d chann_type %d oper_chan %d",
+			__func__, phy_mode, cb_mode, channel_type, oper_chan);
 
 	cfg80211_chandef_create(&chandef, chan, channel_type);
 
@@ -1970,8 +1979,14 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
             pHddApCtx->sapConfig.acs_cfg.ch_width =
                  pSapEvent->sapevt.sapChSelected.ch_width;
 
-            /* TODO Need to indicate operating channel change to hostapd */
-            return hdd_chan_change_notify(pHostapdAdapter, dev,
+            /* Indicate operating channel change to hostapd
+             * only for non driver override acs
+             */
+            if (pHostapdAdapter->device_mode == WLAN_HDD_SOFTAP &&
+                                               pHddCtx->cfg_ini->force_sap_acs)
+                return VOS_STATUS_SUCCESS;
+            else
+                return hdd_chan_change_notify(pHostapdAdapter, dev,
                            pSapEvent->sapevt.sapChSelected.pri_ch);
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
         case eSAP_ACS_SCAN_SUCCESS_EVENT:
@@ -2046,8 +2061,10 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
                  pSapEvent->sapevt.sapChSelected.vht_seg1_center_ch;
             pHddApCtx->sapConfig.acs_cfg.ch_width =
                  pSapEvent->sapevt.sapChSelected.ch_width;
-            /* send vendor event to hostapd */
-            wlan_hdd_cfg80211_acs_ch_select_evt(pHostapdAdapter);
+            /* send vendor event to hostapd only for hostapd based acs */
+            if (!pHddCtx->cfg_ini->force_sap_acs)
+                wlan_hdd_cfg80211_acs_ch_select_evt(pHostapdAdapter);
+
             return VOS_STATUS_SUCCESS;
         case eSAP_ECSA_CHANGE_CHAN_IND:
             hddLog(LOG1,
@@ -2711,6 +2728,15 @@ static __iw_softap_setparam(struct net_device *dev,
             }
             break;
 
+        case QCSAP_PARAM_AUTO_CHANNEL:
+            if (set_value == 0 || set_value == 1)
+                (WLAN_HDD_GET_CTX(
+                           pHostapdAdapter))->cfg_ini->force_sap_acs =
+                                                                     set_value;
+            else
+                ret = -EINVAL;
+            break;
+
         case QCSAP_PARAM_SET_CHANNEL_CHANGE:
 		if ((WLAN_HDD_SOFTAP == pHostapdAdapter->device_mode)||
 		   (WLAN_HDD_P2P_GO == pHostapdAdapter->device_mode)) {
@@ -2932,6 +2958,11 @@ static __iw_softap_setparam(struct net_device *dev,
          case QCASAP_TXRX_FWSTATS_RESET:
              {
                   hddLog(LOG1, "WE_TXRX_FWSTATS_RESET val %d", set_value);
+                  if (set_value != WMA_FW_TXRX_FWSTATS_RESET) {
+                      hddLog(LOGE, "Invalid arg %d in FWSTATS_RESET IOCTL",
+                             set_value);
+                      return -EINVAL;
+                  }
                   ret = process_wma_set_command((int)pHostapdAdapter->sessionId,
                                                 (int)WMA_VDEV_TXRX_FWSTATS_RESET_CMDID,
                                                 set_value, VDEV_CMD);
@@ -3427,6 +3458,10 @@ static __iw_softap_getparam(struct net_device *dev,
             *value = 0;
             break;
         }
+
+    case QCSAP_PARAM_AUTO_CHANNEL:
+        *value = (WLAN_HDD_GET_CTX
+                      (pHostapdAdapter))->cfg_ini->force_sap_acs;
 
     case QCSAP_PARAM_RTSCTS:
         {
@@ -4067,28 +4102,81 @@ static iw_softap_ap_stats(struct net_device *dev,
 }
 
 int
-static __iw_softap_get_stats(struct net_device *dev,
+static __iw_get_char_setnone(struct net_device *dev,
                              struct iw_request_info *info,
                              union iwreq_data *wrqu, char *extra)
 {
-    hdd_adapter_t *p_host_adapter = netdev_priv(dev);
+    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+    int sub_cmd = wrqu->data.flags;
+    ENTER();
+    if (NULL == WLAN_HDD_GET_CTX(pAdapter))
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                                        "%s: HDD Context is NULL!", __func__);
 
-    hdd_wlan_get_stats(p_host_adapter, &(wrqu->data.length),
-                       extra, WE_MAX_STR_LEN);
+        return -EINVAL;
+    }
+
+    if ((WLAN_HDD_GET_CTX(pAdapter))->isLogpInProgress)
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_FATAL,
+                                  "%s:LOGP in Progress. Ignore!!!", __func__);
+        return -EBUSY;
+    }
+    switch(sub_cmd)
+    {
+        case QCSAP_GET_STATS:
+        {
+            hdd_wlan_get_stats(pAdapter, &(wrqu->data.length),
+                               extra, WE_MAX_STR_LEN);
+            break;
+        }
+    }
     return 0;
 }
 
-int
-static iw_softap_get_stats(struct net_device *dev,
-                           struct iw_request_info *info,
-                           union iwreq_data *wrqu, char *extra)
+static int iw_get_char_setnone(struct net_device *dev,
+                               struct iw_request_info *info,
+                               union iwreq_data *wrqu, char *extra)
 {
 	int ret;
 
 	vos_ssr_protect(__func__);
-	ret = __iw_softap_get_stats(dev, info, wrqu, extra);
+	ret = __iw_get_char_setnone(dev, info, wrqu, extra);
 	vos_ssr_unprotect(__func__);
 
+	return ret;
+}
+
+static int wlan_hdd_set_force_acs_ch_range(struct net_device *dev,
+                          struct iw_request_info *info,
+                          union iwreq_data *wrqu, char *extra)
+{
+	hdd_adapter_t *adapter = (netdev_priv(dev));
+	hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
+	int *value = (int *)extra;
+
+	if (wlan_hdd_validate_operation_channel(adapter, value[0]) !=
+					 VOS_STATUS_SUCCESS ||
+		wlan_hdd_validate_operation_channel(adapter, value[1]) !=
+					 VOS_STATUS_SUCCESS) {
+		return -EINVAL;
+	} else {
+		hdd_ctx->cfg_ini->force_sap_acs_st_ch = value[0];
+		hdd_ctx->cfg_ini->force_sap_acs_end_ch = value[1];
+	}
+
+	return 0;
+}
+
+static int iw_softap_set_force_acs_ch_range(struct net_device *dev,
+                                       struct iw_request_info *info,
+                                       union iwreq_data *wrqu, char *extra)
+{
+	int ret;
+	vos_ssr_protect(__func__);
+	ret = wlan_hdd_set_force_acs_ch_range(dev, info, wrqu, extra);
+	vos_ssr_unprotect(__func__);
 	return ret;
 }
 
@@ -5713,6 +5801,8 @@ static const struct iw_priv_args hostapd_private_args[] = {
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setMccLatency" },
    { QCSAP_PARAM_SET_MCC_CHANNEL_QUOTA,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setMccQuota" },
+   { QCSAP_PARAM_AUTO_CHANNEL,
+      IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setAutoChannel" },
    { QCSAP_PARAM_SET_CHANNEL_CHANGE,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1, 0,  "setChanChange" },
 
@@ -5927,6 +6017,8 @@ static const struct iw_priv_args hostapd_private_args[] = {
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,    "getMaxAssoc" },
   { QCSAP_PARAM_GET_WLAN_DBG, 0,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,    "getwlandbg" },
+  { QCSAP_PARAM_AUTO_CHANNEL, 0,
+      IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,    "getAutoChannel" },
   { QCSAP_GTX_BWMASK, 0,
       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,    "get_gtxBWMask" },
   { QCSAP_GTX_MINTPC, 0,
@@ -5996,8 +6088,12 @@ static const struct iw_priv_args hostapd_private_args[] = {
         IW_PRIV_TYPE_BYTE | IW_PRIV_SIZE_FIXED | 6 , 0, "disassoc_sta" },
   { QCSAP_IOCTL_AP_STATS, 0,
         IW_PRIV_TYPE_CHAR | QCSAP_MAX_WSC_IE, "ap_stats" },
-  { QCSAP_IOCTL_GET_STATS, 0,
-        IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN, "get_stats" },
+   /* handler for main ioctl */
+  { QCSAP_PRIV_GET_CHAR_SET_NONE, 0,
+        IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN,"" },
+   /* handler for sub-ioctl */
+  { QCSAP_GET_STATS, 0,
+        IW_PRIV_TYPE_CHAR | WE_MAX_STR_LEN, "getStats" },
   { QCSAP_IOCTL_PRIV_GET_SOFTAP_LINK_SPEED,
         IW_PRIV_TYPE_CHAR | 18,
         IW_PRIV_TYPE_CHAR | 5, "getLinkSpeed" },
@@ -6009,6 +6105,11 @@ static const struct iw_priv_args hostapd_private_args[] = {
        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
        0,
        "setwlandbg" },
+
+   {   WE_SET_SAP_CHANNELS,
+       IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
+       0,
+       "setsapchannels" },
 
    /* handlers for main ioctl */
    {   QCSAP_IOCTL_PRIV_SET_VAR_INT_GET_NONE,
@@ -6142,9 +6243,11 @@ static const iw_handler hostapd_private[] = {
    [QCSAP_IOCTL_ASSOC_STA_MACADDR - SIOCIWFIRSTPRIV] = iw_softap_getassoc_stamacaddr,
    [QCSAP_IOCTL_DISASSOC_STA - SIOCIWFIRSTPRIV] = iw_softap_disassoc_sta,
    [QCSAP_IOCTL_AP_STATS - SIOCIWFIRSTPRIV] = iw_softap_ap_stats,
-   [QCSAP_IOCTL_GET_STATS - SIOCIWFIRSTPRIV] = iw_softap_get_stats,
+   [QCSAP_PRIV_GET_CHAR_SET_NONE - SIOCIWFIRSTPRIV] = iw_get_char_setnone,
    [QCSAP_IOCTL_PRIV_SET_THREE_INT_GET_NONE - SIOCIWFIRSTPRIV]  = iw_set_three_ints_getnone,
    [QCSAP_IOCTL_PRIV_SET_VAR_INT_GET_NONE - SIOCIWFIRSTPRIV]     = iw_set_var_ints_getnone,
+   [QCSAP_IOCTL_SET_CHANNEL_RANGE - SIOCIWFIRSTPRIV] =
+                                             iw_softap_set_force_acs_ch_range,
    [QCSAP_IOCTL_MODIFY_ACL - SIOCIWFIRSTPRIV]   = iw_softap_modify_acl,
    [QCSAP_IOCTL_GET_CHANNEL_LIST - SIOCIWFIRSTPRIV]   = iw_softap_get_channel_list,
    [QCSAP_IOCTL_GET_STA_INFO - SIOCIWFIRSTPRIV] = iw_softap_get_sta_info,
@@ -6331,7 +6434,6 @@ hdd_adapter_t* hdd_wlan_create_ap_dev( hdd_context_t *pHddCtx, tSirMacAddr macAd
 {
     struct net_device *pWlanHostapdDev = NULL;
     hdd_adapter_t *pHostapdAdapter = NULL;
-    v_CONTEXT_t pVosContext= NULL;
 
    hddLog(VOS_TRACE_LEVEL_DEBUG, "%s: iface_name = %s", __func__, iface_name);
 
@@ -6362,11 +6464,6 @@ hdd_adapter_t* hdd_wlan_create_ap_dev( hdd_context_t *pHddCtx, tSirMacAddr macAd
                                       pWlanHostapdDev,
                                       pHostapdAdapter,
                                       (int)vos_get_concurrency_mode());
-
-        //Get the Global VOSS context.
-        pVosContext = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
-        //Save the adapter context in global context for future.
-        ((VosContextType*)(pVosContext))->pHDDSoftAPContext = (v_VOID_t*)pHostapdAdapter;
 
         //Init the net_device structure
         strlcpy(pWlanHostapdDev->name, (const char *)iface_name, IFNAMSIZ);
