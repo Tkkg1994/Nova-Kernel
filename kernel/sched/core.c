@@ -94,7 +94,7 @@
 #include <mach/sec_debug.h>
 #endif
 
-#include <soc/qcom/watchdog.h>
+#include "../../arch/arm/mach-msm/msm_watchdog.h"
 
 #define DLOG_SIZE 15000
 #define MAX_CTXSW_LATENCY 1000000000
@@ -117,7 +117,6 @@ do {							\
 	per_cpu(dptr, dcpu) = ptr;			\
 	local_irq_restore(dflags);			\
 } while (0)
->>>>>>> 1a43fbc... sched: Provide an easy method to log context switch latencies
 
 const char *task_event_names[] = {"PUT_PREV_TASK", "PICK_NEXT_TASK",
 				  "TASK_WAKE", "TASK_MIGRATE", "TASK_UPDATE",
