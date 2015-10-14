@@ -10,6 +10,8 @@
 
 #ifndef __ASSEMBLY__
 
+#include <linux/reboot.h>
+
 struct tag;
 struct pt_regs;
 struct smp_operations;

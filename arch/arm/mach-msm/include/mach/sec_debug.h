@@ -26,6 +26,7 @@
 
 #include <linux/sched.h>
 #include <linux/semaphore.h>
+#include <linux/reboot.h>
 
 #ifdef CONFIG_SEC_DEBUG
 extern int sec_debug_init(void);
@@ -328,7 +329,7 @@ extern int ssr_panic_handler_for_sec_dbg(void);
 __weak void dump_all_task_info(void);
 __weak void dump_cpu_stat(void);
 extern void emerg_pet_watchdog(void);
-extern void msm_restart(char mode, const char *cmd);
+extern void msm_restart(enum reboot_mode mode, const char *cmd);
 #define LOCAL_CONFIG_PRINT_EXTRA_INFO
 
 /* #define CONFIG_SEC_DEBUG_SUBSYS */
