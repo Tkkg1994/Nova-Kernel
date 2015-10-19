@@ -388,7 +388,7 @@ static void lazyplug_work_fn(struct work_struct *work)
 		msecs_to_jiffies(sampling_time));
 }
 
-static void wakeup_boost(void)
+static void wakeup_boost_lazy(void)
 {
 	unsigned int cpu;
 	struct cpufreq_policy *policy;
@@ -428,7 +428,7 @@ static DECLARE_WORK(cpu_all_up_work, cpu_all_up);
 static void cpu_all_up(struct work_struct *work)
 {
 	cpu_all_ctrl(true);
-	wakeup_boost();
+	wakeup_boost_lazy();
 }
 
 #ifdef CONFIG_POWERSUSPEND
