@@ -25,6 +25,7 @@
 #include <linux/jiffies.h>
 #include <linux/wakelock.h>
 #include <linux/err.h>
+#include <linux/msm_ion.h>
 #include <linux/list.h>
 #include <linux/list_sort.h>
 #include <linux/idr.h>
@@ -32,7 +33,6 @@
 #include <linux/of_gpio.h>
 #include <linux/of_address.h>
 #include <linux/io.h>
-#include <linux/dma-mapping.h>
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_restart.h>
 
@@ -136,11 +136,10 @@ struct pil_priv {
 	phys_addr_t base_addr;
 	phys_addr_t region_start;
 	phys_addr_t region_end;
-	void *region;
+	struct ion_handle *region;
 	struct pil_image_info __iomem *info;
 	int id;
 	int unvoted_flag;
-	size_t region_size;
 };
 
 /**
@@ -178,6 +177,8 @@ int pil_do_ramdump(struct pil_desc *desc, void *ramdump_dev)
 	return ret;
 }
 EXPORT_SYMBOL(pil_do_ramdump);
+
+static struct ion_client *ion;
 
 /**
  * pil_get_entry_addr() - Retrieve the entry address of a peripheral image
@@ -363,10 +364,10 @@ static int pil_init_entry_addr(struct pil_priv *priv, const struct pil_mdt *mdt)
 static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 				phys_addr_t max_addr, size_t align)
 {
-	void *region;
+	struct ion_handle *region;
+	int ret;
+	unsigned int mask;
 	size_t size = max_addr - min_addr;
-	size_t aligned_size;
-	DEFINE_DMA_ATTRS(attrs);
 
 	/* Don't reallocate due to fragmentation concerns, just sanity check */
 	if (priv->region) {
@@ -376,24 +377,36 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 		return 0;
 	}
 
-	if (align > SZ_4M)
-		aligned_size = ALIGN(size, SZ_4M);
-	else
-		aligned_size = ALIGN(size, SZ_1M);
-
-	region = dma_alloc_attrs(priv->desc->dev, aligned_size,
-				&priv->region_start, GFP_KERNEL, &attrs);
-
-	if (region == NULL) {
-		pil_err(priv->desc, "Failed to allocate relocatable region of size %zx\n",
-					size);
+	if (!ion) {
+		WARN_ON_ONCE("No ION client, can't support relocation\n");
 		return -ENOMEM;
+	}
+
+	/* Force alignment due to linker scripts not getting it right */
+	if (align > SZ_1M) {
+		mask = ION_HEAP(ION_PIL2_HEAP_ID);
+		align = SZ_4M;
+	} else {
+		mask = ION_HEAP(ION_PIL1_HEAP_ID);
+		align = SZ_1M;
+	}
+
+	region = ion_alloc(ion, size, align, mask, 0);
+	if (IS_ERR(region)) {
+		pil_err(priv->desc, "Failed to allocate relocatable region\n");
+		return PTR_ERR(region);
+	}
+
+	ret = ion_phys(ion, region, (ion_phys_addr_t *)&priv->region_start,
+			&size);
+	if (ret) {
+		ion_free(ion, region);
+		return ret;
 	}
 
 	priv->region = region;
 	priv->region_end = priv->region_start + size;
 	priv->base_addr = min_addr;
-	priv->region_size = aligned_size;
 
 	return 0;
 }
@@ -524,29 +537,13 @@ static void pil_release_mmap(struct pil_desc *desc)
 
 #define IOMAP_SIZE SZ_1M
 
-struct pil_map_fw_info {
-	int relocated;
-	void *region;
-	phys_addr_t base_addr;
-};
-
 static void *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
-	struct pil_map_fw_info *info = data;
-
-	if (info && info->relocated && info->region)
-		return info->region + (paddr - info->base_addr);
-
 	return ioremap(paddr, size);
 }
 
 static void unmap_fw_mem(void *vaddr, void *data)
 {
-	struct pil_map_fw_info *info = data;
-
-	if (info && info->relocated && info->region)
-		return;
-
 	iounmap(vaddr);
 }
 
@@ -556,19 +553,13 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	phys_addr_t paddr;
 	char fw_name[30];
 	int num = seg->num;
-	struct pil_map_fw_info map_fw_info = {
-		.relocated = seg->relocated,
-		.region = desc->priv->region,
-		.base_addr = desc->priv->region_start,
-	};
-	void *map_data = desc->map_data ? desc->map_data : &map_fw_info;
 
 	if (seg->filesz) {
 		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
 				desc->name, num);
 		ret = request_firmware_direct(fw_name, desc->dev, seg->paddr,
 					      seg->filesz, desc->map_fw_mem,
-					      desc->unmap_fw_mem, map_data);
+					      desc->unmap_fw_mem, NULL);
 		if (ret < 0) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big.\n",
 				fw_name);
@@ -593,7 +584,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		u8 bytes_after;
 
 		orig_size = size = min_t(size_t, IOMAP_SIZE, count);
-		buf = desc->map_fw_mem(paddr, size, map_data);
+		buf = ioremap(paddr, size);
 		if (!buf) {
 			pil_err(desc, "Failed to map memory\n");
 			return -ENOMEM;
@@ -613,8 +604,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		}
 
 		memset(buf, 0, size);
-
-		desc->unmap_fw_mem(buf, map_data);
+		iounmap(buf);
 
 		count -= orig_size;
 		paddr += orig_size;
@@ -800,8 +790,7 @@ out:
 	up_read(&pil_pm_rwsem);
 	if (ret) {
 		if (priv->region) {
-			dma_free_coherent(desc->dev, priv->region_size,
-					priv->region, priv->region_start);
+			ion_free(ion, priv->region);
 			priv->region = NULL;
 		}
 		pil_release_mmap(desc);
@@ -825,16 +814,13 @@ void pil_shutdown(struct pil_desc *desc)
 		disable_irq(desc->proxy_unvote_irq);
 		if (!desc->priv->unvoted_flag)
 			pil_proxy_unvote(desc, 1);
-	} else if (!proxy_timeout_ms)
+		return;
+	}
+
+	if (!proxy_timeout_ms)
 		pil_proxy_unvote(desc, 1);
 	else
 		flush_delayed_work(&priv->proxy);
-
-	if (priv->region) {
-		dma_free_coherent(desc->dev, priv->region_size,
-				priv->region, priv->region_start);
-		priv->region = NULL;
-	}
 }
 EXPORT_SYMBOL(pil_shutdown);
 
@@ -972,6 +958,9 @@ static int __init msm_pil_init(void)
 		pr_warn("pil: failed to find qcom,msm-imem-pil node\n");
 	}
 
+	ion = msm_ion_client_create("pil");
+	if (IS_ERR(ion)) /* Can't support relocatable images */
+		ion = NULL;
 	return register_pm_notifier(&pil_pm_notifier);
 }
 device_initcall(msm_pil_init);
@@ -979,6 +968,8 @@ device_initcall(msm_pil_init);
 static void __exit msm_pil_exit(void)
 {
 	unregister_pm_notifier(&pil_pm_notifier);
+	if (ion)
+		ion_client_destroy(ion);
 	if (pil_info_base)
 		iounmap(pil_info_base);
 }
