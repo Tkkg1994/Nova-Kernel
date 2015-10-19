@@ -287,9 +287,6 @@ static void run_boost_migration(unsigned int cpu)
 	if (ret)
 		return;
 
-		if (s->task_load < migration_load_threshold)
-			continue;
-
 	req_freq = load_based_syncs ?
 		(dest_policy.max * s->task_load) / 100 :
 						src_policy.cur;
@@ -304,7 +301,7 @@ static void run_boost_migration(unsigned int cpu)
 
 	cancel_delayed_work_sync(&s->boost_rem);
 
-		s->boost_min = req_freq;
+	s->boost_min = req_freq;
 
 	/* Force policy re-evaluation to trigger adjust notifier. */
 	get_online_cpus();
@@ -395,7 +392,7 @@ static int boost_migration_notify(struct notifier_block *nb,
 	spin_lock_irqsave(&s->lock, flags);
 	s->pending = true;
 	s->src_cpu = mnd->src_cpu;
-	s->task_load = mnd->load;
+	s->task_load = load_based_syncs ? mnd->load : 0;
 	spin_unlock_irqrestore(&s->lock, flags);
 
 	return NOTIFY_OK;
