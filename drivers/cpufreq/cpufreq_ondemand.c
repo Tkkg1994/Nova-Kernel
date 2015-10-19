@@ -300,12 +300,7 @@ static ssize_t store_sampling_rate(struct dbs_data *dbs_data, const char *buf,
 		size_t count)
 {
 	unsigned int input;
-	int ret = 0;
-	int mpd = strcmp(current->comm, "mpdecision");
-
-	if (mpd == 0)
-		return ret;
-
+	int ret;
 	ret = sscanf(buf, "%u", &input);
 	if (ret != 1)
 		return -EINVAL;
