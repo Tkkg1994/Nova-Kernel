@@ -1,3 +1,5 @@
+comment "Qualcomm MHI module edited by samsung"
+
 config QCOM_MHI
 	tristate "Qualcomm MHI module for S5 Plus (SM-G901F)"
 	default n

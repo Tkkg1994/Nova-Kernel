@@ -10,8 +10,8 @@
  * GNU General Public License for more details.
  */
 
-#include <mhi_sys.h>
-#include <mhi.h>
+#include "mhi_sys.h"
+#include "mhi.h"
 extern mhi_pcie_devices mhi_devices;
 int mhi_ssr_notify_cb(struct notifier_block *nb,
 			unsigned long action, void *data);
