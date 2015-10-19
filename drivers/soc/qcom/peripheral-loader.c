@@ -50,12 +50,6 @@
 #define pil_info(desc, fmt, ...)					\
 	dev_info(desc->dev, "%s: " fmt, desc->name, ##__VA_ARGS__)
 
-#if defined(CONFIG_ARM)
-#define pil_memset_io(d, c, count) memset(d, c, count)
-#else
-#define pil_memset_io(d, c, count) memset_io(d, c, count)
-#endif
-
 #define PIL_NUM_DESC		10
 static void __iomem *pil_info_base;
 
@@ -593,21 +587,37 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	paddr = seg->paddr + seg->filesz;
 	count = seg->sz - seg->filesz;
 	while (count > 0) {
-		int size;
+		int size, orig_size;
 		u8 __iomem *buf;
+		u8 bytes_before;
+		u8 bytes_after;
 
-		size = min_t(size_t, IOMAP_SIZE, count);
+		orig_size = size = min_t(size_t, IOMAP_SIZE, count);
 		buf = desc->map_fw_mem(paddr, size, map_data);
 		if (!buf) {
 			pil_err(desc, "Failed to map memory\n");
 			return -ENOMEM;
 		}
-		pil_memset_io(buf, 0, size);
+
+		if ((unsigned long)buf & 0x7) {
+			bytes_before = 8 - ((unsigned long)buf & 0x7);
+			memset_io(buf, 0, bytes_before);
+			size -= bytes_before;
+			buf += bytes_before;
+		}
+
+		if (size & 0x7) {
+			bytes_after = size & 0x7;
+			memset_io(buf + size - bytes_after, 0, bytes_after);
+			size -= bytes_after;
+		}
+
+		memset(buf, 0, size);
 
 		desc->unmap_fw_mem(buf, size, map_data);
 
-		count -= size;
-		paddr += size;
+		count -= orig_size;
+		paddr += orig_size;
 	}
 
 	if (desc->ops->verify_blob) {
