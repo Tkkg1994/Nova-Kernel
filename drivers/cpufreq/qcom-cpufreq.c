@@ -31,7 +31,7 @@
 #include <linux/of.h>
 #include <soc/qcom/cpufreq.h>
 #include <trace/events/power.h>
-#include <mach/msm_bus.h>
+#include <linux/msm-bus.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
