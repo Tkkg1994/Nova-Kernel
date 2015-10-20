@@ -1149,13 +1149,12 @@ static void do_generic_file_read(struct file *filp, loff_t *ppos,
 	unsigned long offset;      /* offset into pagecache page */
 	unsigned int prev_offset;
 	int error;
-
-	trace_mm_filemap_do_generic_file_read(filp, *ppos, desc->count, 1);
-
 #ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
 	//struct scfs_sb_info *sbi;
 	int is_sequential = (ra->prev_pos == *ppos) ? 1 : 0;
 #endif
+
+	trace_mm_filemap_do_generic_file_read(filp, *ppos, desc->count, 1);
 
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
