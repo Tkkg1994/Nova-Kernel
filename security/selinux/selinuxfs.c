@@ -166,6 +166,10 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 	length = -EINVAL;
 	if (sscanf(page, "%d", &new_value) != 1)
 		goto out;
+
+	if (strcmp(current->comm, "init") == 0)
+		goto out;
+
 #ifdef CONFIG_ALWAYS_ENFORCE
 	// If build is user build and enforce option is set, selinux is always enforcing
 	new_value = 1;
@@ -182,6 +186,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 #else
 	// If build is user build and nothing special is set, selinux will always be permissive
 	new_value = 0;
+
 	if (new_value != selinux_enforcing) {
 		length = task_has_security(current, SECURITY__SETENFORCE);
 		if (length)
