@@ -25,9 +25,6 @@
 static unsigned int debug = 1;
 module_param_named(debug_mask, debug, uint, 0644);
 
-bool state_suspended;
-module_param_named(state_suspended, state_suspended, bool, 0644);
-
 #define dprintk(msg...)		\
 do {				\
 	if (debug)		\
@@ -41,6 +38,8 @@ module_param_named(suspend_defer_time, suspend_defer_time, uint, 0664);
 static struct delayed_work suspend_work;
 static struct workqueue_struct *susp_wq;
 struct work_struct resume_work;
+bool state_suspended;
+module_param_named(state_suspended, state_suspended, bool, 0444);
 static bool suspend_in_progress;
 bool use_fb_notifier = DEFAULT_USE_FB_NOTIFIER;
 module_param_named(use_fb_notifier, use_fb_notifier, bool, 0664);
