@@ -421,16 +421,16 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 	if (of_find_property(dev->of_node, PROP_PORTS, &nf)) {
 		nf /= sizeof(*ports);
 		if (nf % 2)
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 
 		ports = devm_kzalloc(dev, nf * sizeof(*ports), GFP_KERNEL);
 		if (!ports)
-			return -ENOMEM;
+			return ERR_PTR(-ENOMEM);
 		ret = of_property_read_u32_array(dev->of_node, PROP_PORTS,
 						 ports, nf);
 
 		if (ret)
-			return ret;
+			return ERR_PTR(ret);
 		num_paths = nf / 2;
 		nf++;
 	}
@@ -469,7 +469,7 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 		bus_bw.usecase = devm_kzalloc(dev, sz_u, GFP_KERNEL);
 		v = bus_vec_lst = devm_kzalloc(dev, sz_v, GFP_KERNEL);
 		if (!bus_bw.usecase || !bus_vec_lst)
-			return -ENOMEM;
+			return ERR_PTR(-ENOMEM);
 	}
 
 	for (i = 0; i < nf; i++) {
