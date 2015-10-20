@@ -199,7 +199,7 @@ static int nla_put_uid(struct sk_buff *skb, int idx, uid_t uid)
 static int fib_uid_range_match(struct flowi *fl, struct fib_rule *rule)
 {
 	return (!uid_valid(rule->uid_start) && !uid_valid(rule->uid_end)) ||
-		(uid_gte(fl->flowi_uid, rule->uid_start) &&
+	       (uid_gte(fl->flowi_uid, rule->uid_start) &&
 		uid_lte(fl->flowi_uid, rule->uid_end));
 }
 
@@ -398,9 +398,9 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh)
 			rule->uid_end = fib_nl_uid(tb[FRA_UID_END]);
 		}
 		if (!uid_valid(rule->uid_start) ||
-			!uid_valid(rule->uid_end) ||
-			!uid_lte(rule->uid_start, rule->uid_end))
-			goto errout_free;
+		    !uid_valid(rule->uid_end) ||
+		    !uid_lte(rule->uid_start, rule->uid_end))
+		goto errout_free;
 	}
 
 	err = ops->configure(rule, skb, frh, tb);
@@ -510,11 +510,11 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh)
 			continue;
 
 		if (tb[FRA_UID_START] &&
-			!uid_eq(rule->uid_start, fib_nl_uid(tb[FRA_UID_START])))
+		    !uid_eq(rule->uid_start, fib_nl_uid(tb[FRA_UID_START])))
 			continue;
 
 		if (tb[FRA_UID_END] &&
-			!uid_eq(rule->uid_end, fib_nl_uid(tb[FRA_UID_END])))
+		    !uid_eq(rule->uid_end, fib_nl_uid(tb[FRA_UID_END])))
 			continue;
 
 		if (!ops->compare(rule, frh, tb))
@@ -653,17 +653,15 @@ static int dump_rules(struct sk_buff *skb, struct netlink_callback *cb,
 {
 	int idx = 0;
 	struct fib_rule *rule;
-	int err = 0;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 		if (idx < cb->args[1])
 			goto skip;
 
-		err = fib_nl_fill_rule(skb, rule, NETLINK_CB(cb->skb).portid,
-				       cb->nlh->nlmsg_seq, RTM_NEWRULE,
-				       NLM_F_MULTI, ops);
-		if (err)
+		if (fib_nl_fill_rule(skb, rule, NETLINK_CB(cb->skb).portid,
+				     cb->nlh->nlmsg_seq, RTM_NEWRULE,
+				     NLM_F_MULTI, ops) < 0)
 			break;
 skip:
 		idx++;
@@ -672,7 +670,7 @@ skip:
 	cb->args[1] = idx;
 	rules_ops_put(ops);
 
-	return err;
+	return skb->len;
 }
 
 static int fib_nl_dumprule(struct sk_buff *skb, struct netlink_callback *cb)
@@ -688,9 +686,7 @@ static int fib_nl_dumprule(struct sk_buff *skb, struct netlink_callback *cb)
 		if (ops == NULL)
 			return -EAFNOSUPPORT;
 
-		dump_rules(skb, cb, ops);
-
-		return skb->len;
+		return dump_rules(skb, cb, ops);
 	}
 
 	rcu_read_lock();
