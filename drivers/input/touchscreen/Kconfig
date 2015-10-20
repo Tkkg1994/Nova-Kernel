@@ -1030,7 +1030,7 @@ source "drivers/input/touchscreen/synaptics/Kconfig"
 
 config STATE_NOTIFIER
         bool "State Notifier"
-	depends on TOUCHSCREEN_SYNAPTICS_G2
+	depends on TOUCHSCREEN_SYNAPTICS_I2C_RMI_G
 	default y
 
 endif
