@@ -2040,7 +2040,7 @@ static int msm_ufs_power_up_sequence(struct ufs_hba *hba,
 	return err;
 }
 
-static int msm_ufs_hce_enable_notify(struct ufs_hba *hba, bool status)
+static int msm_ufs_hce_enable_notify(struct ufs_hba *hba, int status)
 {
 	struct msm_ufs_host *host = hba->priv;
 	int err = 0;
@@ -2172,7 +2172,7 @@ out:
 	return core_clk_rate;
 }
 
-static int msm_ufs_link_startup_notify(struct ufs_hba *hba, bool status)
+static int msm_ufs_link_startup_notify(struct ufs_hba *hba, int status)
 {
 	unsigned long core_clk_rate = 0;
 	u32 core_clk_cycles_per_100ms;
@@ -2461,7 +2461,7 @@ static int get_pwr_dev_param(struct ufs_msm_dev_params *msm_param,
 }
 
 static int msm_ufs_pwr_change_notify(struct ufs_hba *hba,
-				     bool status,
+				     int status,
 				     struct ufs_pa_layer_attr *dev_max_params,
 				     struct ufs_pa_layer_attr *dev_req_params)
 {
