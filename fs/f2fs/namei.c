@@ -54,7 +54,7 @@ static struct inode *f2fs_new_inode(struct inode *dir, umode_t mode)
 	if (err) {
 		err = -EINVAL;
 		nid_free = true;
-		goto out;
+		goto fail;
 	}
 
 	/* If the directory encrypted, then we should encrypt the inode. */
@@ -66,6 +66,9 @@ static struct inode *f2fs_new_inode(struct inode *dir, umode_t mode)
 	if (f2fs_may_inline_dentry(inode))
 		set_inode_flag(F2FS_I(inode), FI_INLINE_DENTRY);
 
+	f2fs_init_extent_tree(inode, NULL);
+
+	stat_inc_inline_xattr(inode);
 	stat_inc_inline_inode(inode);
 	stat_inc_inline_dir(inode);
 
@@ -73,15 +76,12 @@ static struct inode *f2fs_new_inode(struct inode *dir, umode_t mode)
 	mark_inode_dirty(inode);
 	return inode;
 
-out:
-	clear_nlink(inode);
-	unlock_new_inode(inode);
 fail:
 	trace_f2fs_new_inode(inode, err);
 	make_bad_inode(inode);
-	iput(inode);
 	if (nid_free)
-		alloc_nid_failed(sbi, ino);
+		set_inode_flag(F2FS_I(inode), FI_FREE_NID);
+	iput(inode);
 	return ERR_PTR(err);
 }
 
@@ -90,7 +90,14 @@ static int is_multimedia_file(const unsigned char *s, const char *sub)
 	size_t slen = strlen(s);
 	size_t sublen = strlen(sub);
 
-	if (sublen > slen)
+	/*
+	 * filename format of multimedia file should be defined as:
+	 * "filename + '.' + extension".
+	 */
+	if (slen < sublen + 2)
+		return 0;
+
+	if (s[slen - sublen - 1] != '.')
 		return 0;
 
 	return !strncasecmp(s + slen - sublen, sub, sublen);
@@ -210,7 +217,7 @@ static int __recover_dot_dentries(struct inode *dir, nid_t pino)
 
 	f2fs_lock_op(sbi);
 
-	de = f2fs_find_entry(dir, &dot, &page);
+	de = f2fs_find_entry(dir, &dot, &page, 0);
 	if (de) {
 		f2fs_dentry_kunmap(dir, page);
 		f2fs_put_page(page, 0);
@@ -220,7 +227,7 @@ static int __recover_dot_dentries(struct inode *dir, nid_t pino)
 			goto out;
 	}
 
-	de = f2fs_find_entry(dir, &dotdot, &page);
+	de = f2fs_find_entry(dir, &dotdot, &page, 0);
 	if (de) {
 		f2fs_dentry_kunmap(dir, page);
 		f2fs_put_page(page, 0);
@@ -249,7 +256,7 @@ static struct dentry *f2fs_lookup(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_name.len > F2FS_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
-	de = f2fs_find_entry(dir, &dentry->d_name, &page);
+	de = f2fs_find_entry(dir, &dentry->d_name, &page, flags);
 	if (!de)
 		return d_splice_alias(inode, dentry);
 
@@ -284,7 +291,7 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 	trace_f2fs_unlink_enter(dir, dentry);
 	f2fs_balance_fs(sbi);
 
-	de = f2fs_find_entry(dir, &dentry->d_name, &page);
+	de = f2fs_find_entry(dir, &dentry->d_name, &page, 0);
 	if (!de)
 		goto fail;
 
@@ -531,7 +538,7 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	f2fs_balance_fs(sbi);
 
-	old_entry = f2fs_find_entry(old_dir, &old_dentry->d_name, &old_page);
+	old_entry = f2fs_find_entry(old_dir, &old_dentry->d_name, &old_page, 0);
 	if (!old_entry)
 		goto out;
 
@@ -550,7 +557,7 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 		err = -ENOENT;
 		new_entry = f2fs_find_entry(new_dir, &new_dentry->d_name,
-						&new_page);
+						&new_page, 0);
 		if (!new_entry)
 			goto out_dir;
 
