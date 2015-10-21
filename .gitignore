@@ -229,3 +229,8 @@ GTAGS
 /vmlinuz*
 /Hulk*
 /output_*
+
+#
+# Exceptions
+#
+!drivers/staging/qcacld-2.0/firmware_bin/*
