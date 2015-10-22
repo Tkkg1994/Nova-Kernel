@@ -26,7 +26,7 @@
 #include <asm/mach/map.h>
 #include <asm/page.h>
 #include <asm/cacheflush.h>
-#include <mach/iommu_domains.h>
+#include <linux/msm_iommu_domains.h>
 #include <trace/events/kmem.h>
 
 struct ion_iommu_heap {
