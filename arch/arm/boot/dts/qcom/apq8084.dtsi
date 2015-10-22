@@ -4832,7 +4832,8 @@
 		};
 	};
 
-	qcom,msm-cpufreq {
+	qcom,msm-cpufreq@0 {
+		reg = <0 4>;
 		compatible = "qcom,msm-cpufreq";
 		clock-names = "l2_clk", "cpu0_clk", "cpu1_clk", "cpu2_clk",
 				"cpu3_clk";
