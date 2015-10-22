@@ -1383,6 +1383,7 @@ irqreturn_t msm_iommu_fault_handler_v2(int irq, void *dev_id)
 			if (strcmp(drvdata->name, "mdp_iommu") == 0) {
 					extern void msm_fb_iommu_page_fault(void);
 					msm_fb_iommu_page_fault();
+			}
 
 			if (ctx_drvdata->attached_domain) {
 				pagetable_phys = msm_iommu_iova_to_phys_soft(
