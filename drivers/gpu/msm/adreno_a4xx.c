@@ -544,6 +544,7 @@ uint64_t a4xx_perfcounter_read_vbif_pwr(struct adreno_device *adreno_dev,
 static void a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = &adreno_dev->dev;
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned int reg;
 
 	switch (bit) {
@@ -584,7 +585,7 @@ static void a4xx_err_callback(struct adreno_device *adreno_dev, int bit)
 		* turned on again when device resets
 		*/
 		adreno_writereg(adreno_dev, ADRENO_REG_RBBM_INT_0_MASK,
-		adreno_dev->gpudev->irq->mask & ~(1 << A4XX_INT_CP_HW_FAULT));
+		gpudev->irq->mask & ~(1 << A4XX_INT_CP_HW_FAULT));
 		break;
 	}
 	default:
