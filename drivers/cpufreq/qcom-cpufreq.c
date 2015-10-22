@@ -481,7 +481,7 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 		f /= 1000;
 
 		// override clk_round_rate calculated value for min freq
-		if (f < 300000 && f > data[j]) f = data[j];
+		if (f < 300000 && f > data[i]) f = data[i];
 
 		/*
 		 * Check if this is the last feasible frequency in the table.
