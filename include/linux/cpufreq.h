@@ -141,6 +141,7 @@ void cpufreq_sysfs_remove_file(const struct attribute *attr);
 unsigned int cpufreq_get(unsigned int cpu);
 unsigned int cpufreq_quick_get(unsigned int cpu);
 unsigned int cpufreq_quick_get_max(unsigned int cpu);
+unsigned int cpufreq_quick_get_util(unsigned int cpu);
 void disable_cpufreq(void);
 
 u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy);
@@ -161,6 +162,11 @@ static inline unsigned int cpufreq_quick_get_max(unsigned int cpu)
 {
 	return 0;
 }
+static inline unsigned int cpufreq_quick_get_util(unsigned int cpu);
+{
+	return 0;
+}
+
 static inline void disable_cpufreq(void) { }
 #endif
 #ifdef CONFIG_MSM_LIMITER
