@@ -656,6 +656,8 @@ static int msm_iommu_sec_ptbl_unmap(struct msm_iommu_drvdata *iommu_drvdata,
 	int ret, scm_ret;
 	struct scm_desc desc = {0};
 
+	if (!IS_ALIGNED(va, SZ_1M) || !IS_ALIGNED(len, SZ_1M))
+		return -EINVAL;
 	desc.args[0] = unmap.info.id = iommu_drvdata->sec_id;
 	desc.args[1] = unmap.info.ctx_id = ctx_drvdata->num;
 	desc.args[2] = unmap.info.va = va;
