@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -39,6 +39,7 @@
 #define __PMC_H__
 
 
+#include "palTimer.h"
 #include "csrLinkList.h"
 #include "pmcApi.h"
 #include "smeInternal.h"
@@ -162,6 +163,9 @@ typedef struct sPmcInfo
     void *impsCallbackContext;  /* value to be passed as parameter to routine specified above */
     vos_timer_t hImpsTimer;  /* timer to use with IMPS */
     vos_timer_t hTrafficTimer;  /* timer to measure traffic for BMPS */
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+    vos_timer_t hDiagEvtTimer;  /* timer to report PMC state through DIAG event */
+#endif
     vos_timer_t hExitPowerSaveTimer;  /* timer for deferred exiting of power save mode */
     tDblLinkList powerSaveCheckList; /* power save check routine list */
     tDblLinkList requestFullPowerList; /* request full power callback routine list */
@@ -184,6 +188,7 @@ typedef struct sPmcInfo
     void *enterWowlCallbackContext;/* value to be passed as parameter to routine specified above */
     tSirSmeWowlEnterParams wowlEnterParams; /* WOWL mode configuration */
     tDblLinkList deferredMsgList;   //The message in here are deferred and DONOT expect response from PE
+    tANI_BOOLEAN rfSuppliesVotedOff;  //Whether RF supplies are voted off or not.
 #ifdef FEATURE_WLAN_SCAN_PNO
     preferredNetworkFoundIndCallback  prefNetwFoundCB; /* routine to call for Preferred Network Found Indication */
     void *preferredNetworkFoundIndCallbackContext;/* value to be passed as parameter to routine specified above */
@@ -202,16 +207,23 @@ typedef struct sPmcInfo
     void *wakeReasonIndCBContext;  /* value to be passed as parameter to routine specified above */
 #endif // WLAN_WAKEUP_EVENTS
 
-/*
- * If TRUE driver will go to BMPS only if host operating system
- * asks to enter BMPS. For android wlan_hdd_cfg80211_set_power_mgmt API will
- * be used to set host power save
- */
+/* If TRUE driver will go to BMPS only if host operatiing system asks to enter BMPS.
+* For android wlan_hdd_cfg80211_set_power_mgmt API will be used to set host powersave*/
     v_BOOL_t    isHostPsEn;
     v_BOOL_t    ImpsReqFailed;
     v_BOOL_t    ImpsReqTimerFailed;
     tANI_U8     ImpsReqFailCnt;
     tANI_U8     ImpsReqTimerfailCnt;
+
+#ifdef FEATURE_WLAN_BATCH_SCAN
+   /*HDD callback to be called after receiving SET BATCH SCAN RSP from FW*/
+   hddSetBatchScanReqCallback setBatchScanReqCallback;
+   void * setBatchScanReqCallbackContext;
+   /*HDD callback to be called after receiving BATCH SCAN iRESULT IND from FW*/
+   hddTriggerBatchScanResultIndCallback batchScanResultCallback;
+   void * batchScanResultCallbackContext;
+#endif
+
 
 } tPmcInfo, *tpPmcInfo;
 
@@ -245,6 +257,12 @@ extern eHalStatus pmcStartTrafficTimer (tHalHandle hHal, tANI_U32 expirationTime
 extern void pmcStopTrafficTimer (tHalHandle hHal);
 extern void pmcImpsTimerExpired (tHalHandle hHal);
 extern void pmcTrafficTimerExpired (tHalHandle hHal);
+
+#ifdef FEATURE_WLAN_DIAG_SUPPORT
+extern eHalStatus pmcStartDiagEvtTimer (tHalHandle hHal);
+extern void pmcStopDiagEvtTimer (tHalHandle hHal);
+extern void pmcDiagEvtTimerExpired (tHalHandle hHal);
+#endif
 
 extern void pmcExitPowerSaveTimerExpired (tHalHandle hHal);
 extern tPmcState pmcGetPmcState (tHalHandle hHal);
@@ -330,7 +348,7 @@ typedef struct sPsOffloadPerSessionInfo
     tDblLinkList uapsdCbList;
 
     /*
-     * Whether TDLS session allows power save or not
+     * Whether TDLS session allows powersave or not
      */
 #ifdef FEATURE_WLAN_TDLS
     v_BOOL_t isTdlsPowerSaveProhibited;

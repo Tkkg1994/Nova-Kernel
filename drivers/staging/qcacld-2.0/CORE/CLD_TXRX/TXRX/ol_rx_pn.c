@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -109,8 +109,7 @@ ol_rx_pn_check_base(
     int last_pn_valid;
 
     /* Make sure host pn check is not redundant */
-    if ((adf_os_atomic_read(&peer->fw_pn_check)) ||
-         (vdev->opmode == wlan_op_mode_ibss)) {
+    if (adf_os_atomic_read(&peer->fw_pn_check)) {
         return msdu_list;
     }
 
@@ -131,6 +130,7 @@ ol_rx_pn_check_base(
         adf_nbuf_t mpdu_tail, next_mpdu;
         union htt_rx_pn_t new_pn;
         int pn_is_replay = 0;
+
         rx_desc = htt_rx_msdu_desc_retrieve(pdev->htt_pdev, mpdu);
 
         /*
@@ -140,7 +140,7 @@ ol_rx_pn_check_base(
         ol_rx_mpdu_list_next(pdev, mpdu, &mpdu_tail, &next_mpdu);
 
         /* Don't check the PN replay for non-encrypted frames */
-        if (!htt_rx_mpdu_is_encrypted(pdev->htt_pdev, rx_desc)) {
+        if (!vdev->drop_unenc && !htt_rx_mpdu_is_encrypted(pdev->htt_pdev, rx_desc)) {
             ADD_MPDU_TO_LIST(out_list_head, out_list_tail, mpdu, mpdu_tail);
             mpdu = next_mpdu;
             continue;
@@ -349,13 +349,10 @@ ol_rx_pn_trace_display(ol_txrx_pdev_handle pdev, int just_once)
     }
 
     i = start;
-    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-        "                                 seq     PN\n");
-    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-        "   count  idx    peer   tid uni  num    LSBs\n");
+    adf_os_print("                                 seq     PN\n");
+    adf_os_print("   count  idx    peer   tid uni  num    LSBs\n");
     do {
-        VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-            "  %6lld %4d  %p %2d   %d %4d %8d\n",
+        adf_os_print("  %6lld %4d  %p %2d   %d %4d %8d\n",
             cnt, i,
             pdev->rx_pn_trace.data[i].peer,
             pdev->rx_pn_trace.data[i].tid,

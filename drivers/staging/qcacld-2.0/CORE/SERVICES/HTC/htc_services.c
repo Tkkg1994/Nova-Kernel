@@ -25,7 +25,7 @@
  * to the Linux Foundation.
  */
 
-#include "htc_debug.h"
+
 #include "htc_internal.h"
 #include <adf_nbuf.h>  /* adf_nbuf_t */
 #if defined(HIF_PCI)
@@ -115,16 +115,12 @@ A_STATUS HTCConnectService(HTC_HANDLE               HTCHandle,
             if (pConnectReq->ConnectionFlags & HTC_CONNECT_FLAGS_DISABLE_CREDIT_FLOW_CTRL) {
                 disableCreditFlowCtrl = TRUE;
             }
-#if defined(HIF_USB)
-            if (!htc_credit_flow) {
-                disableCreditFlowCtrl = TRUE;
-            }
-#else
+
             /* Only enable credit for WMI service */
             if (!htc_credit_flow && pConnectReq->ServiceID != WMI_CONTROL_SVC) {
                 disableCreditFlowCtrl = TRUE;
             }
-#endif
+
                 /* check caller if it wants to transfer meta data */
             if ((pConnectReq->pMetaData != NULL) &&
                 (pConnectReq->MetaDataLength <= HTC_SERVICE_META_DATA_MAX_LENGTH)) {
@@ -194,10 +190,6 @@ A_STATUS HTCConnectService(HTC_HANDLE               HTCHandle,
                     (" Target failed service 0x%X connect request (status:%d)\n",
                                 rsp_msg_serv_id, rsp_msg_status));
                 status = A_EPROTO;
-#ifdef QCA_TX_HTT2_SUPPORT
-                /* Keep work and not to block the control message. */
-                target->CtrlResponseProcessing = FALSE;
-#endif /* QCA_TX_HTT2_SUPPORT */
                 break;
             }
 
@@ -269,38 +261,8 @@ A_STATUS HTCConnectService(HTC_HANDLE               HTCHandle,
                                      &pEndpoint->ul_is_polled,
                                      &pEndpoint->dl_is_polled);
         if (A_FAILED(status)) {
-            AR_DEBUG_PRINTF(ATH_DEBUG_ERROR,("%s Failed to Map Service to Pipe\n",
-                       __func__));
             break;
         }
-
-#if defined(HIF_SDIO)
-        /*
-         When AltDataCreditSize is non zero, it indicates the credit size for
-         HTT and all other services on Mbox0. Mbox1 has WMI_CONTROL_SVC which
-         uses the default credit size. Use AltDataCreditSize only when mailbox
-         is swapped. Mailbox swap bit is set by bmi_target_ready at the end of
-         BMI phase.
-
-         The Credit Size is a parameter associated with the mbox rather than a
-         service. Multiple services can run on this mbox.
-
-         If AltDataCreditSize is 0, that means the firmware doesn't support
-         this feature. Default to the TargetCreditSize
-        */
-
-        if ((target->AltDataCreditSize) && HIFIsMailBoxSwapped(target->hif_dev)
-            && (pEndpoint->UL_PipeID == 1) && (pEndpoint->DL_PipeID == 0))
-            pEndpoint->TxCreditSize = target->AltDataCreditSize;
-#elif defined(HIF_USB)
-        /*
-         * Endpoing to pipe is one-to-one mapping in USB.
-         * If AltDataCreditSize is not zero, it indicates the credit size for
-         * HTT_DATA_MSG_SVC services use AltDataCrditSize.
-         */
-        if ((target->AltDataCreditSize) && (pEndpoint->ServiceID == HTT_DATA_MSG_SVC))
-            pEndpoint->TxCreditSize = target->AltDataCreditSize;
-#endif
 
         adf_os_assert(!pEndpoint->dl_is_polled); /* not currently supported */
 
@@ -309,7 +271,7 @@ A_STATUS HTCConnectService(HTC_HANDLE               HTCHandle,
                 target->osdev,
                 &pEndpoint->ul_poll_timer,
                 HTCSendCompleteCheckCleanup,
-                pEndpoint, ADF_DEFERRABLE_TIMER);
+                pEndpoint);
         }
 
         AR_DEBUG_PRINTF(ATH_DEBUG_SETUP, ("HTC Service:0x%4.4X, ULpipe:%d DLpipe:%d id:%d Ready\n",
@@ -341,14 +303,17 @@ void HTCSetCreditDistribution(HTC_HANDLE               HTCHandle,
 }
 
 
-void HTCFwEventHandler(void *context, A_STATUS status)
+void HTCFwEventHandler(void *context)
 {
     HTC_TARGET      *target = (HTC_TARGET *)context;
     HTC_INIT_INFO   *initInfo = &target->HTCInitInfo;
 
-    /* check if target failure handler exists and pass error code to it. */
+    /*
+     * Currently, there's only one event type (Target Failure);
+     * there's no need to discriminate between event types.
+     */
     if (target->HTCInitInfo.TargetFailure != NULL) {
-        initInfo->TargetFailure(initInfo->pContext, status);
+        initInfo->TargetFailure(initInfo->pContext, A_ERROR);
     }
 }
 

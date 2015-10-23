@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -88,8 +88,7 @@ eHalStatus limP2PActionCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess);
  * P2P of limSetLinkState
  *
  *------------------------------------------------------------------*/
-void limSetLinkStateP2PCallback(tpAniSirGlobal pMac, void *callbackArg,
-            bool status)
+void limSetLinkStateP2PCallback(tpAniSirGlobal pMac, void *callbackArg)
 {
     //Send Ready on channel indication to SME
     if(pMac->lim.gpLimRemainOnChanReq)
@@ -160,10 +159,6 @@ static eHalStatus limSendHalReqRemainOnChanOffload(tpAniSirGlobal pMac,
         vos_mem_free(pScanOffloadReq);
         return eHAL_STATUS_FAILURE;
     }
-
-    pMac->lim.fOffloadScanPending = 1;
-    pMac->lim.fOffloadScanP2PListen = 1;
-
     return eHAL_STATUS_SUCCESS;
 }
 
@@ -182,6 +177,13 @@ int limProcessRemainOnChnlReq(tpAniSirGlobal pMac, tANI_U32 *pMsg)
      * respond with Probe Rsp causing peer device to NOT find us.
      * If we need this optimization, we need to find a way to keep the STA-AP link awake (no BMPS) on home channel when in listen state
      */
+#ifdef CONC_OPER_AND_LISTEN_CHNL_SAME_OPTIMIZE
+    tANI_U8 i;
+    tpPESession psessionEntry;
+#endif
+#ifdef WLAN_FEATURE_P2P_INTERNAL
+    tpPESession pP2pSession;
+#endif
 
     tSirRemainOnChnReq *MsgBuff = (tSirRemainOnChnReq *)pMsg;
     pMac->lim.gpLimRemainOnChanReq = MsgBuff;
@@ -202,6 +204,64 @@ int limProcessRemainOnChnlReq(tpAniSirGlobal pMac, tANI_U32 *pMsg)
         return FALSE;
     }
 
+#ifdef CONC_OPER_AND_LISTEN_CHNL_SAME_OPTIMIZE
+    for (i =0; i < pMac->lim.maxBssId;i++)
+    {
+        psessionEntry = peFindSessionBySessionId(pMac,i);
+
+        if ( (psessionEntry != NULL) )
+        {
+            if (psessionEntry->currentOperChannel == MsgBuff->chnNum)
+            {
+                tANI_U32 val;
+                tSirMacAddr nullBssid = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+                pMac->lim.p2pRemOnChanTimeStamp = vos_timer_get_system_time();
+                pMac->lim.gTotalScanDuration = MsgBuff->duration;
+
+                /* get the duration from the request */
+                val = SYS_MS_TO_TICKS(MsgBuff->duration);
+
+                limLog( pMac, LOG2, "Start listen duration = %d", val);
+                if (tx_timer_change(
+                        &pMac->lim.limTimers.gLimRemainOnChannelTimer, val, 0)
+                                          != TX_SUCCESS)
+                {
+                    limLog(pMac, LOGP,
+                          FL("Unable to change remain on channel Timer val"));
+                    goto error;
+                }
+                else if(TX_SUCCESS != tx_timer_activate(
+                                &pMac->lim.limTimers.gLimRemainOnChannelTimer))
+                {
+                    limLog(pMac, LOGP,
+                    FL("Unable to activate remain on channel Timer"));
+                    limDeactivateAndChangeTimer(pMac, eLIM_REMAIN_CHN_TIMER);
+                    goto error;
+                }
+
+#ifdef WLAN_FEATURE_P2P_INTERNAL
+                //Session is needed to send probe rsp
+                if(eSIR_SUCCESS != limCreateSessionForRemainOnChn(pMac, &pP2pSession))
+                {
+                    limLog( pMac, LOGE, "Unable to create session");
+                    goto error;
+                }
+#endif
+
+                if ((limSetLinkState(pMac, MsgBuff->isProbeRequestAllowed?
+                                     eSIR_LINK_LISTEN_STATE:eSIR_LINK_SEND_ACTION_STATE,
+                                     nullBssid, pMac->lim.gSelfMacAddr,
+                                     limSetLinkStateP2PCallback, NULL)) != eSIR_SUCCESS)
+                {
+                    limLog( pMac, LOGE, "Unable to change link state");
+                    goto error;
+                }
+                return FALSE;
+            }
+        }
+    }
+#endif
     pMac->lim.gLimPrevMlmState = pMac->lim.gLimMlmState;
     pMac->lim.gLimMlmState     = eLIM_MLM_P2P_LISTEN_STATE;
 
@@ -212,6 +272,12 @@ int limProcessRemainOnChnlReq(tpAniSirGlobal pMac, tANI_U32 *pMsg)
                    limRemainOnChnlSuspendLinkHdlr, NULL);
     return FALSE;
 
+#ifdef CONC_OPER_AND_LISTEN_CHNL_SAME_OPTIMIZE
+error:
+    limRemainOnChnRsp(pMac,eHAL_STATUS_FAILURE, NULL);
+    /* pMsg is freed by the caller */
+    return FALSE;
+#endif
 }
 
 
@@ -225,8 +291,7 @@ tSirRetStatus limCreateSessionForRemainOnChn(tpAniSirGlobal pMac, tPESession **p
     if(pMac->lim.gpLimRemainOnChanReq && ppP2pSession)
     {
         if((psessionEntry = peCreateSession(pMac,
-           pMac->lim.gpLimRemainOnChanReq->selfMacAddr,
-           &sessionId, 1, eSIR_INFRA_AP_MODE)) == NULL)
+           pMac->lim.gpLimRemainOnChanReq->selfMacAddr, &sessionId, 1)) == NULL)
         {
             limLog(pMac, LOGE, FL("Session Can not be created "));
             /* send remain on chn failure */
@@ -561,8 +626,8 @@ void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data)
         return;
     }
 
-    /* Incase of the Remain on Channel Failure Case
-       Clean up Everything */
+    //Incase of the Remain on Channel Failure Case
+    //Cleanup Everything
     if(eHAL_STATUS_FAILURE == status)
     {
        //Deactivate Remain on Channel Timer
@@ -578,15 +643,15 @@ void limRemainOnChnRsp(tpAniSirGlobal pMac, eHalStatus status, tANI_U32 *data)
 
        pMac->lim.gLimSystemInScanLearnMode = 0;
        pMac->lim.gLimHalScanState = eLIM_HAL_IDLE_SCAN_STATE;
-       SET_LIM_PROCESS_DEFD_MESGS(pMac, true);
     }
 
     /* delete the session */
     if((psessionEntry = peFindSessionByBssid(pMac,
                  MsgRemainonChannel->selfMacAddr,&sessionId)) != NULL)
     {
-        if (LIM_IS_P2P_DEVICE_ROLE(psessionEntry)) {
-            peDeleteSession( pMac, psessionEntry);
+        if ( eLIM_P2P_DEVICE_ROLE == psessionEntry->limSystemRole )
+        {
+           peDeleteSession( pMac, psessionEntry);
         }
     }
 
@@ -732,6 +797,72 @@ eHalStatus limP2PActionCnf(tpAniSirGlobal pMac, tANI_U32 txCompleteSuccess)
     }
 
     return eHAL_STATUS_SUCCESS;
+}
+
+
+void limSetHtCaps(tpAniSirGlobal pMac, tpPESession psessionEntry, tANI_U8 *pIeStartPtr,tANI_U32 nBytes)
+{
+    v_U8_t              *pIe=NULL;
+    tDot11fIEHTCaps     dot11HtCap;
+
+    PopulateDot11fHTCaps(pMac, psessionEntry, &dot11HtCap);
+    pIe = limGetIEPtr(pMac,pIeStartPtr, nBytes,
+                                       DOT11F_EID_HTCAPS,ONE_BYTE);
+    limLog( pMac, LOG2, FL("pIe %p dot11HtCap.supportedMCSSet[0]=0x%x"),
+            pIe, dot11HtCap.supportedMCSSet[0]);
+    if(pIe)
+    {
+        tHtCaps *pHtcap = (tHtCaps *)&pIe[2]; //convert from unpacked to packed structure
+        pHtcap->advCodingCap = dot11HtCap.advCodingCap;
+        pHtcap->supportedChannelWidthSet = dot11HtCap.supportedChannelWidthSet;
+        pHtcap->mimoPowerSave = dot11HtCap.mimoPowerSave;
+        pHtcap->greenField = dot11HtCap.greenField;
+        pHtcap->shortGI20MHz = dot11HtCap.shortGI20MHz;
+        pHtcap->shortGI40MHz = dot11HtCap.shortGI40MHz;
+        pHtcap->txSTBC = dot11HtCap.txSTBC;
+        pHtcap->rxSTBC = dot11HtCap.rxSTBC;
+        pHtcap->delayedBA = dot11HtCap.delayedBA  ;
+        pHtcap->maximalAMSDUsize = dot11HtCap.maximalAMSDUsize;
+        pHtcap->dsssCckMode40MHz = dot11HtCap.dsssCckMode40MHz;
+        pHtcap->psmp = dot11HtCap.psmp;
+        pHtcap->stbcControlFrame = dot11HtCap.stbcControlFrame;
+        pHtcap->lsigTXOPProtection = dot11HtCap.lsigTXOPProtection;
+        pHtcap->maxRxAMPDUFactor = dot11HtCap.maxRxAMPDUFactor;
+        pHtcap->mpduDensity = dot11HtCap.mpduDensity;
+        vos_mem_copy((void *)pHtcap->supportedMCSSet,
+                     (void *)(dot11HtCap.supportedMCSSet),
+                      sizeof(pHtcap->supportedMCSSet));
+        pHtcap->pco = dot11HtCap.pco;
+        pHtcap->transitionTime = dot11HtCap.transitionTime;
+        pHtcap->mcsFeedback = dot11HtCap.mcsFeedback;
+        pHtcap->txBF = dot11HtCap.txBF;
+        pHtcap->rxStaggeredSounding = dot11HtCap.rxStaggeredSounding;
+        pHtcap->txStaggeredSounding = dot11HtCap.txStaggeredSounding;
+        pHtcap->rxZLF = dot11HtCap.rxZLF;
+        pHtcap->txZLF = dot11HtCap.txZLF;
+        pHtcap->implicitTxBF = dot11HtCap.implicitTxBF;
+        pHtcap->calibration = dot11HtCap.calibration;
+        pHtcap->explicitCSITxBF = dot11HtCap.explicitCSITxBF;
+        pHtcap->explicitUncompressedSteeringMatrix =
+            dot11HtCap.explicitUncompressedSteeringMatrix;
+        pHtcap->explicitBFCSIFeedback = dot11HtCap.explicitBFCSIFeedback;
+        pHtcap->explicitUncompressedSteeringMatrixFeedback =
+            dot11HtCap.explicitUncompressedSteeringMatrixFeedback;
+        pHtcap->explicitCompressedSteeringMatrixFeedback =
+            dot11HtCap.explicitCompressedSteeringMatrixFeedback;
+        pHtcap->csiNumBFAntennae = dot11HtCap.csiNumBFAntennae;
+        pHtcap->uncompressedSteeringMatrixBFAntennae =
+            dot11HtCap.uncompressedSteeringMatrixBFAntennae;
+        pHtcap->compressedSteeringMatrixBFAntennae =
+            dot11HtCap.compressedSteeringMatrixBFAntennae;
+        pHtcap->antennaSelection = dot11HtCap.antennaSelection;
+        pHtcap->explicitCSIFeedbackTx = dot11HtCap.explicitCSIFeedbackTx;
+        pHtcap->antennaIndicesFeedbackTx = dot11HtCap.antennaIndicesFeedbackTx;
+        pHtcap->explicitCSIFeedback = dot11HtCap.explicitCSIFeedback;
+        pHtcap->antennaIndicesFeedback = dot11HtCap.antennaIndicesFeedback;
+        pHtcap->rxAS = dot11HtCap.rxAS;
+        pHtcap->txSoundingPPDUs = dot11HtCap.txSoundingPPDUs;
+    }
 }
 
 
@@ -910,7 +1041,7 @@ send_action_frame:
                 nBytes += noaLen;
                 limLog( pMac, LOGE,
                         FL("noaLen=%d origLen=%d pP2PIe=%p"
-                        " nBytes=%d nBytesToCopy=%zu "),
+                        " nBytes=%d nBytesToCopy=%d "),
                                    noaLen,origLen,pP2PIe,nBytes,
                    ((pP2PIe + origLen + 2) - (v_U8_t *)pMbMsg->data));
             }
@@ -918,9 +1049,8 @@ send_action_frame:
 
         if (SIR_MAC_MGMT_PROBE_RSP == pFc->subType)
         {
-            lim_set_ht_caps(pMac, psessionEntry,
-                            (tANI_U8*)pMbMsg->data + PROBE_RSP_IE_OFFSET,
-                            nBytes - PROBE_RSP_IE_OFFSET);
+            limSetHtCaps( pMac, psessionEntry, (tANI_U8*)pMbMsg->data + PROBE_RSP_IE_OFFSET,
+                           nBytes - PROBE_RSP_IE_OFFSET);
         }
 
         if (pMac->fP2pListenOffload)
@@ -987,9 +1117,11 @@ send_frame1:
     // Paranoia:
     vos_mem_set(pFrame, nBytes, 0);
 
+#ifdef QCA_WIFI_2_0
     /* Add sequence number to action frames */
     /* Frames are handed over in .11 format by supplicant already */
     limPopulateP2pMacHeader(pMac, (tANI_U8*)pMbMsg->data);
+#endif /* QCA_WIFI_2_0 */
 
     if ((noaLen > 0) && (noaLen<(SIR_MAX_NOA_ATTR_LEN + SIR_P2P_IE_HEADER_LEN)))
     {
@@ -1075,7 +1207,7 @@ send_frame1:
     {
         halstatus = halTxFrame( pMac, pPacket, (tANI_U16)nBytes,
                         HAL_TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
-                        7, limTxComplete, pFrame,
+                        7,/*SMAC_SWBD_TX_TID_MGMT_HIGH */ limTxComplete, pFrame,
                         txFlag, smeSessionId );
 
         if (!pMbMsg->noack)
@@ -1090,8 +1222,8 @@ send_frame1:
         pMac->lim.mgmtFrameSessionId = pMbMsg->sessionId;
         halstatus = halTxFrameWithTxComplete( pMac, pPacket, (tANI_U16)nBytes,
                         HAL_TXRX_FRM_802_11_MGMT, ANI_TXDIR_TODS,
-                        7, limTxComplete, pFrame,
-                        limP2PActionCnf, txFlag, smeSessionId, false );
+                        7,/*SMAC_SWBD_TX_TID_MGMT_HIGH */ limTxComplete, pFrame,
+                        limP2PActionCnf, txFlag, smeSessionId );
 
         if ( ! HAL_STATUS_SUCCESS ( halstatus ) )
         {

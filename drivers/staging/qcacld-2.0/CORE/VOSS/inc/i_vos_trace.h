@@ -79,7 +79,6 @@ void vos_trace_display(void);
 
 void vos_trace_setValue( VOS_MODULE_ID module, VOS_TRACE_LEVEL level, v_U8_t on );
 
-void vos_trace_set_module_trace_level(VOS_MODULE_ID module, uint32_t level);
 
 // VOS_TRACE is the macro invoked to add trace messages to code.  See the
 // documenation for vos_trace_msg() for the parameters etc. for this function.
@@ -126,17 +125,7 @@ void __printf(3,4) vos_snprintf(char *strBuffer, unsigned  int size,
 #endif
 
 #ifdef PANIC_ON_BUG
-#ifdef CONFIG_X86
-/* BUG_ON does not call panic on x86,so call panic directly */
-#define VOS_BUG( _condition ) do {                                      \
-        if ( ! ( _condition ) )                                         \
-        {                                                               \
-            printk(KERN_CRIT "VOS BUG in %s Line %d\n", __func__, __LINE__); \
-            dump_stack();                                               \
-            panic("BUG");                                               \
-        }                                                               \
-    } while(0)
-#else
+
 #define VOS_BUG( _condition ) do {                                      \
         if ( ! ( _condition ) )                                         \
         {                                                               \
@@ -144,7 +133,6 @@ void __printf(3,4) vos_snprintf(char *strBuffer, unsigned  int size,
             BUG_ON(1);                                                  \
         }                                                               \
     } while(0)
-#endif
 
 #else
 

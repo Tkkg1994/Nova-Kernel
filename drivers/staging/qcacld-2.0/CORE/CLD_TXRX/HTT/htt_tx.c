@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -50,23 +50,6 @@
 #include <ol_txrx_htt_api.h> /* ol_tx_msdu_id_storage */
 #include <htt_internal.h>
 
-#ifdef IPA_UC_OFFLOAD
-/* IPA Micro controler TX data packet HTT Header Preset */
-/* 31 | 30  29 | 28 | 27 | 26  22  | 21   16 | 15  13   | 12  8       | 7 0
- *------------------------------------------------------------------------------
- * R  | CS  OL | R  | PP | ext TID | vdev ID | pkt type | pkt subtype | msg type
- * 0  | 0      | 0  |    | 0x1F    | 0       | 2        | 0           | 0x01
- *------------------------------------------------------------------------------
- * pkt ID                                    | pkt length
- *------------------------------------------------------------------------------
- *                                frag_desc_ptr
- *------------------------------------------------------------------------------
- *                                   peer_id
- *------------------------------------------------------------------------------
- */
-#define HTT_IPA_UC_OFFLOAD_TX_HEADER_DEFAULT 0x07C04001
-#endif /* IPA_UC_OFFLOAD */
-
 /*--- setup / tear-down functions -------------------------------------------*/
 
 #ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
@@ -76,12 +59,9 @@ u_int32_t *g_dbg_htt_desc_end_addr, *g_dbg_htt_desc_start_addr;
 int
 htt_tx_attach(struct htt_pdev_t *pdev, int desc_pool_elems)
 {
-    int i, i_int, pool_size;
-    uint32_t **p;
-    adf_os_dma_addr_t pool_paddr = {0};
-    struct htt_tx_desc_page_t *page_info;
-    unsigned int num_link = 0;
-    uint32_t page_size;
+    int i, pool_size;
+    u_int32_t **p;
+    adf_os_dma_addr_t pool_paddr;
 
     if (pdev->cfg.is_high_latency) {
         pdev->tx_descs.size = sizeof(struct htt_host_tx_desc_t);
@@ -101,190 +81,60 @@ htt_tx_attach(struct htt_pdev_t *pdev, int desc_pool_elems)
             + (ol_cfg_netbuf_frags_max(pdev->ctrl_pdev)+1) * 8 // 2x u_int32_t
             + 4; /* u_int32_t fragmentation list terminator */
     }
-
+    if (pdev->tx_descs.size < sizeof(u_int32_t *)) {
+        pdev->tx_descs.size = sizeof(u_int32_t *);
+    }
     /*
      * Make sure tx_descs.size is a multiple of 4-bytes.
      * It should be, but round up just to be sure.
      */
     pdev->tx_descs.size = (pdev->tx_descs.size + 3) & (~0x3);
+
     pdev->tx_descs.pool_elems = desc_pool_elems;
     pdev->tx_descs.alloc_cnt = 0;
 
     pool_size = pdev->tx_descs.pool_elems * pdev->tx_descs.size;
 
-   /* Calculate required page count first */
-    page_size = adf_os_mem_get_page_size();
-    pdev->num_pages = pool_size / page_size;
-    if (pool_size % page_size)
-        pdev->num_pages++;
+    pdev->tx_descs.pool_vaddr = adf_os_mem_alloc_consistent(
+        pdev->osdev, pool_size, &pool_paddr,
+        adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
+    pdev->tx_descs.pool_paddr = pool_paddr;
 
-    /* Put in as many as possible descriptors into single page */
-    /* calculate how many descriptors can put in single page */
-    pdev->num_desc_per_page = page_size / pdev->tx_descs.size;
-
-    /* Pages information storage */
-    pdev->desc_pages = (struct htt_tx_desc_page_t *)adf_os_mem_alloc(
-        pdev->osdev, pdev->num_pages * sizeof(struct htt_tx_desc_page_t));
-    if (!pdev->desc_pages) {
-        adf_os_print("HTT Attach, desc page alloc fail");
-        goto fail1;
+    if (!pdev->tx_descs.pool_vaddr) {
+        return 1; /* failure */
     }
 
-    page_info = pdev->desc_pages;
-    p = (uint32_t **) pdev->tx_descs.freelist;
-    /* Allocate required memory with multiple pages */
-    for(i = 0; i < pdev->num_pages; i++) {
-        if (pdev->cfg.is_high_latency) {
-            page_info->page_v_addr_start = adf_os_mem_alloc(
-                pdev->osdev, page_size);
-            page_info->page_p_addr = pool_paddr;
-            if (!page_info->page_v_addr_start) {
-               page_info = pdev->desc_pages;
-               for (i_int = 0 ; i_int < i; i_int++) {
-                    page_info = pdev->desc_pages + i_int;
-                    adf_os_mem_free(page_info->page_v_addr_start);
-               }
-               goto fail2;
-            }
-        } else {
-            page_info->page_v_addr_start = adf_os_mem_alloc_consistent(
-                pdev->osdev,
-                page_size,
-                &page_info->page_p_addr,
-                adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
-            if (!page_info->page_v_addr_start) {
-               page_info = pdev->desc_pages;
-               for (i_int = 0 ; i_int < i; i_int++) {
-                    page_info = pdev->desc_pages + i_int;
-                    adf_os_mem_free_consistent(
-                        pdev->osdev,
-                        pdev->num_desc_per_page * pdev->tx_descs.size,
-                        page_info->page_v_addr_start,
-                        page_info->page_p_addr,
-                        adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
-               }
-               goto fail2;
-            }
-        }
-        page_info->page_v_addr_end = page_info->page_v_addr_start +
-            pdev->num_desc_per_page * pdev->tx_descs.size;
-        page_info++;
-    }
+    adf_os_print("%s:htt_desc_start:0x%p htt_desc_end:0x%p\n", __func__,
+                 pdev->tx_descs.pool_vaddr,
+                 (u_int32_t *) (pdev->tx_descs.pool_vaddr + pool_size));
 
-    page_info = pdev->desc_pages;
-    pdev->tx_descs.freelist = (uint32_t *)page_info->page_v_addr_start;
-    p = (uint32_t **) pdev->tx_descs.freelist;
-    for(i = 0; i < pdev->num_pages; i++) {
-        for (i_int = 0; i_int < pdev->num_desc_per_page; i_int++) {
-            if (i_int == (pdev->num_desc_per_page - 1)) {
-                /* Last element on this page, should pint next page */
-                if (!page_info->page_v_addr_start) {
-                    adf_os_print("over flow num link %d\n", num_link);
-                    goto fail3;
-                }
-                page_info++;
-                *p = (uint32_t *)page_info->page_v_addr_start;
-            }
-            else {
-                *p = (uint32_t *)(((char *) p) + pdev->tx_descs.size);
-            }
-            num_link++;
-            p = (uint32_t **) *p;
-            /* Last link established exit */
-            if (num_link == (pdev->tx_descs.pool_elems - 1))
-               break;
-        }
+#ifdef QCA_SUPPORT_TXDESC_SANITY_CHECKS
+    g_dbg_htt_desc_end_addr = (u_int32_t *)
+                         (pdev->tx_descs.pool_vaddr + pool_size);
+    g_dbg_htt_desc_start_addr = (u_int32_t *) pdev->tx_descs.pool_vaddr;
+#endif
+
+    /* link tx descriptors into a freelist */
+    pdev->tx_descs.freelist = (u_int32_t *) pdev->tx_descs.pool_vaddr;
+    p = (u_int32_t **) pdev->tx_descs.freelist;
+    for (i = 0; i < desc_pool_elems - 1; i++) {
+        *p = (u_int32_t *) (((char *) p) + pdev->tx_descs.size);
+        p = (u_int32_t **) *p;
     }
     *p = NULL;
 
-    if (pdev->cfg.is_high_latency) {
-        adf_os_atomic_init(&pdev->htt_tx_credit.target_delta);
-        adf_os_atomic_init(&pdev->htt_tx_credit.bus_delta);
-        adf_os_atomic_add(HTT_MAX_BUS_CREDIT,&pdev->htt_tx_credit.bus_delta);
-    }
     return 0; /* success */
-
-fail3:
-    if (pdev->cfg.is_high_latency) {
-        page_info = pdev->desc_pages;
-        for (i_int = 0 ; i_int < pdev->num_pages; i_int++) {
-            page_info = pdev->desc_pages + i_int;
-            adf_os_mem_free(page_info->page_v_addr_start);
-        }
-    } else {
-        page_info = pdev->desc_pages;
-        for (i_int = 0 ; i_int < pdev->num_pages; i_int++) {
-            page_info = pdev->desc_pages + i_int;
-            adf_os_mem_free_consistent(
-                pdev->osdev,
-                pdev->num_desc_per_page * pdev->tx_descs.size,
-                page_info->page_v_addr_start,
-                page_info->page_p_addr,
-                adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
-        }
-    }
-
-fail2:
-    adf_os_mem_free(pdev->desc_pages);
-
-fail1:
-    return -1;
 }
 
 void
 htt_tx_detach(struct htt_pdev_t *pdev)
 {
-    unsigned int i;
-    struct htt_tx_desc_page_t *page_info;
-
-    if (pdev){
-        if (pdev->cfg.is_high_latency) {
-            adf_os_mem_free(pdev->tx_descs.pool_vaddr);
-            for (i = 0; i < pdev->num_pages; i++) {
-                page_info = pdev->desc_pages + i;
-                    adf_os_mem_free(page_info->page_v_addr_start);
-            }
-        } else {
-            for (i = 0; i < pdev->num_pages; i++) {
-                page_info = pdev->desc_pages + i;
-                    adf_os_mem_free_consistent(
-                    pdev->osdev,
-                    pdev->num_desc_per_page * pdev->tx_descs.size,
-                    page_info->page_v_addr_start,
-                    page_info->page_p_addr,
-                    adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
-            }
-        }
-        adf_os_mem_free(pdev->desc_pages);
-    }
-}
-
-/**
- * htt_tx_get_paddr() - get physical address for htt desc
- *
- * Get HTT descriptor physical address from virtaul address
- * Find page first and find offset
- *
- * Return: Physical address of descriptor
- */
-adf_os_dma_addr_t htt_tx_get_paddr(htt_pdev_handle pdev, char *target_vaddr)
-{
-	unsigned int i;
-	struct htt_tx_desc_page_t *page_info = NULL;
-
-	for (i = 0; i < pdev->num_pages; i++) {
-		page_info = pdev->desc_pages + i;
-		if (!page_info->page_v_addr_start) {
-			adf_os_assert(0);
-			return 0;
-		}
-		if ((target_vaddr >= page_info->page_v_addr_start) &&
-			(target_vaddr <= page_info->page_v_addr_end))
-			break;
-	}
-
-	return page_info->page_p_addr +
-		(adf_os_dma_addr_t)(target_vaddr - page_info->page_v_addr_start);
+    adf_os_mem_free_consistent(
+        pdev->osdev,
+        pdev->tx_descs.pool_elems * pdev->tx_descs.size, /* pool_size */
+        pdev->tx_descs.pool_vaddr,
+        pdev->tx_descs.pool_paddr,
+        adf_os_get_dma_mem_context((&pdev->tx_descs), memctx));
 }
 
 /*--- descriptor allocation functions ---------------------------------------*/
@@ -324,14 +174,13 @@ htt_tx_desc_alloc(htt_pdev_handle pdev, u_int32_t *paddr_lo)
          * to map it from a virtual/CPU address to a physical/bus address.
          */
         *fragmentation_descr_field_ptr =
-            (uint32_t)htt_tx_get_paddr(pdev, (char *)htt_tx_desc) +
-            HTT_TX_DESC_LEN;
+            HTT_TX_DESC_PADDR(pdev, htt_tx_desc) + HTT_TX_DESC_LEN;
     }
     /*
      * Include the headroom for the HTC frame header when specifying the
      * physical address for the HTT tx descriptor.
      */
-    *paddr_lo = (uint32_t)htt_tx_get_paddr(pdev, (char *)htt_host_tx_desc);
+    *paddr_lo = (u_int32_t) HTT_TX_DESC_PADDR(pdev, htt_host_tx_desc);
     /*
      * The allocated tx descriptor space includes headroom for a
      * HTC frame header.  Hide this headroom, so that we don't have
@@ -372,7 +221,7 @@ void htt_tx_desc_frags_table_set(
         ((u_int32_t *) htt_tx_desc) + HTT_TX_DESC_FRAGS_DESC_PADDR_OFFSET_DWORD;
     if (reset) {
         *fragmentation_descr_field_ptr =
-            (uint32_t)htt_tx_get_paddr(pdev, (char *)htt_tx_desc) + HTT_TX_DESC_LEN;
+            HTT_TX_DESC_PADDR(pdev, htt_tx_desc) + HTT_TX_DESC_LEN;
     } else {
         *fragmentation_descr_field_ptr = paddr;
     }
@@ -400,7 +249,7 @@ htt_tx_desc_flag_batch_more(htt_pdev_handle pdev, void *desc)
 
 /*--- tx send function ------------------------------------------------------*/
 
-#ifdef ATH_11AC_TXCOMPACT
+#if ATH_11AC_TXCOMPACT
 
 /* Scheduling the Queued packets in HTT which could not be sent out because of No CE desc*/
 void
@@ -515,39 +364,16 @@ htt_tx_send_nonstd(
 
 #else  /*ATH_11AC_TXCOMPACT*/
 
-#ifdef QCA_TX_HTT2_SUPPORT
-static inline HTC_ENDPOINT_ID
-htt_tx_htt2_get_ep_id(
-    htt_pdev_handle pdev,
-    adf_nbuf_t msdu)
-{
-    /*
-     * TX HTT2 service mainly for small sized frame and check if
-     * this candidate frame allow or not.
-     */
-    if ((pdev->htc_tx_htt2_endpoint != ENDPOINT_UNUSED) &&
-        adf_nbuf_get_tx_parallel_dnload_frm(msdu) &&
-        (adf_nbuf_len(msdu) < pdev->htc_tx_htt2_max_size))
-        return pdev->htc_tx_htt2_endpoint;
-    else
-        return pdev->htc_endpoint;
-}
-#else
-#define htt_tx_htt2_get_ep_id(pdev, msdu)     (pdev->htc_endpoint)
-#endif /* QCA_TX_HTT2_SUPPORT */
-
 static inline int
 htt_tx_send_base(
     htt_pdev_handle pdev,
     adf_nbuf_t msdu,
     u_int16_t msdu_id,
-    int download_len,
-    u_int8_t more_data)
+    int download_len)
 {
     struct htt_host_tx_desc_t *htt_host_tx_desc;
     struct htt_htc_pkt *pkt;
     int packet_len;
-    HTC_ENDPOINT_ID ep_id;
 
     /*
      * The HTT tx descriptor was attached as the prefix fragment to the
@@ -579,20 +405,17 @@ htt_tx_send_base(
         download_len = packet_len;
     }
 
-    ep_id = htt_tx_htt2_get_ep_id(pdev, msdu);
-
     SET_HTC_PACKET_INFO_TX(
         &pkt->htc_pkt,
         pdev->tx_send_complete_part2,
         (unsigned char *) htt_host_tx_desc,
         download_len - HTC_HDR_LENGTH,
-        ep_id,
+        pdev->htc_endpoint,
         1); /* tag - not relevant here */
 
     SET_HTC_PACKET_NET_BUF_CONTEXT(&pkt->htc_pkt, msdu);
 
-    adf_nbuf_trace_update(msdu, "HT:T:");
-    HTCSendDataPkt(pdev->htc_pdev, &pkt->htc_pkt, more_data);
+    HTCSendDataPkt(pdev->htc_pdev, &pkt->htc_pkt);
 
     return 0; /* success */
 }
@@ -606,6 +429,7 @@ htt_tx_send_batch(
     u_int16_t *msdu_id_storage;
     u_int16_t msdu_id;
     adf_nbuf_t msdu;
+
     /*
      * FOR NOW, iterate through the batch, sending the frames singly.
      * Eventually HTC and HIF should be able to accept a batch of
@@ -617,10 +441,8 @@ htt_tx_send_batch(
          adf_nbuf_t next_msdu = adf_nbuf_next(msdu);
          msdu_id_storage = ol_tx_msdu_id_storage(msdu);
          msdu_id = *msdu_id_storage;
-
          /* htt_tx_send_base returns 0 as success and 1 as failure */
-         if (htt_tx_send_base(pdev, msdu, msdu_id, pdev->download_len,
-                              num_msdus)) {
+         if (htt_tx_send_base(pdev, msdu, msdu_id, pdev->download_len)) {
              adf_nbuf_set_next(msdu, rejected);
              rejected = msdu;
          }
@@ -650,7 +472,7 @@ htt_tx_send_nonstd(
         HTT_TX_HDR_SIZE_802_1Q +
         HTT_TX_HDR_SIZE_LLC_SNAP +
         ol_cfg_tx_download_size(pdev->ctrl_pdev);
-    return htt_tx_send_base(pdev, msdu, msdu_id, download_len, 0);
+    return htt_tx_send_base(pdev, msdu, msdu_id, download_len);
 }
 
 int
@@ -659,7 +481,7 @@ htt_tx_send_std(
     adf_nbuf_t msdu,
     u_int16_t msdu_id)
 {
-    return htt_tx_send_base(pdev, msdu, msdu_id, pdev->download_len, 0);
+    return htt_tx_send_base(pdev, msdu, msdu_id, pdev->download_len);
 }
 
 #endif /*ATH_11AC_TXCOMPACT*/
@@ -701,206 +523,3 @@ htt_tx_desc_display(void *tx_desc)
     }
 }
 #endif
-
-#ifdef IPA_UC_OFFLOAD
-int htt_tx_ipa_uc_attach(struct htt_pdev_t *pdev,
-    unsigned int uc_tx_buf_sz,
-    unsigned int uc_tx_buf_cnt,
-    unsigned int uc_tx_partition_base)
-{
-   unsigned int  tx_buffer_count;
-   adf_nbuf_t    buffer_vaddr;
-   u_int32_t     buffer_paddr;
-   u_int32_t    *header_ptr;
-   u_int32_t    *ring_vaddr;
-   int           return_code = 0;
-
-   /* Allocate CE Write Index WORD */
-   pdev->ipa_uc_tx_rsc.tx_ce_idx.vaddr =
-       adf_os_mem_alloc_consistent(pdev->osdev,
-                4,
-                &pdev->ipa_uc_tx_rsc.tx_ce_idx.paddr,
-                adf_os_get_dma_mem_context(
-                   (&pdev->ipa_uc_tx_rsc.tx_ce_idx), memctx));
-   if (!pdev->ipa_uc_tx_rsc.tx_ce_idx.vaddr) {
-      adf_os_print("%s: CE Write Index WORD alloc fail", __func__);
-      return -1;
-   }
-
-   /* Allocate TX COMP Ring */
-   pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr =
-       adf_os_mem_alloc_consistent(pdev->osdev,
-                uc_tx_buf_cnt * 4,
-                &pdev->ipa_uc_tx_rsc.tx_comp_base.paddr,
-                adf_os_get_dma_mem_context(
-                   (&pdev->ipa_uc_tx_rsc.tx_comp_base), memctx));
-   if (!pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr) {
-      adf_os_print("%s: TX COMP ring alloc fail", __func__);
-      return_code = -2;
-      goto free_tx_ce_idx;
-   }
-
-   adf_os_mem_zero(pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr, uc_tx_buf_cnt * 4);
-
-   /* Allocate TX BUF vAddress Storage */
-   pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg =
-         (adf_nbuf_t *)adf_os_mem_alloc(pdev->osdev,
-                          uc_tx_buf_cnt * sizeof(adf_nbuf_t));
-   if (!pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg) {
-      adf_os_print("%s: TX BUF POOL vaddr storage alloc fail",
-                   __func__);
-      return_code = -3;
-      goto free_tx_comp_base;
-   }
-   adf_os_mem_zero(pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg,
-                   uc_tx_buf_cnt * sizeof(adf_nbuf_t));
-
-   ring_vaddr = pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr;
-   /* Allocate TX buffers as many as possible */
-   for (tx_buffer_count = 0;
-        tx_buffer_count < (uc_tx_buf_cnt - 1);
-        tx_buffer_count++) {
-      buffer_vaddr = adf_nbuf_alloc(pdev->osdev,
-                uc_tx_buf_sz, 0, 4, FALSE);
-      if (!buffer_vaddr)
-      {
-         adf_os_print("%s: TX BUF alloc fail, allocated buffer count %d",
-                      __func__, tx_buffer_count);
-         return 0;
-      }
-
-      /* Init buffer */
-      adf_os_mem_zero(adf_nbuf_data(buffer_vaddr), uc_tx_buf_sz);
-      header_ptr = (u_int32_t *)adf_nbuf_data(buffer_vaddr);
-
-      *header_ptr = HTT_IPA_UC_OFFLOAD_TX_HEADER_DEFAULT;
-      header_ptr++;
-      *header_ptr |= ((u_int16_t)uc_tx_partition_base + tx_buffer_count) << 16;
-
-      adf_nbuf_map(pdev->osdev, buffer_vaddr, ADF_OS_DMA_BIDIRECTIONAL);
-      buffer_paddr = adf_nbuf_get_frag_paddr_lo(buffer_vaddr, 0);
-      header_ptr++;
-      *header_ptr = (u_int32_t)(buffer_paddr + 16);
-
-      header_ptr++;
-      *header_ptr = 0xFFFFFFFF;
-
-      /* FRAG Header */
-      header_ptr++;
-      *header_ptr = buffer_paddr + 32;
-
-      *ring_vaddr = buffer_paddr;
-      pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[tx_buffer_count] =
-            buffer_vaddr;
-      /* Memory barrier to ensure actual value updated */
-
-      ring_vaddr++;
-   }
-
-   pdev->ipa_uc_tx_rsc.alloc_tx_buf_cnt = tx_buffer_count;
-
-   return 0;
-
-free_tx_comp_base:
-   adf_os_mem_free_consistent(pdev->osdev,
-                   ol_cfg_ipa_uc_tx_max_buf_cnt(pdev->ctrl_pdev) * 4,
-                   pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr,
-                   pdev->ipa_uc_tx_rsc.tx_comp_base.paddr,
-                   adf_os_get_dma_mem_context(
-                      (&pdev->ipa_uc_tx_rsc.tx_comp_base), memctx));
-free_tx_ce_idx:
-   adf_os_mem_free_consistent(pdev->osdev,
-                   4,
-                   pdev->ipa_uc_tx_rsc.tx_ce_idx.vaddr,
-                   pdev->ipa_uc_tx_rsc.tx_ce_idx.paddr,
-                   adf_os_get_dma_mem_context(
-                      (&pdev->ipa_uc_tx_rsc.tx_ce_idx), memctx));
-   return return_code;
-}
-
-int htt_tx_ipa_uc_detach(struct htt_pdev_t *pdev)
-{
-   u_int16_t idx;
-
-   if (pdev->ipa_uc_tx_rsc.tx_ce_idx.vaddr) {
-      adf_os_mem_free_consistent(pdev->osdev,
-                   4,
-                   pdev->ipa_uc_tx_rsc.tx_ce_idx.vaddr,
-                   pdev->ipa_uc_tx_rsc.tx_ce_idx.paddr,
-                   adf_os_get_dma_mem_context(
-                      (&pdev->ipa_uc_tx_rsc.tx_ce_idx), memctx));
-   }
-
-   if (pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr) {
-     adf_os_mem_free_consistent(pdev->osdev,
-                   ol_cfg_ipa_uc_tx_max_buf_cnt(pdev->ctrl_pdev) * 4,
-                   pdev->ipa_uc_tx_rsc.tx_comp_base.vaddr,
-                   pdev->ipa_uc_tx_rsc.tx_comp_base.paddr,
-                   adf_os_get_dma_mem_context(
-                      (&pdev->ipa_uc_tx_rsc.tx_comp_base), memctx));
-   }
-
-   /* Free each single buffer */
-   for(idx = 0; idx < pdev->ipa_uc_tx_rsc.alloc_tx_buf_cnt; idx++) {
-      if (pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx]) {
-         adf_nbuf_unmap(pdev->osdev,
-            pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx],
-            ADF_OS_DMA_FROM_DEVICE);
-         adf_nbuf_free(pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg[idx]);
-      }
-   }
-
-   /* Free storage */
-   adf_os_mem_free(pdev->ipa_uc_tx_rsc.tx_buf_pool_vaddr_strg);
-
-   return 0;
-}
-#endif /* IPA_UC_OFFLOAD */
-
-int htt_tx_credit_update(struct htt_pdev_t *pdev)
-{
-   int credit_delta;
-   credit_delta = MIN(adf_os_atomic_read(&pdev->htt_tx_credit.target_delta),
-                      adf_os_atomic_read(&pdev->htt_tx_credit.bus_delta));
-   if (credit_delta) {
-      adf_os_atomic_add(-credit_delta, &pdev->htt_tx_credit.target_delta);
-      adf_os_atomic_add(-credit_delta, &pdev->htt_tx_credit.bus_delta);
-   }
-   return credit_delta;
-}
-
-#ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL
-void htt_tx_group_credit_process(struct htt_pdev_t *pdev, u_int32_t *msg_word)
-{
-   int group_credit_sign;
-   int32_t group_credit;
-   u_int32_t group_credit_abs, vdev_id_mask, ac_mask;
-   u_int8_t group_abs, group_id;
-   u_int8_t group_offset = 0, more_group_present = 0;
-
-   more_group_present = HTT_TX_CREDIT_TXQ_GRP_GET(*msg_word);
-
-   while (more_group_present) {
-      /* Parse the Group Data */
-      group_id = HTT_TXQ_GROUP_ID_GET(*(msg_word+1+group_offset));
-      group_credit_abs =
-           HTT_TXQ_GROUP_CREDIT_COUNT_GET(*(msg_word+1+group_offset));
-      group_credit_sign =
-           HTT_TXQ_GROUP_SIGN_GET(*(msg_word+1+group_offset)) ? -1 : 1;
-      group_credit = group_credit_sign * group_credit_abs;
-      group_abs = HTT_TXQ_GROUP_ABS_GET(*(msg_word+1+group_offset));
-
-      vdev_id_mask =
-           HTT_TXQ_GROUP_VDEV_ID_MASK_GET(*(msg_word+2+group_offset));
-      ac_mask = HTT_TXQ_GROUP_AC_MASK_GET(*(msg_word+2+group_offset));
-
-      ol_txrx_update_tx_queue_groups(pdev->txrx_pdev, group_id,
-                                     group_credit, group_abs,
-                                     vdev_id_mask, ac_mask);
-      more_group_present = HTT_TXQ_GROUP_EXT_GET(*(msg_word+1+group_offset));
-      group_offset += HTT_TX_GROUP_INDEX_OFFSET;
-   }
-   OL_TX_UPDATE_GROUP_CREDIT_STATS(pdev->txrx_pdev);
-}
-#endif
-

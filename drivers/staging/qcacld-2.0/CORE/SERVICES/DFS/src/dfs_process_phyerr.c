@@ -237,7 +237,7 @@ dfs_process_phyerr_sowl(struct ath_dfs *dfs, void *buf, u_int16_t datalen,
    const char *cbuf = (const char *) buf;
    u_int8_t dur = 0;
    u_int8_t pulse_bw_info, pulse_length_ext, pulse_length_pri;
-   int pri_found = 0, ext_found = 0;
+   int pri_found, ext_found;
    int early_ext = 0;
    int event_width;
 
@@ -501,8 +501,8 @@ dump_phyerr_contents(const char *d, int len)
 
 void
 dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
-                   u_int8_t r_rssi, u_int8_t r_ext_rssi, u_int32_t r_rs_tstamp,
-                   u_int64_t r_fulltsf, bool enable_log)
+    u_int8_t r_rssi, u_int8_t r_ext_rssi, u_int32_t r_rs_tstamp,
+    u_int64_t r_fulltsf)
 {
    struct ath_dfs *dfs = (struct ath_dfs *)ic->ic_dfs;
    struct ieee80211_channel *chan=ic->ic_curchan;
@@ -538,12 +538,6 @@ dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
     */
    if (dfs->dfs_debug_mask & ATH_DEBUG_DFS_PHYERR_PKT)
       dump_phyerr_contents(buf, datalen);
-
-   if (chan == NULL) {
-      VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
-              "%s: chan is NULL\n", __func__);
-      return;
-   }
 
    if (IEEE80211_IS_CHAN_RADAR(chan)) {
          DFS_DPRINTK(dfs, ATH_DEBUG_DFS1,
@@ -584,9 +578,8 @@ dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
     * + otherwise, Owl (and legacy.)
     */
    if (dfs->dfs_caps.ath_chip_is_bb_tlv) {
-      if (dfs_process_phyerr_bb_tlv(dfs, buf, datalen, r_rssi, r_ext_rssi,
-                                    r_rs_tstamp, r_fulltsf,
-                                    &e, enable_log) == 0) {
+      if (dfs_process_phyerr_bb_tlv(dfs, buf, datalen, r_rssi,
+          r_ext_rssi, r_rs_tstamp, r_fulltsf, &e) == 0) {
                         dfs->dfs_phyerr_reject_count++;
          return;
                     } else {
@@ -612,10 +605,6 @@ dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
          return;
                 }
    }
-
-   VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-             "\n %s: Frequency at which the phyerror was injected = %d",
-             __func__, e.freq);
 
    /*
     * If the hardware supports radar reporting on the extension channel
@@ -760,7 +749,6 @@ dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
       event->re_ts = (e.rs_tstamp) & DFS_TSMASK;
       event->re_chanindex = dfs->dfs_curchan_radindex;
       event->re_flags = 0;
-      event->sidx = e.sidx;
 
       /*
        * Handle chirp flags.
@@ -837,7 +825,6 @@ dfs_process_phyerr(struct ieee80211com *ic, void *buf, u_int16_t datalen,
          event->re_full_ts = e.fulltsf;
          event->re_ts = (e.rs_tstamp) & DFS_TSMASK;
          event->re_rssi = e.rssi;
-         event->sidx = e.sidx;
 
          /*
           * Handle chirp flags.

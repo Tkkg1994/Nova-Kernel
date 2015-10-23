@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -81,7 +81,7 @@
 #define SOFTAP_RSSI_WEIGHT      (20)
 #define SOFTAP_COUNT_WEIGHT     (20)
 
-#define SAP_DEFAULT_24GHZ_CHANNEL     (6)
+#define SAP_DEFAULT_CHANNEL     (6)
 #define SAP_DEFAULT_5GHZ_CHANNEL      (40)
 #define SAP_CHANNEL_NOT_SELECTED (0)
 
@@ -113,39 +113,10 @@ typedef enum
     CHANNEL_14
 } tSapChannel;
 
-#define MAX_80MHZ_BANDS 6
-#define SAP_80MHZ_MASK     0x0F
-#define SAP_40MHZ_MASK_L   0x03
-#define SAP_40MHZ_MASK_H   0x0C
-
-/*
- * structs for holding channel bonding bitmap
- * used for finding new channel when SAP is on
- * DFS channel and radar is detected.
- */
-typedef struct sChannelBondingInfo {
-  v_U8_t channelMap:4;
-  v_U8_t rsvd:4;
-  v_U8_t startChannel;
-} tChannelBondingInfo;
-
-typedef struct __chan_bonding_bitmap {
-  tChannelBondingInfo chanBondingSet[MAX_80MHZ_BANDS];
-} chan_bonding_bitmap;
-
 /**
 * Structure holding information of each channel in the spectrum,
 * it contains the channel number, the computed weight
 */
-typedef struct sChannelInfo {
-    v_U8_t   channel;
-    v_BOOL_t valid; // if the channel is valid to be picked as new channel
-} tChannelInfo;
-
-typedef struct sAll5GChannelList{
-    v_U8_t       numChannel;
-    tChannelInfo *channelList;
-} tAll5GChannelList;
 
 typedef struct sSapChannelListInfo{
     v_U8_t numChannel;
@@ -179,30 +150,5 @@ typedef struct sSapChSelParams {
     void *pSpectInfoParams;//*pDfsParams;   // Filled with tSapChSelSpectInfo
     v_U16_t numChannels;
 } tSapChSelParams;
-
-#define SAP_TX_LEAKAGE_THRES 310
-#define SAP_TX_LEAKAGE_MAX  1000
-#define SAP_TX_LEAKAGE_MIN  200
-/*
- * This define is used to block additional channels
- * based on the new data gathered on auto platforms
- * and to differentiate the leakage data among different
- * platforms.
- */
-#define SAP_TX_LEAKAGE_AUTO_MIN  210
-
-typedef struct sSapTxLeakInfo {
-    v_U8_t  leak_chan;      /* leak channel */
-    v_U32_t leak_lvl;       /* tx leakage lvl */
-} tSapTxLeakInfo;
-
-typedef struct sSapChanMatrixInfo {
-    v_U8_t channel;         /* channel to switch from */
-#ifdef FEATURE_WLAN_CH144
-    tSapTxLeakInfo chan_matrix[RF_CHAN_144 - RF_CHAN_36 + 1];
-#else
-    tSapTxLeakInfo chan_matrix[RF_CHAN_140 - RF_CHAN_36 + 1];
-#endif
-} tSapChanMatrixInfo;
 
 #endif // if !defined __SAP_CH_SELECT_H

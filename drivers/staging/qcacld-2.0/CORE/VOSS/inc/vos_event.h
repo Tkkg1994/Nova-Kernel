@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -181,6 +181,11 @@ VOS_STATUS vos_event_reset( vos_event_t * event );
 
   -------------------------------------------------------------------------*/
 VOS_STATUS vos_event_destroy( vos_event_t *event );
+
+// TODO: this is being removed and a stub exists currently to avoid
+// compiler errors
+VOS_STATUS vos_wait_events( vos_event_t *events, v_U8_t numEvents,
+                            v_U32_t timeout, v_U8_t *pEventIndex );
 
 /*----------------------------------------------------------------------------
 

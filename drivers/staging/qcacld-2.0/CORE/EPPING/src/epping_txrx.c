@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -20,10 +20,12 @@
  */
 
 /*
- * This file was originally distributed by Qualcomm Atheros, Inc.
- * under proprietary terms before Copyright ownership was assigned
- * to the Linux Foundation.
+ * Copyright (c) 2014 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+ * Qualcomm Atheros Confidential and Proprietary.
+ *
  */
+
 
 /*========================================================================
 
@@ -43,6 +45,7 @@
 #include <linux/firmware.h>
 #include <wcnss_api.h>
 #include <wlan_hdd_tx_rx.h>
+#include <palTimer.h>
 #include <wniApi.h>
 #include <wlan_nlink_srv.h>
 #include <wlan_btc_svc.h>
@@ -242,11 +245,10 @@ static int epping_set_mac_address(struct net_device *dev, void *addr)
 static void epping_stop_adapter(epping_adapter_t *pAdapter)
 {
    if (pAdapter && pAdapter->started) {
-      EPPING_LOG(LOG1, FL("Disabling queues"));
       netif_tx_disable(pAdapter->dev);
       netif_carrier_off(pAdapter->dev);
       pAdapter->started = false;
-#if defined(MSM_PLATFORM) && defined(HIF_PCI) && defined(CONFIG_CNSS)
+#if defined(MSM_PLATFORM) && defined(HIF_PCI)
       cnss_request_bus_bandwidth(CNSS_BUS_WIDTH_LOW);
 #endif
    }
@@ -260,11 +262,10 @@ static int epping_start_adapter(epping_adapter_t *pAdapter)
       return -1;
    }
    if (!pAdapter->started) {
-#if defined(MSM_PLATFORM) && defined(HIF_PCI) && defined(CONFIG_CNSS)
+#if defined(MSM_PLATFORM) && defined(HIF_PCI)
       cnss_request_bus_bandwidth(CNSS_BUS_WIDTH_HIGH);
 #endif
       netif_carrier_on(pAdapter->dev);
-      EPPING_LOG(LOG1, FL("Enabling queues"));
       netif_tx_start_all_queues(pAdapter->dev);
       pAdapter->started = true;
    } else {
@@ -323,8 +324,7 @@ void epping_destroy_adapter(epping_adapter_t *pAdapter)
    while (adf_nbuf_queue_len(&pAdapter->nodrop_queue)) {
       adf_nbuf_t tmp_nbuf = NULL;
       tmp_nbuf = adf_nbuf_queue_remove(&pAdapter->nodrop_queue);
-      if (tmp_nbuf)
-         adf_nbuf_free(tmp_nbuf);
+      adf_nbuf_free(tmp_nbuf);
    }
 
    free_netdev(dev);
@@ -355,12 +355,7 @@ epping_adapter_t *epping_add_adapter(epping_context_t *pEpping_ctx,
    struct net_device *dev;
    epping_adapter_t *pAdapter;
 
-   dev = alloc_netdev(sizeof(epping_adapter_t),
-                      "wifi%d",
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0)) || defined(WITH_BACKPORTS)
-                      NET_NAME_UNKNOWN,
-#endif
-                      ether_setup);
+   dev = alloc_netdev(sizeof(epping_adapter_t), "wifi%d", ether_setup);
    if (dev == NULL) {
       EPPING_LOG(VOS_TRACE_LEVEL_FATAL,
          "%s: Cannot allocate epping_adapter_t\n", __func__);
@@ -379,13 +374,12 @@ epping_adapter_t *epping_add_adapter(epping_context_t *pEpping_ctx,
    adf_nbuf_queue_init(&pAdapter->nodrop_queue);
    pAdapter->epping_timer_state = EPPING_TX_TIMER_STOPPED;
    adf_os_timer_init(epping_get_adf_ctx(), &pAdapter->epping_timer,
-      epping_timer_expire, dev, ADF_DEFERRABLE_TIMER);
+      epping_timer_expire, dev);
    dev->type = ARPHRD_IEEE80211;
    dev->netdev_ops = &epping_drv_ops;
    dev->watchdog_timeo = 5 * HZ;           /* XXX */
    dev->tx_queue_len = ATH_TXBUF-1;        /* 1 for mgmt frame */
    if (epping_register_adapter(pAdapter) == 0) {
-      EPPING_LOG(LOG1, FL("Disabling queues"));
       netif_tx_disable(dev);
       netif_carrier_off(dev);
       return pAdapter;
@@ -437,7 +431,7 @@ int epping_connect_service(epping_context_t *pEpping_ctx)
    }
    pEpping_ctx->EppingEndpoint[0] = response.Endpoint;
 
-#if defined(HIF_PCI) || defined(HIF_USB)
+#if defined(HIF_PCI)
    connect.ServiceID = WMI_DATA_BK_SVC;
    status = HTCConnectService(pEpping_ctx->HTCHandle,
                               &connect, &response);

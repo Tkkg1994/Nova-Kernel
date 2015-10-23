@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012, 2014-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012,2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -46,18 +46,23 @@
 #include "vos_trace.h"
 #include "vos_memory.h"
 #include "vos_types.h"
+#include "palTimer.h"
 #include "rrmGlobal.h"
 
 /*--------------------------------------------------------------------------
   Type declarations
   ------------------------------------------------------------------------*/
+typedef struct sRrmConfigParam
+{
+   tANI_U8 rrmEnabled;
+   tANI_U8 maxRandnInterval;
+}tRrmConfigParam, *tpRrmConfigParam;
 
 typedef struct sRrmNeighborReportDesc
 {
    tListElem    List;
    tSirNeighborBssDescription   *pNeighborBssDescription;
    tANI_U32                     roamScore;
-   tANI_U8                      sessionId;
 } tRrmNeighborReportDesc, *tpRrmNeighborReportDesc;
 
 
@@ -89,7 +94,7 @@ typedef struct sRrmSMEContext
    tANI_U16 randnIntvl; //Randomization interval to be used in subsequent measurements.
    tANI_U16 duration[SIR_ESE_MAX_MEAS_IE_REQS];
    tANI_U8 measMode[SIR_ESE_MAX_MEAS_IE_REQS];
-   struct rrm_config_param rrmConfig;
+   tRrmConfigParam rrmConfig;
    vos_timer_t IterMeasTimer;
    tDblLinkList neighborReportCache;
    tRrmNeighborRequestControlInfo neighborReqControlInfo;

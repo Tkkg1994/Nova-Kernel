@@ -65,6 +65,8 @@
 #define FREQ_5500_MHZ       5500
 
 #define DFS_MAX_FREQ_SPREAD            1375 * 1
+#define DFS_LARGE_PRI_MULTIPLIER       4
+#define DFS_W53_DEFAULT_PRI_MULTIPLIER 2
 
 static char debug_dup[33];
 static int debug_dup_cnt;
@@ -177,30 +179,30 @@ dfs_process_radarevent(struct ath_dfs *dfs, struct ieee80211_channel *chan)
             (dfs->dfs_caps.ath_chip_is_bb_tlv) &&
             (chan->ic_freq < FREQ_5500_MHZ)) {
 
-            dfs->dfs_pri_multiplier = dfs->dfs_pri_multiplier_ini;
-
-            /* do not process W53 pulses,
-               unless we have a minimum number of them
-             */
+            dfs->dfs_pri_multiplier = DFS_W53_DEFAULT_PRI_MULTIPLIER;
+            /* do not process W53 pulses unless we have a minimum number of them */
             if (dfs->dfs_phyerr_w53_counter >= 5) {
-               DFS_DPRINTK(dfs, ATH_DEBUG_DFS1,
-                       "%s: w53_counter=%d, freq_max=%d, "
-                       "freq_min=%d, pri_multiplier=%d",
-                       __func__,
-                       dfs->dfs_phyerr_w53_counter,
-                       dfs->dfs_phyerr_freq_max,
-                       dfs->dfs_phyerr_freq_min,
-                       dfs->dfs_pri_multiplier);
+                /*
+                  for chips that support frequency information, we can
+                  relax PRI restriction if the frequency
+                  spread is narrow.
+                */
+                if ((dfs->dfs_phyerr_freq_max - dfs->dfs_phyerr_freq_min) < DFS_MAX_FREQ_SPREAD) {
+                    dfs->dfs_pri_multiplier = DFS_LARGE_PRI_MULTIPLIER;
+                }
+                DFS_DPRINTK(dfs, ATH_DEBUG_DFS1, "%s: w53_counter=%d, freq_max=%d, freq_min=%d, pri_multiplier=%d",
+                            __func__,
+                            dfs->dfs_phyerr_w53_counter,
+                            dfs->dfs_phyerr_freq_max,
+                            dfs->dfs_phyerr_freq_min,
+                            dfs->dfs_pri_multiplier);
                 dfs->dfs_phyerr_freq_min     = 0x7fffffff;
                 dfs->dfs_phyerr_freq_max     = 0;
             } else {
                 return 0;
             }
         }
-        DFS_DPRINTK(dfs, ATH_DEBUG_DFS1,
-                    "%s: pri_multiplier=%d",
-                    __func__,
-                    dfs->dfs_pri_multiplier);
+        DFS_DPRINTK(dfs, ATH_DEBUG_DFS1, "%s: pri_multiplier=%d", __func__, dfs->dfs_pri_multiplier);
 
    ATH_DFSQ_LOCK(dfs);
    empty = STAILQ_EMPTY(&(dfs->dfs_radarq));
@@ -380,101 +382,7 @@ dfs_process_radarevent(struct ath_dfs *dfs, struct ieee80211_channel *chan)
             dfs_reset_alldelaylines(dfs);
             dfs_reset_radarq(dfs);
          }
-
          found = 0;
-
-         /*
-          * Use this fix only when device is not in test mode, as
-          * it drops some valid phyerrors.
-          * In FCC or JAPAN domain,if the follwing signature matches
-          * its likely that this is a false radar pulse pattern
-          * so process the next pulse in the queue.
-          */
-         if ((dfs->disable_dfs_ch_switch == VOS_FALSE) &&
-             (DFS_FCC_DOMAIN == dfs->dfsdomain ||
-              DFS_MKK4_DOMAIN == dfs->dfsdomain) &&
-             (re.re_dur >= 11 && re.re_dur <= 20) &&
-             (diff_ts > 500 || diff_ts <= 305) &&
-             (re.sidx == -4)) {
-            VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-            "\n%s: Rejecting on Peak Index = %d,re.re_dur = %d,diff_ts = %d\n",
-            __func__,re.sidx, re.re_dur, diff_ts);
-
-            ATH_DFSQ_LOCK(dfs);
-            empty = STAILQ_EMPTY(&(dfs->dfs_radarq));
-            ATH_DFSQ_UNLOCK(dfs);
-            continue;
-         }
-
-         /*
-          * Modifying the pulse duration for FCC Type 4
-          * or JAPAN W56 Type 6 radar pulses when the
-          * following condition is reported in radar
-          * summary report.
-          */
-         if ((DFS_FCC_DOMAIN == dfs->dfsdomain ||
-              DFS_MKK4_DOMAIN == dfs->dfsdomain) &&
-             ((chan->ic_flags & IEEE80211_CHAN_VHT80) ==
-              IEEE80211_CHAN_VHT80) &&
-             (chan->ic_pri_freq_center_freq_mhz_separation ==
-                                DFS_WAR_PLUS_30_MHZ_SEPARATION ||
-              chan->ic_pri_freq_center_freq_mhz_separation ==
-                                DFS_WAR_MINUS_30_MHZ_SEPARATION) &&
-             (re.sidx == DFS_WAR_PEAK_INDEX_ZERO) &&
-             (re.re_dur > DFS_TYPE4_WAR_PULSE_DURATION_LOWER_LIMIT &&
-              re.re_dur < DFS_TYPE4_WAR_PULSE_DURATION_UPPER_LIMIT) &&
-             (diff_ts > DFS_TYPE4_WAR_PRI_LOWER_LIMIT &&
-              diff_ts < DFS_TYPE4_WAR_PRI_UPPER_LIMIT)) {
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                       "\n%s:chan->ic_flags=0x%x, Pri Chan MHz Separation=%d\n",
-                       __func__, chan->ic_flags,
-                       chan->ic_pri_freq_center_freq_mhz_separation);
-
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                "\n%s: Reported Peak Index = %d,re.re_dur = %d,diff_ts = %d\n",
-                 __func__, re.sidx, re.re_dur, diff_ts);
-
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                "\n%s: Modifying the pulse duration to fit the valid range \n",
-                 __func__);
-
-             re.re_dur = DFS_TYPE4_WAR_VALID_PULSE_DURATION;
-         }
-
-         /*
-          * Modifying the pulse duration for ETSI Type 2
-          * and ETSI type 3 radar pulses when the following
-          * condition is reported in radar summary report.
-          */
-         if ((DFS_ETSI_DOMAIN == dfs->dfsdomain) &&
-             ((chan->ic_flags & IEEE80211_CHAN_VHT80) ==
-              IEEE80211_CHAN_VHT80) &&
-             (chan->ic_pri_freq_center_freq_mhz_separation ==
-                                DFS_WAR_PLUS_30_MHZ_SEPARATION ||
-              chan->ic_pri_freq_center_freq_mhz_separation ==
-                                DFS_WAR_MINUS_30_MHZ_SEPARATION) &&
-             (re.sidx == DFS_WAR_PEAK_INDEX_ZERO) &&
-             (re.re_dur > DFS_ETSI_TYPE2_TYPE3_WAR_PULSE_DUR_LOWER_LIMIT &&
-              re.re_dur < DFS_ETSI_TYPE2_TYPE3_WAR_PULSE_DUR_UPPER_LIMIT) &&
-             ((diff_ts > DFS_ETSI_TYPE2_WAR_PRI_LOWER_LIMIT &&
-               diff_ts < DFS_ETSI_TYPE2_WAR_PRI_UPPER_LIMIT) ||
-              (diff_ts > DFS_ETSI_TYPE3_WAR_PRI_LOWER_LIMIT &&
-               diff_ts < DFS_ETSI_TYPE3_WAR_PRI_UPPER_LIMIT ))) {
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                       "\n%s:chan->ic_flags=0x%x, Pri Chan MHz Separation=%d\n",
-                       __func__, chan->ic_flags,
-                       chan->ic_pri_freq_center_freq_mhz_separation);
-
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                "\n%s: Reported Peak Index = %d,re.re_dur = %d,diff_ts = %d\n",
-                 __func__, re.sidx, re.re_dur, diff_ts);
-
-             VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                "\n%s: Modifying the ETSI pulse dur to fit the valid range \n",
-                 __func__);
-
-             re.re_dur  = DFS_ETSI_WAR_VALID_PULSE_DURATION;
-         }
 
       /* BIN5 pulses are FCC and Japan specific */
 
@@ -610,11 +518,7 @@ VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO, "%s[%d]:filterID= %d :: Rejec
             DFS_DPRINTK(dfs, ATH_DEBUG_DFS3,
                "Found on channel minDur = %d, filterId = %d",ft->ft_mindur,
                rf != NULL ? rf->rf_pulseid : -1);
-            VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_INFO,
-                 "%s[%d]:### Found on channel minDur = %d, filterId = %d ###",
-                 __func__,__LINE__,ft->ft_mindur,
-                 rf != NULL ? rf->rf_pulseid : -1);
-         }
+                        }
          tabledepth++;
       }
       ATH_DFSQ_LOCK(dfs);

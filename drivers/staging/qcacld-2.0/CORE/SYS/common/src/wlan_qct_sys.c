@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2013, 2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -81,9 +81,6 @@ VOS_STATUS WLANFTM_McProcessMsg (v_VOID_t *message);
 
 #define SYS_MSG_COOKIE ( 0xFACE )
 
-/* SYS stop timeout 30 seconds */
-#define SYS_STOP_TIMEOUT (30000)
-
 // need to define FIELD_OFFSET for non-WM platforms
 #ifndef FIELD_OFFSET
 #define FIELD_OFFSET(x,y) offsetof(x,y)
@@ -136,6 +133,7 @@ VOS_STATUS sysStop( v_CONTEXT_t pVosContext )
 {
    VOS_STATUS vosStatus = VOS_STATUS_SUCCESS;
    vos_msg_t sysMsg;
+   v_U8_t evtIndex;
 
    /* Initialize the stop event */
    vosStatus = vos_event_init( &gStopEvt );
@@ -160,7 +158,7 @@ VOS_STATUS sysStop( v_CONTEXT_t pVosContext )
       vosStatus = VOS_STATUS_E_BADMSG;
    }
 
-   vosStatus = vos_wait_single_event(&gStopEvt, SYS_STOP_TIMEOUT);
+   vosStatus = vos_wait_events( &gStopEvt, 1, 0, &evtIndex );
    VOS_ASSERT( VOS_IS_STATUS_SUCCESS ( vosStatus ) );
 
    vosStatus = vos_event_destroy( &gStopEvt );
@@ -319,13 +317,7 @@ VOS_STATUS sysMcProcessMsg( v_CONTEXT_t pVosContext, vos_msg_t *pMsg )
    VOS_STATUS vosStatus = VOS_STATUS_SUCCESS;
    v_VOID_t *hHal;
 
-   if (NULL == pMsg)
-   {
-      VOS_ASSERT(0);
-      VOS_TRACE(VOS_MODULE_ID_SYS, VOS_TRACE_LEVEL_ERROR,
-            "%s: NULL pointer to vos_msg_t", __func__);
-      return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT( pMsg );
 
    // All 'new' SYS messages are identified by a cookie in the reserved
    // field of the message as well as the message type.  This prevents
@@ -444,13 +436,8 @@ VOS_STATUS sysTxProcessMsg( v_CONTEXT_t pVosContext, vos_msg_t *pMsg )
 {
    VOS_STATUS vosStatus = VOS_STATUS_SUCCESS;
 
-   if (NULL == pMsg)
-   {
-      VOS_ASSERT(0);
-      VOS_TRACE(VOS_MODULE_ID_SYS, VOS_TRACE_LEVEL_ERROR,
-            "%s: NULL pointer to vos_msg_t", __func__);
-      return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT( pMsg );
+
    // All 'new' SYS messages are identified by a cookie in the reserved
    // field of the message as well as the message type.  This prevents
    // the possibility of overlap in the message types defined for new
@@ -515,13 +502,7 @@ VOS_STATUS sysRxProcessMsg( v_CONTEXT_t pVosContext, vos_msg_t *pMsg )
 {
    VOS_STATUS vosStatus = VOS_STATUS_SUCCESS;
 
-   if (NULL == pMsg)
-   {
-      VOS_ASSERT(0);
-      VOS_TRACE(VOS_MODULE_ID_SYS, VOS_TRACE_LEVEL_ERROR,
-            "%s: NULL pointer to vos_msg_t", __func__);
-      return VOS_STATUS_E_INVAL;
-   }
+   VOS_ASSERT( pMsg );
 
    // All 'new' SYS messages are identified by a cookie in the reserved
    // field of the message as well as the message type.  This prevents

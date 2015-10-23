@@ -42,7 +42,7 @@
 #include <ipv6.h>          /* IPV6_HDR_LEN, etc. */
 #include <ip_prot.h>       /* IP_PROTOCOL_TCP, etc. */
 
-#ifdef ATH_11AC_TXCOMPACT
+#if ATH_11AC_TXCOMPACT
 #define OL_TX_DESC_NO_REFS(tx_desc) 1
 #define OL_TX_DESC_REF_INIT(tx_desc) /* no-op */
 #define OL_TX_DESC_REF_INC(tx_desc) /* no-op */
@@ -245,63 +245,33 @@ ol_rx_mpdu_list_next(
         break; \
     }
 
-#define TXRX_STATS_UPDATE_TX_COMP_HISTOGRAM(_pdev, _p_cntrs)                   \
-do {                                                                           \
-    if (_p_cntrs > 60)                                                         \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_61_plus,1);            \
-    else if (_p_cntrs > 50)                                                    \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_51_60,1);              \
-    else if (_p_cntrs > 40)                                                    \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_41_50,1);              \
-    else if (_p_cntrs > 30)                                                    \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_31_40,1);              \
-    else if (_p_cntrs > 20)                                                    \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_21_30,1);              \
-    else if (_p_cntrs > 10)                                                    \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_11_20,1);              \
-    else if (_p_cntrs > 2)                                                     \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_2_10,1);               \
-    else                                                                       \
-        TXRX_STATS_ADD(_pdev,pub.tx.comp_histogram.pkts_1,1);                  \
-                                                                               \
-} while (0)
-
-
-#define TXRX_STATS_UPDATE_TX_STATS(_pdev, _status, _p_cntrs, _b_cntrs)         \
-do {                                                                           \
-    switch (status) {                                                          \
-    case htt_tx_status_ok:                                                     \
-       TXRX_STATS_ADD(_pdev, pub.tx.delivered.pkts, _p_cntrs);                 \
-       TXRX_STATS_ADD(_pdev, pub.tx.delivered.bytes, _b_cntrs);                \
-        break;                                                                 \
-    case htt_tx_status_discard:                                                \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.target_discard.pkts, _p_cntrs);    \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.target_discard.bytes, _b_cntrs);   \
-        break;                                                                 \
-    case htt_tx_status_no_ack:                                                 \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.no_ack.pkts, _p_cntrs);            \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.no_ack.bytes, _b_cntrs);           \
-        break;                                                                 \
-    case htt_tx_status_download_fail:                                          \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.download_fail.pkts, _p_cntrs);     \
-       TXRX_STATS_ADD(_pdev, pub.tx.dropped.download_fail.bytes, _b_cntrs);    \
-        break;                                                                 \
-    default:                                                                   \
-        break;                                                                 \
-    }                                                                          \
-    TXRX_STATS_UPDATE_TX_COMP_HISTOGRAM(_pdev, _p_cntrs);                      \
+#define TXRX_STATS_UPDATE_TX_STATS(_pdev, _status, _p_cntrs, _b_cntrs)          \
+do {                                                                            \
+    switch (status) {                                                           \
+    case htt_tx_status_ok:                                                      \
+       TXRX_STATS_ADD(_pdev, pub.tx.delivered.pkts, _p_cntrs);                  \
+       TXRX_STATS_ADD(_pdev, pub.tx.delivered.bytes, _b_cntrs);                 \
+        break;                                                                  \
+    case htt_tx_status_discard:                                                 \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.target_discard.pkts, _p_cntrs);     \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.target_discard.bytes, _b_cntrs);    \
+        break;                                                                  \
+    case htt_tx_status_no_ack:                                                  \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.no_ack.pkts, _p_cntrs);             \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.no_ack.bytes, _b_cntrs);            \
+        break;                                                                  \
+    case htt_tx_status_download_fail:                                           \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.download_fail.pkts, _p_cntrs);      \
+       TXRX_STATS_ADD(_pdev, pub.tx.dropped.download_fail.bytes, _b_cntrs);     \
+        break;                                                                  \
+    default:                                                                    \
+        break;                                                                  \
+    }                                                                           \
 } while (0)
 
 #elif /*---*/ TXRX_STATS_LEVEL == TXRX_STATS_LEVEL_BASIC
 
-#define TXRX_STATS_MSDU_LIST_INCR(pdev, field, netbuf_list) \
-    do { \
-        adf_nbuf_t tmp_list = netbuf_list; \
-        while (tmp_list) { \
-            TXRX_STATS_MSDU_INCR(pdev, field, tmp_list); \
-            tmp_list = adf_nbuf_next(tmp_list); \
-        } \
-    } while (0)
+#define TXRX_STATS_MSDU_LIST_INCR(pdev, field, netbuf_list)
 
 #define TXRX_STATS_MSDU_INCR_TX_STATUS(status, pdev, netbuf) \
     do { \
@@ -438,7 +408,7 @@ OL_TXRX_FRMS_DUMP(
     u_int8_t *p;
 
     if (name) {
-        VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO, "%s\n", name);
+        adf_os_print("%s\n", name);
     }
     while (frm) {
         p = adf_nbuf_data(frm);
@@ -486,7 +456,7 @@ OL_TXRX_FRMS_DUMP(
                 ip_prot = ipv6_hdr->next_hdr;
                 tcp_offset = l2_hdr_size + IPV6_HDR_LEN;
             } else {
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
+                adf_os_print(
                     "frame %p non-IP ethertype (%x)\n", frm, ethertype);
                 goto NOT_IP_TCP;
             }
@@ -500,18 +470,16 @@ OL_TXRX_FRMS_DUMP(
                     (tcp_hdr->seq_num[1] << 16) |
                     (tcp_hdr->seq_num[1] <<  8) |
                     (tcp_hdr->seq_num[1] <<  0);
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                    "frame %p: TCP seq num = %d\n", frm, tcp_seq_num);
+                adf_os_print("frame %p: TCP seq num = %d\n", frm, tcp_seq_num);
 #else
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                     "frame %p: TCP seq num = %d\n", frm,
+                adf_os_print("frame %p: TCP seq num = %d\n", frm,
                     ((*(p + tcp_offset + 4)) << 24) |
                     ((*(p + tcp_offset + 5)) << 16) |
                     ((*(p + tcp_offset + 6)) <<  8) |
                      (*(p + tcp_offset + 7)));
 #endif
             } else {
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
+                adf_os_print(
                     "frame %p non-TCP IP protocol (%x)\n", frm, ip_prot);
             }
         }
@@ -546,13 +514,11 @@ NOT_IP_TCP:
                 i += frag_bytes;
             }
 
-            VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                "frame %p data (%p), hex dump of bytes 0-%d of %d:\n",
+            adf_os_print("frame %p data (%p), hex dump of bytes 0-%d of %d:\n",
                 frm, p, len_lim-1, (int) adf_nbuf_len(frm));
             p = local_buf;
             while (len_lim > 16) {
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                    "  " /* indent */
+                adf_os_print("  " /* indent */
                     "%02x %02x %02x %02x %02x %02x %02x %02x "
                     "%02x %02x %02x %02x %02x %02x %02x %02x\n",
                     *(p +  0), *(p +  1), *(p +  2), *(p +  3),
@@ -562,15 +528,13 @@ NOT_IP_TCP:
                 p += 16;
                 len_lim -= 16;
             }
-            VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                "  " /* indent */);
+            adf_os_print("  " /* indent */);
             while (len_lim > 0) {
-                VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                    "%02x ", *p);
+                adf_os_print("%02x ", *p);
                 p++;
                 len_lim--;
             }
-            VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO, "\n");
+            adf_os_print("\n");
         }
         frm = adf_nbuf_next(frm);
     }
@@ -699,12 +663,8 @@ do {                                                                            
 #define DEBUG_HTT_CREDIT 0
 #endif
 
-#ifdef FEATURE_HL_GROUP_CREDIT_FLOW_CONTROL
-void
-ol_txrx_update_group_credit(
-    struct ol_tx_queue_group_t *group,
-    int32_t credit,
-    u_int8_t absolute);
+#if defined(QCA_SUPPORT_TXRX_VDEV_PAUSE_LL) || defined(QCA_SUPPORT_TX_THROTTLE_LL)
+#define QCA_SUPPORT_TXRX_VDEV_LL_TXQ
 #endif
 
 #endif /* _OL_TXRX_INTERNAL__H_ */

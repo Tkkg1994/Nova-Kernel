@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -101,12 +101,10 @@
 /// in the software system.
 typedef enum
 {
-   /* 0 is unused for historical purposes */
+   VOS_MODULE_ID_BAP        = 0,
    VOS_MODULE_ID_TL         = 1,
    VOS_MODULE_ID_WDI        = 2,
    // 3 & 4 are unused for historical purposes
-   VOS_MODULE_ID_RSV3       = 3,
-   VOS_MODULE_ID_RSV4       = 4,
    VOS_MODULE_ID_HDD        = 5,
    VOS_MODULE_ID_SME        = 6,
    VOS_MODULE_ID_PE         = 7,
@@ -119,11 +117,13 @@ typedef enum
    VOS_MODULE_ID_HDD_DATA   = 14,
    VOS_MODULE_ID_HDD_SAP_DATA  = 15,
 
+#ifdef QCA_WIFI_2_0
    VOS_MODULE_ID_HIF        = 16,
    VOS_MODULE_ID_HTC        = 17,
    VOS_MODULE_ID_TXRX       = 18,
    VOS_MODULE_ID_ADF        = 19,
    VOS_MODULE_ID_CFG        = 20,
+#endif
 
    // not a real module ID.  This is used to identify the maxiumum
    // number of VOS_MODULE_IDs and should always be at the END of
@@ -146,15 +146,8 @@ typedef enum
     VOS_FTM_MODE = 5,
     VOS_IBSS_MODE,
     VOS_P2P_DEVICE_MODE,
-    VOS_OCB_MODE,
     VOS_MAX_NO_OF_MODE
 } tVOS_CON_MODE;
-
-#ifdef WLAN_OPEN_P2P_INTERFACE
-#define VOS_MAX_CONCURRENCY_PERSONA    4  // This should match with WLAN_MAX_INTERFACES
-#else
-#define VOS_MAX_CONCURRENCY_PERSONA    3
-#endif
 
 //This is a bit pattern to be set for each mode
 //bit 0 - sta mode
@@ -168,17 +161,8 @@ typedef enum
     VOS_STA_SAP=3, //to support sta, softAp  mode . This means STA+AP mode
     VOS_P2P_CLIENT=4,
     VOS_P2P_GO=8,
+    VOS_MAX_CONCURRENCY_PERSONA=4
 } tVOS_CONCURRENCY_MODE;
-
-#ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
-typedef enum
-{
-    VOS_MCC_TO_SCC_SWITCH_DISABLE = 0,
-    VOS_MCC_TO_SCC_SWITCH_ENABLE,
-    VOS_MCC_TO_SCC_SWITCH_FORCE,
-    VOS_MCC_TO_SCC_SWITCH_MAX
-} tVOS_MCC_TO_SCC_SWITCH_MODE;
-#endif
 
 #if !defined( NULL )
 #ifdef __cplusplus

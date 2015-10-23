@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -71,6 +71,40 @@ static char g_log2ceil[] = {
 /*=== function definitions ===*/
 
 /*---*/
+#ifdef QCA_WIFI_ISOC
+
+#define QCA_SUPPORT_RX_REORDER_RELEASE_CHECK 1
+
+static inline void
+OL_RX_REORDER_IDX_START_SELF_SELECT(
+    struct ol_txrx_peer_t *peer, unsigned tid, unsigned *idx_start)
+{
+    /* for simplicity, always use the next_rel_idx value */
+    //if (*idx_start == ~0)
+    {
+        *idx_start = peer->tids_next_rel_idx[tid];
+    }
+}
+#define OL_RX_REORDER_IDX_WRAP(idx, win_sz, win_sz_mask) \
+   do { \
+       if (idx >= win_sz) { \
+           idx = 0; \
+       } \
+   } while (0)
+#define OL_RX_REORDER_IDX_MAX(win_sz, win_sz_mask) (win_sz - 1)
+/*
+ * For "integrated SoC", the reorder index represents the offset from the
+ * start of the block ack window.
+ * Hence, the initial value for this index is zero.
+ */
+#define OL_RX_REORDER_IDX_INIT(seq_num, win_sz, win_sz_mask) 0
+#define OL_RX_REORDER_NO_HOLES(rx_reorder) ((rx_reorder)->num_mpdus == 0)
+#define OL_RX_REORDER_MPDU_CNT_INCR(rx_reorder, incr) \
+    ((rx_reorder)->num_mpdus += (incr))
+#define OL_RX_REORDER_MPDU_CNT_DECR(rx_reorder, decr) \
+    ((rx_reorder)->num_mpdus -= (decr))
+
+#else
 
 #define QCA_SUPPORT_RX_REORDER_RELEASE_CHECK 0
 #define OL_RX_REORDER_IDX_START_SELF_SELECT(peer, tid, idx_start) /* no-op */
@@ -81,18 +115,31 @@ static char g_log2ceil[] = {
 #define OL_RX_REORDER_MPDU_CNT_INCR(rx_reorder, incr) /* n/a */
 #define OL_RX_REORDER_MPDU_CNT_DECR(rx_reorder, decr) /* n/a */
 
+#endif /* QCA_WIFI_ISOC */
 
 /*---*/
+#if defined (QCA_WIFI_ISOC) && defined (QCA_SUPPORT_RX_REORDER_RELEASE_CHECK)
 
-/* reorder array elements are known to be non-NULL */
-#define OL_RX_REORDER_PTR_CHECK(ptr) /* no-op */
+/* reorder array elements could be NULL */
+#define OL_RX_REORDER_PTR_CHECK(ptr) if (ptr)
 #define OL_RX_REORDER_LIST_APPEND(head_msdu, tail_msdu, rx_reorder_array_elem) \
     do { \
         if (tail_msdu) { \
             adf_nbuf_set_next(tail_msdu, rx_reorder_array_elem->head); \
+        } else { \
+            head_msdu = rx_reorder_array_elem->head; \
+            tail_msdu = rx_reorder_array_elem->tail; \
         } \
     } while (0)
 
+#else
+
+/* reorder array elements are known to be non-NULL */
+#define OL_RX_REORDER_PTR_CHECK(ptr) /* no-op */
+#define OL_RX_REORDER_LIST_APPEND(head_msdu, tail_msdu, rx_reorder_array_elem) \
+    adf_nbuf_set_next(tail_msdu, rx_reorder_array_elem->head)
+
+#endif /* QCA_SUPPORT_RX_REORDER_RELEASE_CHECK */
 
 /* functions called by txrx components */
 
@@ -110,7 +157,7 @@ void ol_rx_reorder_init(struct ol_rx_reorder_t *rx_reorder, u_int8_t tid)
 }
 
 
-static enum htt_rx_status
+enum htt_rx_status
 ol_rx_reorder_seq_num_check(
     struct ol_txrx_pdev_t *pdev,
     struct ol_txrx_peer_t *peer,
@@ -143,84 +190,6 @@ ol_rx_reorder_seq_num_check(
     return htt_rx_status_ok;
 }
 
-/**
- * ol_rx_seq_num_check() - Does duplicate detection for mcast packets and
- *                           duplicate detection & check for out-of-order
- *                           packets for unicast packets.
- * @pdev:                        Pointer to pdev maintained by OL
- * @peer:                        Pointer to peer structure maintained by OL
- * @tid:                         TID value passed as part of HTT msg by f/w
- * @rx_mpdu_desc:                Pointer to Rx Descriptor for the given MPDU
- *
- *  This function
- *      1) For Multicast Frames -- does duplicate detection
- *          A frame is considered duplicate & dropped if it has a seq.number
- *          which is received twice in succession and with the retry bit set
- *          in the second case.
- *          A frame which is older than the last sequence number received
- *          is not considered duplicate but out-of-order. This function does
- *          perform out-of-order check for multicast frames, which is in
- *          keeping with the 802.11 2012 spec section 9.3.2.10
- *      2) For Unicast Frames -- does duplicate detection & out-of-order check
- *          only for non-aggregation tids.
- *
- * Return:        Returns htt_rx_status_err_replay, if packet needs to be
- *                dropped, htt_rx_status_ok otherwise.
- */
-enum htt_rx_status
-ol_rx_seq_num_check(struct ol_txrx_pdev_t *pdev,
-					struct ol_txrx_peer_t *peer,
-					uint8_t tid,
-					void *rx_mpdu_desc)
-{
-	uint16_t pkt_tid = 0xffff;
-	uint16_t seq_num = IEEE80211_SEQ_MAX;
-	bool retry = 0;
-
-	seq_num = htt_rx_mpdu_desc_seq_num(pdev->htt_pdev, rx_mpdu_desc);
-
-	 /* For mcast packets, we only the dup-detection, not re-order check */
-
-	if (adf_os_unlikely(OL_RX_MCAST_TID == tid)) {
-
-		pkt_tid = htt_rx_mpdu_desc_tid(pdev->htt_pdev, rx_mpdu_desc);
-
-		/* Invalid packet TID, expected only for HL */
-		/* Pass the packet on */
-		if (adf_os_unlikely(pkt_tid >= OL_TXRX_NUM_EXT_TIDS))
-			return htt_rx_status_ok;
-
-		retry = htt_rx_mpdu_desc_retry(pdev->htt_pdev, rx_mpdu_desc);
-
-		/*
-		 * At this point, we define frames to be duplicate if they arrive
-		 * "ONLY" in succession with the same sequence number and the last
-		 * one has the retry bit set. For an older frame, we consider that
-		 * as an out of order frame, and hence do not perform the dup-detection
-		 * or out-of-order check for multicast frames as per discussions & spec
-		 * Hence "seq_num <= last_seq_num" check is not necessary.
-		 */
-		if (adf_os_unlikely(retry &&
-			(seq_num == peer->tids_mcast_last_seq[pkt_tid]))) {/* drop mcast */
-			TXRX_STATS_INCR(pdev, priv.rx.err.msdu_mc_dup_drop);
-			return htt_rx_status_err_replay;
-		} else {
-			/*
-			 * This is a multicast packet likely to be passed on...
-			 * Set the mcast last seq number here
-			 * This is fairly accurate since:
-			 * a) f/w sends multicast as separate PPDU/HTT messages
-			 * b) Mcast packets are not aggregated & hence single
-			 * c) Result of b) is that, flush / release bit is set always
-			 *	on the mcast packets, so likely to be immediatedly released.
-			 */
-			peer->tids_mcast_last_seq[pkt_tid] = seq_num;
-			return htt_rx_status_ok;
-		}
-	} else
-		return ol_rx_reorder_seq_num_check(pdev, peer, tid, seq_num);
-}
-
 void
 ol_rx_reorder_store(
     struct ol_txrx_pdev_t *pdev,
@@ -235,6 +204,14 @@ ol_rx_reorder_store(
     idx &= peer->tids_rx_reorder[tid].win_sz_mask;
     rx_reorder_array_elem = &peer->tids_rx_reorder[tid].array[idx];
     if (rx_reorder_array_elem->head) {
+#ifdef QCA_WIFI_ISOC
+        /* This should not happen in Riva/Pronto case. Because
+         * A-MSDU within a MPDU is indicated together. Defragmentation
+         * is handled by RPE. So add an Assert here to catch potential
+         * rx reorder issues.
+         */
+        TXRX_ASSERT2(0);
+#endif
         adf_nbuf_set_next(rx_reorder_array_elem->tail, head_msdu);
     } else {
         rx_reorder_array_elem->head = head_msdu;
@@ -463,6 +440,23 @@ ol_rx_reorder_peer_cleanup(
     OL_RX_REORDER_TIMEOUT_PEER_CLEANUP(peer);
 }
 
+#ifdef QCA_WIFI_ISOC
+/*
+ * (Responder Role) TXRX Data Path will invoke this API after
+ * Aggregation has been enabled for this peer-tid combination
+ * with appropriate status code. Send ADDBA Response to Peer with
+ * status.
+ */
+void ol_ctrl_rx_addba_complete(ol_pdev_handle pdev,
+			       u_int8_t *peer_mac_addr,
+			       int tid, int failed)
+{
+	/*
+	 * TODO: Send Rx AddBA response to umac for the devices
+	 * which does addba processing on host (pronto).
+	 */
+}
+#endif
 
 /* functions called by HTT */
 
@@ -617,14 +611,6 @@ ol_rx_pn_ind_handler(
     int seq_num, i=0;
 
     peer = ol_txrx_peer_find_by_id(pdev, peer_id);
-
-    if (!peer) {
-        /* If we can't find a peer send this packet to OCB interface using
-           OCB self peer */
-        if (!ol_txrx_get_ocb_peer(pdev, &peer))
-			peer = NULL;
-    }
-
     if (peer) {
         vdev = peer->vdev;
     } else {
@@ -803,23 +789,19 @@ ol_rx_reorder_trace_display(ol_txrx_pdev_handle pdev, int just_once, int limit)
     }
 
     i = start;
-    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-        "           log       array seq\n");
-    VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-        "   count   idx  tid   idx  num (LSBs)\n");
+    adf_os_print("           log       array seq\n");
+    adf_os_print("   count   idx  tid   idx  num (LSBs)\n");
     do {
         u_int16_t seq_num, reorder_idx;
         seq_num = pdev->rx_reorder_trace.data[i].seq_num;
         reorder_idx = pdev->rx_reorder_trace.data[i].reorder_idx;
         if (seq_num < (1 << 14)) {
-            VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                "  %6lld  %4d  %3d  %4d  %4d (%d)\n",
+            adf_os_print("  %6lld  %4d  %3d  %4d  %4d (%d)\n",
                 cnt, i, pdev->rx_reorder_trace.data[i].tid,
                 reorder_idx, seq_num, seq_num & 63);
         } else {
             int err = TXRX_SEQ_NUM_ERR(seq_num);
-            VOS_TRACE(VOS_MODULE_ID_TXRX, VOS_TRACE_LEVEL_INFO,
-                "  %6lld  %4d err %d (%d MPDUs)\n",
+            adf_os_print("  %6lld  %4d err %d (%d MPDUs)\n",
                 cnt, i, err, pdev->rx_reorder_trace.data[i].num_mpdus);
         }
         cnt++;
