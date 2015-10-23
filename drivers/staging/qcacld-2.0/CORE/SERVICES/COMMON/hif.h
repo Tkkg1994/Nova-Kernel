@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -406,11 +406,7 @@ typedef int ( *HIF_MASK_UNMASK_RECV_EVENT)(HIF_DEVICE  *device,
                                                 bool    Mask,
                                                 void   *AsyncContext);
 
-#ifdef HIF_MBOX_SLEEP_WAR
-/* This API is used to update the target sleep state */
-void
-HIFSetMboxSleep(HIF_DEVICE *device, bool sleep, bool wait, bool cache);
-#endif
+
 /*
  * This API is used to perform any global initialization of the HIF layer
  * and to set OS driver callbacks (i.e. insertion/removal) to the HIF layer
@@ -429,14 +425,6 @@ void HIFReleaseDevice(HIF_DEVICE *device);
 int HIFAttachHTC(HIF_DEVICE *device, HTC_CALLBACKS *callbacks);
 /* This API detaches the HTC layer from the HIF device */
 void     HIFDetachHTC(HIF_DEVICE *device);
-
-A_STATUS
-HIFSyncRead(HIF_DEVICE *device,
-               A_UINT32 address,
-               A_UCHAR *buffer,
-               A_UINT32 length,
-               A_UINT32 request,
-               void *context);
 
 /*
  * This API is used to provide the read/write interface over the specific bus
@@ -497,6 +485,7 @@ int hifWaitForPendingRecv(HIF_DEVICE *device);
 #define DIAG_TRANSFER_LIMIT 2048U /* maximum number of bytes that can be
                                     handled atomically by DiagRead/DiagWrite */
 
+#if !defined(QCA_WIFI_ISOC)
     /* API to handle HIF-specific BMI message exchanges, this API is synchronous
      * and only allowed to be called from a context that can block (sleep) */
 int HIFExchangeBMIMsg(HIF_DEVICE *device,
@@ -520,8 +509,7 @@ int HIFExchangeBMIMsg(HIF_DEVICE *device,
      */
 int HIFDiagReadAccess(HIF_DEVICE *hifDevice, A_UINT32 address, A_UINT32 *data);
 int HIFDiagReadMem(HIF_DEVICE *hif_device, A_UINT32 address, A_UINT8 *data, int nbytes);
-void HIFDumpTargetMemory(HIF_DEVICE *hif_device, void *ramdump_base,
-                           u_int32_t address, u_int32_t size);
+
     /*
      * APIs to handle HIF specific diagnostic write accesses. These APIs are
      * synchronous and only allowed to be called from a context that can block (sleep).
@@ -534,6 +522,12 @@ void HIFDumpTargetMemory(HIF_DEVICE *hif_device, void *ramdump_base,
      */
 int HIFDiagWriteAccess(HIF_DEVICE *hifDevice, A_UINT32 address, A_UINT32 data);
 int HIFDiagWriteMem(HIF_DEVICE *hif_device, A_UINT32 address, A_UINT8 *data, int nbytes);
+#else
+inline int HIFDiagReadAccess(HIF_DEVICE *hifDevice, A_UINT32 address, A_UINT32 *data) {return A_OK;};
+inline int HIFDiagReadMem(HIF_DEVICE *hif_device, A_UINT32 address, A_UINT8 *data, int nbytes) {return A_OK;};
+inline int HIFDiagWriteAccess(HIF_DEVICE *hifDevice, A_UINT32 address, A_UINT32 data) {return A_OK;};
+inline int HIFDiagWriteMem(HIF_DEVICE *hif_device, A_UINT32 address, A_UINT8 *data, int nbytes) {return A_OK;};
+#endif
 #if defined(HIF_PCI) && ! defined(A_SIMOS_DEVHOST)
 /*
  * This API allows the Host to access Target registers of a given
@@ -813,58 +807,8 @@ void sim_target_register_write(struct ol_softc *scn, u_int32_t addr, u_int32_t v
 
 #endif
 
-#ifdef IPA_UC_OFFLOAD
-/*
- * IPA micro controller data path offload feature enabled,
- * HIF should release copy engine related resource information to IPA UC
- * IPA UC will access hardware resource with released information
- */
-void HIFIpaGetCEResource(HIF_DEVICE *hif_device,
-                          A_UINT32 *ce_sr_base_paddr,
-                          A_UINT32 *ce_sr_ring_size,
-                          A_UINT32 *ce_reg_paddr);
-#endif /* IPA_UC_OFFLOAD */
-
-void HIFSetMailboxSwap(HIF_DEVICE  *device);
-
-#ifdef FEATURE_RUNTIME_PM
-/* Runtime power management API of HIF to control
- * runtime pm. During Runtime Suspend the get API
- * return -EAGAIN. The caller can queue the cmd or return.
- * The put API decrements the usage count.
- * The get API increments the usage count.
- * The API's are exposed to HTT and WMI Services only.
- */
-int hif_pm_runtime_get(HIF_DEVICE *);
-int hif_pm_runtime_put(HIF_DEVICE *);
-void *hif_runtime_pm_prevent_suspend_init(const char *);
-void hif_runtime_pm_prevent_suspend_deinit(void *data);
-int hif_pm_runtime_prevent_suspend(void *ol_sc, void *data);
-int hif_pm_runtime_allow_suspend(void *ol_sc, void *data);
-int hif_pm_runtime_prevent_suspend_timeout(void *ol_sc, void *data,
-						unsigned int delay);
-#else
-static inline int hif_pm_runtime_get(HIF_DEVICE *device) { return 0; }
-static inline int hif_pm_runtime_put(HIF_DEVICE *device) { return 0; }
-static inline int
-hif_pm_runtime_prevent_suspend(void *ol_sc, void *context) { return 0; }
-static inline int
-hif_pm_runtime_allow_suspend(void *ol_sc, void *context) { return 0; }
-static inline int
-hif_pm_runtime_prevent_suspend_timeout(void *ol_sc, void *context,
-						unsigned int msec)
-{
-	return 0;
-}
-static inline void *
-hif_runtime_pm_prevent_suspend_init(const char *name) { return NULL; }
-static inline void
-hif_runtime_pm_prevent_suspend_deinit(void *context) { }
-#endif
 #ifdef __cplusplus
 }
 #endif
-
-A_BOOL HIFIsMailBoxSwapped(HIF_DEVICE *hd);
 
 #endif /* _HIF_H_ */

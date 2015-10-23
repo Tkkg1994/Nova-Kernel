@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -54,39 +54,6 @@
 
 #define HTT_RSSI_INVALID 0x7fff
 
-/**
- * @brief RX stats header
- * @details
- *  When receiving an OCB packet, the RX stats is sent to the user application
- *  so that the user application can do processing based on the RX stats.
- *  This structure will be preceded by an ethernet header with
- *  the proto field set to 0x8152. This struct includes various RX
- *  paramaters including RSSI, data rate, and center frequency.
- */
-PREPACK struct ocb_rx_stats_hdr_t {
-    /* version - The version must be 1. */
-    A_UINT16 version;
-    /* length - The length of this structure */
-    A_UINT16 length;
-    /* channel_freq - The center frequency for the packet */
-    A_UINT16 channel_freq;
-    /* rssi_cmb - combined RSSI from all chains */
-    A_INT16 rssi_cmb;
-    /* rssi - rssi for chains 0 through 3 (for 20 MHz bandwidth) */
-    A_INT16 rssi[4];
-    /* tsf32 - timestamp in TSF units */
-    A_UINT32 tsf32;
-    /* timestamp_microsec - timestamp in microseconds */
-    A_UINT32 timestamp_microsec;
-    /* datarate - MCS index */
-    A_UINT8 datarate;
-    /* timestamp_submicrosec - submicrosecond portion of the timestamp */
-    A_UINT8 timestamp_submicrosec;
-    /* ext_tid - Extended TID */
-    A_UINT8 ext_tid;
-    /* Ensure the size of the structure is a multiple of 4 */
-    A_UINT8 reserved;
-};
 
 /*================ rx indication message field access methods ===============*/
 
@@ -245,34 +212,21 @@ htt_rx_ind_mpdu_range_info(
     enum htt_rx_status *status,
     int *mpdu_count);
 
+/**
+ * @brief Return the RSSI provided in a rx indication message.
+ * @details
+ *  Return the RSSI from an rx indication message, converted to dBm units.
+ *
+ * @param pdev - the HTT instance the rx data was received on
+ * @param rx_ind_msg - the netbuf containing the rx indication message
+ * @return RSSI in dBm, or HTT_INVALID_RSSI
+ */
 int16_t
 htt_rx_ind_rssi_dbm(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg);
-
-int16_t
-htt_rx_ind_rssi_dbm_chain(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
-                          int8_t chain);
-
-void
-htt_rx_ind_legacy_rate(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
-    uint8_t *legacy_rate, uint8_t *legacy_rate_sel);
-
-
-void
-htt_rx_ind_timestamp(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg,
-    uint32_t *timestamp_microsec, uint8_t *timestamp_submicrosec);
-
-uint32_t
-htt_rx_ind_tsf32(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg);
-
-uint8_t
-htt_rx_ind_ext_tid(htt_pdev_handle pdev, adf_nbuf_t rx_ind_msg);
 
 
 /*==================== rx MPDU descriptor access methods ====================*/
 
-extern
-bool (*htt_rx_mpdu_desc_retry)(
-		htt_pdev_handle pdev, void *mpdu_desc);
 /**
  * @brief Return a rx MPDU's sequence number.
  * @details
@@ -308,8 +262,13 @@ extern a_uint16_t
  * @param mpdu_desc - the abstract descriptor for the MPDU in question
  * @return the rx reorder array index the MPDU goes into
  */
+#ifdef QCA_WIFI_ISOC
+int
+htt_rx_mpdu_desc_reorder_idx(htt_pdev_handle pdev, void *mpdu_desc);
+#else
 /* use sequence number (or LSBs thereof) as rx reorder array index */
 #define htt_rx_mpdu_desc_reorder_idx htt_rx_mpdu_desc_seq_num
+#endif
 
 union htt_rx_pn_t {
     /* WEP: 24-bit PN */
@@ -347,10 +306,6 @@ extern void (*htt_rx_mpdu_desc_pn)(
     void *mpdu_desc,
     union htt_rx_pn_t *pn,
     int pn_len_bits);
-
-extern
-uint8_t (*htt_rx_mpdu_desc_tid)(
-			htt_pdev_handle pdev, void *mpdu_desc);
 
 /**
  * @brief Return the TSF timestamp indicating when a MPDU was received.
@@ -556,6 +511,7 @@ htt_rx_msdu_forward(htt_pdev_handle pdev, void *msdu_desc);
 int
 htt_rx_msdu_inspect(htt_pdev_handle pdev, void *msdu_desc);
 
+
 /**
  * @brief Provide all action specifications for a rx MSDU
  * @details
@@ -597,21 +553,6 @@ extern a_bool_t
     void *mpdu_desc,
     u_int8_t *key_id);
 
-extern a_bool_t
-(*htt_rx_msdu_chan_info_present)(
-	htt_pdev_handle pdev,
-	void *mpdu_desc);
-
-extern a_bool_t
-(*htt_rx_msdu_center_freq)(
-	htt_pdev_handle pdev,
-	struct ol_txrx_peer_t *peer,
-	void *mpdu_desc,
-	uint16_t *primary_chan_center_freq_mhz,
-	uint16_t *contig_chan1_center_freq_mhz,
-	uint16_t *contig_chan2_center_freq_mhz,
-	uint8_t *phy_mode);
-
 /*====================== rx MSDU + descriptor delivery ======================*/
 
 /**
@@ -651,13 +592,6 @@ extern a_bool_t
  */
 extern int
 (*htt_rx_amsdu_pop)(
-    htt_pdev_handle pdev,
-    adf_nbuf_t rx_ind_msg,
-    adf_nbuf_t *head_msdu,
-    adf_nbuf_t *tail_msdu);
-
-extern int
-(*htt_rx_frag_pop)(
     htt_pdev_handle pdev,
     adf_nbuf_t rx_ind_msg,
     adf_nbuf_t *head_msdu,
@@ -853,27 +787,4 @@ htt_rx_msdu_rx_desc_size_hl(
  */
 void htt_rx_get_vowext_stats(adf_nbuf_t msdu,struct vow_extstats *vowstats);
 
-/**
- * @brief parses the offload message passed by the target.
- * @param pdev - pdev handle
- * @param paddr - physical address of the rx buffer
- * @param vdev_id - reference to vdev id to be filled
- * @param peer_id - reference to the peer id to be filled
- * @param tid - reference to the tid to be filled
- * @param fw_desc - reference to the fw descriptor to be filled
- * @param peer_id - reference to the peer id to be filled
- * @param head_buf - reference to the head buffer
- * @param tail_buf - reference to the tail buffer
- */
-int
-htt_rx_offload_paddr_msdu_pop_ll(
-    htt_pdev_handle pdev,
-    u_int32_t * msg_word,
-    int msdu_iter,
-    int *vdev_id,
-    int *peer_id,
-    int *tid,
-    u_int8_t *fw_desc,
-    adf_nbuf_t *head_buf,
-    adf_nbuf_t *tail_buf);
 #endif /* _OL_HTT_RX_API__H_ */

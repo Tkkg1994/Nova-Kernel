@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,9 +51,6 @@
 #include "limPropExtsUtils.h"
 #include "limSerDesUtils.h"
 #include "limTrace.h"
-#ifdef WLAN_FEATURE_VOWIFI_11R
-#include "limFTDefs.h"
-#endif
 #include "limSession.h"
 #define LIM_GET_NOISE_MAX_TRY 5
 /**
@@ -109,7 +106,8 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
             LIM_BSS_CAPS_SET(WME, *qosCap);
         if (LIM_BSS_CAPS_GET(WME, *qosCap) && pBeaconStruct->wsmCapablePresent)
             LIM_BSS_CAPS_SET(WSM, *qosCap);
-        if (pBeaconStruct->propIEinfo.capabilityPresent)
+        if (pBeaconStruct->propIEinfo.aniIndicator &&
+            pBeaconStruct->propIEinfo.capabilityPresent)
             *propCap = pBeaconStruct->propIEinfo.capability;
         if (pBeaconStruct->HTCaps.present)
             pMac->lim.htCapabilityPresentInBeacon = 1;
@@ -118,19 +116,15 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
 
 #ifdef WLAN_FEATURE_11AC
         VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO_MED,
-            "***beacon.VHTCaps.present*****=%d BSS_VHT_CAPABLE:%d",
-            pBeaconStruct->VHTCaps.present,
-            IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps));
+            "***beacon.VHTCaps.present*****=%d",pBeaconStruct->VHTCaps.present);
         VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_INFO_MED,
            "***beacon.SU Beamformer Capable*****=%d",pBeaconStruct->VHTCaps.suBeamFormerCap);
 
-        if (IS_BSS_VHT_CAPABLE(pBeaconStruct->VHTCaps) && pBeaconStruct->VHTOperation.present)
+        if ( pBeaconStruct->VHTCaps.present && pBeaconStruct->VHTOperation.present)
         {
             psessionEntry->vhtCapabilityPresentInBeacon = 1;
             psessionEntry->apCenterChan = pBeaconStruct->VHTOperation.chanCenterFreqSeg1;
             psessionEntry->apChanWidth = pBeaconStruct->VHTOperation.chanWidth;
-            psessionEntry->vhtTxChannelWidthSet =
-                    pBeaconStruct->VHTOperation.chanWidth;
 
             if (pBeaconStruct->Vendor1IEPresent &&
                 pBeaconStruct->Vendor2IEPresent &&
@@ -182,10 +176,16 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
         {
             *localConstraint = pBeaconStruct->eseTxPwr.power_limit;
         }
-        psessionEntry->is_ese_version_ie_present =
-                              pBeaconStruct->is_ese_ver_ie_present;
 #endif
         if (pBeaconStruct->powerConstraintPresent)
+#if 0
+        //Remove this check. This function is expected to return localPowerConsraints
+        //and it should just do that. Check for 11h enabled or not can be done at the caller
+#if defined WLAN_FEATURE_VOWIFI
+          && ( pMac->lim.gLim11hEnable
+           || pMac->rrm.rrmPEContext.rrmEnable
+#endif
+#endif
         {
 #if defined WLAN_FEATURE_VOWIFI
            *localConstraint -= pBeaconStruct->localPowerConstraint.localPowerConstraints;
@@ -199,10 +199,6 @@ limExtractApCapability(tpAniSirGlobal pMac, tANI_U8 *pIE, tANI_U16 ieLen,
             limLog(pMac, LOGP, FL("Could not update local power constraint to cfg."));
         }
 #endif
-        psessionEntry->countryInfoPresent = FALSE;
-        /* Initializing before first use */
-        if (pBeaconStruct->countryInfoPresent)
-           psessionEntry->countryInfoPresent = TRUE;
     }
     vos_mem_free(pBeaconStruct);
     return;
@@ -253,7 +249,10 @@ ePhyChanBondState  limGetHTCBState(ePhyChanBondState aniCBMode)
  * limGetStaPeerType
  *
  *FUNCTION:
- * This API returns STA peer type
+ * Based on a combination of the following -
+ * 1) tDphHashNode.aniPeer
+ * 2) tDphHashNode.propCapability
+ * this API determines if a given STA is an ANI peer or not
  *
  *LOGIC:
  *
@@ -270,9 +269,19 @@ tStaRateMode limGetStaPeerType( tpAniSirGlobal pMac,
     tpDphHashNode pStaDs,
     tpPESession   psessionEntry)
 {
-  tStaRateMode staPeerType = eSTA_11b;
+tStaRateMode staPeerType = eSTA_11b;
+  // Determine the peer-STA type
+  if( pStaDs->aniPeer )
+  {
+    if(PROP_CAPABILITY_GET( TAURUS, pStaDs->propCapability ))
+        staPeerType = eSTA_TAURUS;
+    else if( PROP_CAPABILITY_GET( TITAN, pStaDs->propCapability ))
+        staPeerType = eSTA_TITAN;
+    else
+        staPeerType = eSTA_POLARIS;
+  }
 #ifdef WLAN_FEATURE_11AC
-  if(pStaDs->mlmStaContext.vhtCapability)
+  else if(pStaDs->mlmStaContext.vhtCapability)
       staPeerType = eSTA_11ac;
 #endif
   else if(pStaDs->mlmStaContext.htCapability)

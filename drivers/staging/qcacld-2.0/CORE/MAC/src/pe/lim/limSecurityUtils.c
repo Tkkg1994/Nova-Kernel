@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -47,17 +47,10 @@
 #include "utilsApi.h"
 #include "limUtils.h"
 #include "limSecurityUtils.h"
-#ifdef WLAN_FEATURE_VOWIFI_11R
-#include "limFTDefs.h"
-#endif
 #include "limSession.h"
 
 
 #define LIM_SEED_LENGTH 16
-/*
- * preauth node timeout value in interval of 10msec
- */
-#define LIM_OPENAUTH_TIMEOUT 500
 
 /**
  * limIsAuthAlgoSupported()
@@ -90,9 +83,10 @@ limIsAuthAlgoSupported(tpAniSirGlobal pMac, tAniAuthType authType, tpPESession p
 
     if (authType == eSIR_OPEN_SYSTEM)
     {
-        if (LIM_IS_AP_ROLE(psessionEntry)) {
-           if ((psessionEntry->authType == eSIR_OPEN_SYSTEM) ||
-              (psessionEntry->authType == eSIR_AUTO_SWITCH))
+
+        if(psessionEntry->limSystemRole == eLIM_AP_ROLE)
+        {
+           if((psessionEntry->authType == eSIR_OPEN_SYSTEM) || (psessionEntry->authType == eSIR_AUTO_SWITCH))
               return true;
            else
               return false;
@@ -116,14 +110,19 @@ limIsAuthAlgoSupported(tpAniSirGlobal pMac, tAniAuthType authType, tpPESession p
     else
     {
 
-        if (LIM_IS_AP_ROLE(psessionEntry)) {
-            if ((psessionEntry->authType == eSIR_SHARED_KEY) ||
-               (psessionEntry->authType == eSIR_AUTO_SWITCH))
+        if(psessionEntry->limSystemRole == eLIM_AP_ROLE)
+        {
+            if((psessionEntry->authType == eSIR_SHARED_KEY) || (psessionEntry->authType == eSIR_AUTO_SWITCH))
                 algoEnable = true;
             else
                 algoEnable = false;
-        } else if (wlan_cfgGetInt(pMac, WNI_CFG_SHARED_KEY_AUTH_ENABLE,
-                      &algoEnable) != eSIR_SUCCESS) {
+
+        }
+        else
+
+        if (wlan_cfgGetInt(pMac, WNI_CFG_SHARED_KEY_AUTH_ENABLE,
+                      &algoEnable) != eSIR_SUCCESS)
+        {
             /**
              * Could not get AuthAlgo2 Enable value
              * from CFG. Log error.
@@ -134,10 +133,15 @@ limIsAuthAlgoSupported(tpAniSirGlobal pMac, tAniAuthType authType, tpPESession p
             return false;
         }
 
-        if (LIM_IS_AP_ROLE(psessionEntry)) {
+        if(psessionEntry->limSystemRole == eLIM_AP_ROLE)
+        {
             privacyOptImp = psessionEntry->privacy;
-        } else if (wlan_cfgGetInt(pMac, WNI_CFG_PRIVACY_ENABLED,
-                      &privacyOptImp) != eSIR_SUCCESS) {
+        }
+        else
+
+        if (wlan_cfgGetInt(pMac, WNI_CFG_PRIVACY_ENABLED,
+                      &privacyOptImp) != eSIR_SUCCESS)
+        {
             /**
              * Could not get PrivacyOptionImplemented value
              * from CFG. Log error.
@@ -257,60 +261,7 @@ limSearchPreAuthList(tpAniSirGlobal pMac, tSirMacAddr macAddr)
     return pTempNode;
 } /*** end limSearchPreAuthList() ***/
 
-/**
- * limDeleteOpenAuthPreAuthNode() - delete any stale preauth nodes
- * @pMac: Pointer to Global MAC structure
- *
- * This function is called to delete any stale preauth nodes on
- * receiving authentication frame and existing preauth nodes
- * reached the maximum allowed limit.
- *
- * Return: return true if any preauthnode deleted else false
- */
-tANI_U8
-limDeleteOpenAuthPreAuthNode(tpAniSirGlobal pMac)
-{
-    struct tLimPreAuthNode    *pPrevNode, *pTempNode, *pFoundNode;
-    tANI_U8 authNodeFreed = false;
 
-    pTempNode = pPrevNode = pMac->lim.pLimPreAuthList;
-
-    if (pTempNode == NULL)
-        return authNodeFreed;
-
-    while (pTempNode != NULL)
-    {
-        if (pTempNode->mlmState == eLIM_MLM_AUTHENTICATED_STATE &&
-            pTempNode->authType == eSIR_OPEN_SYSTEM &&
-            (vos_timer_get_system_ticks() >
-                   (LIM_OPENAUTH_TIMEOUT + pTempNode->timestamp) ||
-             vos_timer_get_system_ticks() < pTempNode->timestamp))
-        {
-            // Found node to be deleted
-            authNodeFreed = true;
-            pFoundNode = pTempNode;
-            if (pMac->lim.pLimPreAuthList == pTempNode)
-            {
-                pPrevNode = pMac->lim.pLimPreAuthList = pTempNode =
-                                 pFoundNode->next;
-            }
-            else
-            {
-                pPrevNode->next = pTempNode->next;
-                pTempNode = pPrevNode->next;
-            }
-
-            limReleasePreAuthNode(pMac, pFoundNode);
-        }
-        else
-        {
-            pPrevNode = pTempNode;
-            pTempNode = pPrevNode->next;
-        }
-    }
-
-    return authNodeFreed;
-}
 
 /**
  * limAddPreAuthNode
@@ -489,11 +440,6 @@ limRestoreFromAuthState(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U1
     tSirMacAddr     currentBssId;
     tLimMlmAuthCnf  mlmAuthCnf;
 
-#ifdef FEATURE_WLAN_DIAG_SUPPORT
-    limDiagEventReport(pMac, WLAN_PE_DIAG_AUTH_COMP_EVENT, sessionEntry,
-                       resultCode, protStatusCode);
-#endif
-
     vos_mem_copy( (tANI_U8 *) &mlmAuthCnf.peerMacAddr,
                   (tANI_U8 *) &pMac->lim.gpLimMlmAuthReq->peerMacAddr,
                   sizeof(tSirMacAddr));
@@ -512,16 +458,18 @@ limRestoreFromAuthState(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U1
     sessionEntry->limMlmState = sessionEntry->limPrevMlmState;
 
     MTRACE(macTrace(pMac, TRACE_CODE_MLM_STATE, sessionEntry->peSessionId, sessionEntry->limMlmState));
-    /* Set the authAckStatus status flag as sucess as
-     * host have received the auth rsp and no longer auth
-     * retry is needed also cancel the auth rety timer
-     */
-    pMac->auth_ack_status = LIM_AUTH_ACK_RCD_SUCCESS;
-    /* 'Change' timer for future activations */
-    limDeactivateAndChangeTimer(pMac, eLIM_AUTH_RETRY_TIMER);
+
+
     // 'Change' timer for future activations
     limDeactivateAndChangeTimer(pMac, eLIM_AUTH_FAIL_TIMER);
 
+    #if 0
+    if (wlan_cfgGetStr(pMac, WNI_CFG_BSSID, currentBssId, &cfg) != eSIR_SUCCESS)
+    {
+        /// Could not get BSSID from CFG. Log error.
+        limLog(pMac, LOGP, FL("could not retrieve BSSID"));
+    }
+    #endif //TO SUPPORT BT-AMP
     sirCopyMacAddr(currentBssId,sessionEntry->bssId);
 
     if (sessionEntry->limSmeState == eLIM_SME_WT_PRE_AUTH_STATE)
@@ -980,6 +928,11 @@ tANI_U32 val = 0;
 
   SET_LIM_PROCESS_DEFD_MESGS(pMac, false);
   msgQ.type = WDA_SET_BSSKEY_REQ;
+  //
+  // FIXME_GEN4
+  // A global counter (dialog token) is required to keep track of
+  // all PE <-> HAL communication(s)
+  //
   msgQ.reserved = 0;
   msgQ.bodyptr = pSetBssKeyParams;
   msgQ.bodyval = 0;
@@ -1086,11 +1039,11 @@ void limSendSetStaKeyReq( tpAniSirGlobal pMac,
       SET_LIM_PROCESS_DEFD_MESGS(pMac, false);
   }
 
-  if (LIM_IS_IBSS_ROLE(sessionEntry) && !pMlmSetKeysReq->key[0].unicast) {
+  if(sessionEntry->limSystemRole == eLIM_STA_IN_IBSS_ROLE && !pMlmSetKeysReq->key[0].unicast) {
       if (sendRsp == eANI_BOOLEAN_TRUE)
           sessionEntry->limMlmState = eLIM_MLM_WT_SET_STA_BCASTKEY_STATE;
       msgQ.type = WDA_SET_STA_BCASTKEY_REQ;
-  } else {
+  }else {
       if (sendRsp == eANI_BOOLEAN_TRUE)
           sessionEntry->limMlmState = eLIM_MLM_WT_SET_STA_KEY_STATE;
       msgQ.type = WDA_SET_STAKEY_REQ;
@@ -1129,8 +1082,6 @@ void limSendSetStaKeyReq( tpAniSirGlobal pMac,
           else
           {
              limLog( pMac, LOGE, FL( "Wrong Key Index %d" ), defWEPIdx);
-             vos_mem_free (pSetStaKeyParams);
-             return;
           }
       }
       break;
@@ -1150,6 +1101,11 @@ void limSendSetStaKeyReq( tpAniSirGlobal pMac,
 
   pSetStaKeyParams->sendRsp = sendRsp;
 
+  //
+  // FIXME_GEN4
+  // A global counter (dialog token) is required to keep track of
+  // all PE <-> HAL communication(s)
+  //
   msgQ.reserved = 0;
   msgQ.bodyptr = pSetStaKeyParams;
   msgQ.bodyval = 0;
@@ -1222,6 +1178,11 @@ tSirRetStatus      retCode;
   pRemoveBssKeyParams->sessionId = psessionEntry->peSessionId;
 
   msgQ.type = WDA_REMOVE_BSSKEY_REQ;
+  //
+  // FIXME_GEN4
+  // A global counter (dialog token) is required to keep track of
+  // all PE <-> HAL communication(s)
+  //
   msgQ.reserved = 0;
   msgQ.bodyptr = pRemoveBssKeyParams;
   msgQ.bodyval = 0;
@@ -1315,6 +1276,11 @@ tSirRetStatus      retCode;
   SET_LIM_PROCESS_DEFD_MESGS(pMac, false);
 
   msgQ.type = WDA_REMOVE_STAKEY_REQ;
+  //
+  // FIXME_GEN4
+  // A global counter (dialog token) is required to keep track of
+  // all PE <-> HAL communication(s)
+  //
   msgQ.reserved = 0;
   msgQ.bodyptr = pRemoveStaKeyParams;
   msgQ.bodyval = 0;

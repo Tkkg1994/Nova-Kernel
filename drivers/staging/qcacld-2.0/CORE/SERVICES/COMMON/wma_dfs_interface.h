@@ -27,7 +27,7 @@
 
 #include "ath_dfs_structs.h"
 #include "_ieee80211_common.h"
-#include <vos_lock.h>
+
 #define IEEE80211_CHAN_MAX      255
 
 /* channel attributes */
@@ -120,12 +120,6 @@ struct ieee80211_channel
 
     /* Channel Center frequency applicable*/
     u_int32_t       ic_vhtop_ch_freq_seg2;
-
-    /*
-     * spectral separation between pri channel
-     * and the center frequency in MHz
-     */
-    int             ic_pri_freq_center_freq_mhz_separation;
 };
 
 struct ieee80211_channel_list
@@ -205,8 +199,6 @@ typedef struct ieee80211com
     HAL_DFS_DOMAIN current_dfs_regdomain;
     u_int8_t vdev_id;
     u_int8_t last_radar_found_chan;
-    int32_t dfs_pri_multiplier;
-    vos_lock_t chan_lock;
 } IEEE80211COM, *PIEEE80211COM;
 
 /*

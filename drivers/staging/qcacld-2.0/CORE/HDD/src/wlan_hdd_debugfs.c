@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -28,22 +28,12 @@
 #ifdef WLAN_OPEN_SOURCE
 #include <wlan_hdd_includes.h>
 #include <wlan_hdd_wowl.h>
-#include <vos_sched.h>
 
 #define MAX_USER_COMMAND_SIZE_WOWL_ENABLE 8
 #define MAX_USER_COMMAND_SIZE_WOWL_PATTERN 512
 #define MAX_USER_COMMAND_SIZE_FRAME 4096
 
-/**
- * __wcnss_wowenable_write() - write wow enable
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t __wcnss_wowenable_write(struct file *file,
+static ssize_t wcnss_wowenable_write(struct file *file,
                const char __user *buf, size_t count, loff_t *ppos)
 {
     hdd_adapter_t *pAdapter = (hdd_adapter_t *)file->private_data;
@@ -53,8 +43,6 @@ static ssize_t __wcnss_wowenable_write(struct file *file,
     v_U8_t wow_enable = 0;
     v_U8_t wow_mp = 0;
     v_U8_t wow_pbm = 0;
-
-    ENTER();
 
     if ((NULL == pAdapter) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
@@ -134,42 +122,11 @@ static ssize_t __wcnss_wowenable_write(struct file *file,
 
       return -EFAULT;
     }
-    EXIT();
+
     return count;
 }
 
-/**
- * wcnss_wowenable_write() - SSR wrapper for wcnss_wowenable_write
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t wcnss_wowenable_write(struct file *file,
-				 const char __user *buf,
-				 size_t count, loff_t *ppos)
-{
-	ssize_t ret;
-
-	vos_ssr_protect(__func__);
-	ret = __wcnss_wowenable_write(file, buf, count, ppos);
-	vos_ssr_unprotect(__func__);
-
-	return ret;
-}
-
-/**
- * __wcnss_wowpattern_write() - write wow pattern
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t __wcnss_wowpattern_write(struct file *file,
+static ssize_t wcnss_wowpattern_write(struct file *file,
                const char __user *buf, size_t count, loff_t *ppos)
 {
     hdd_adapter_t *pAdapter = (hdd_adapter_t *)file->private_data;
@@ -252,44 +209,12 @@ static ssize_t __wcnss_wowpattern_write(struct file *file,
 
     hdd_add_wowl_ptrn_debugfs(pAdapter, pattern_idx, pattern_offset,
                               pattern_buf, pattern_mask);
-    EXIT();
+
     return count;
 }
 
-/**
- * wcnss_wowpattern_write() - SSR wrapper for __wcnss_wowpattern_write
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t wcnss_wowpattern_write(struct file *file,
-				      const char __user *buf,
-				      size_t count, loff_t *ppos)
-{
-	ssize_t ret;
-
-	vos_ssr_protect(__func__);
-	ret = __wcnss_wowpattern_write(file, buf, count, ppos);
-	vos_ssr_unprotect(__func__);
-
-	return ret;
-}
-
-/**
- * __wcnss_patterngen_write() - write pattern
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t __wcnss_patterngen_write(struct file *file,
-					const char __user *buf,
-					size_t count, loff_t *ppos)
+static ssize_t wcnss_patterngen_write(struct file *file,
+               const char __user *buf, size_t count, loff_t *ppos)
 {
     hdd_adapter_t *pAdapter = (hdd_adapter_t *)file->private_data;
     hdd_context_t *pHddCtx;
@@ -302,8 +227,6 @@ static ssize_t __wcnss_patterngen_write(struct file *file,
     char *pattern_buf;
     v_U16_t pattern_len = 0;
     v_U16_t i = 0;
-
-    ENTER();
 
     if ((NULL == pAdapter) || (WLAN_HDD_ADAPTER_MAGIC != pAdapter->magic))
     {
@@ -404,7 +327,6 @@ static ssize_t __wcnss_patterngen_write(struct file *file,
             goto failure;
         }
         vos_mem_free(cmd);
-        vos_mem_free(delPeriodicTxPtrnParams);
         return count;
     }
 
@@ -483,8 +405,6 @@ static ssize_t __wcnss_patterngen_write(struct file *file,
         goto failure;
     }
     vos_mem_free(cmd);
-    vos_mem_free(addPeriodicTxPtrnParams);
-    EXIT();
     return count;
 
 failure:
@@ -492,60 +412,14 @@ failure:
     return -EINVAL;
 }
 
-/**
- * wcnss_patterngen_write() - SSR wrapper for __wcnss_patterngen_write
- * @file: file pointer
- * @buf: buffer
- * @count: count
- * @ppos: position pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static ssize_t wcnss_patterngen_write(struct file *file,
-				      const char __user *buf,
-				      size_t count, loff_t *ppos)
-{
-	ssize_t ret;
-
-	vos_ssr_protect(__func__);
-	ret = __wcnss_patterngen_write(file, buf, count, ppos);
-	vos_ssr_unprotect(__func__);
-
-	return ret;
-}
-
-/**
- * __wcnss_debugfs_open() - open debugfs
- * @inode: inode pointer
- * @file: file pointer
- *
- * Return: 0 on success, error number otherwise
- */
-static int __wcnss_debugfs_open(struct inode *inode, struct file *file)
-{
-	ENTER();
-	if (inode->i_private)
-		file->private_data = inode->i_private;
-	EXIT();
-	return 0;
-}
-
-/**
- * wcnss_debugfs_open() - SSR wrapper for __wcnss_debugfs_open
- * @inode: inode pointer
- * @file: file pointer
- *
- * Return: 0 on success, error number otherwise
- */
 static int wcnss_debugfs_open(struct inode *inode, struct file *file)
 {
-	int ret;
+    if (inode->i_private)
+    {
+        file->private_data = inode->i_private;
+    }
 
-	vos_ssr_protect(__func__);
-	ret = __wcnss_debugfs_open(inode, file);
-	vos_ssr_unprotect(__func__);
-
-	return ret;
+    return 0;
 }
 
 static const struct file_operations fops_wowenable = {

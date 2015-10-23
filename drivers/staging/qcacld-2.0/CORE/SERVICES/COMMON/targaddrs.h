@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -121,8 +121,7 @@ PREPACK64 struct host_interest_s {
     /* Pointer to debug logging header */
     A_UINT32               hi_dbglog_hdr;                             /* 0x08 */
 
-    /* Save SW ROM version */
-    A_UINT32               hi_sw_rom_version;                         /* 0x0c */
+    A_UINT32               hi_unused0c;                               /* 0x0c */
 
     /*
      * General-purpose flag bits, similar to SOC_OPTION_* flags.
@@ -277,15 +276,6 @@ PREPACK64 struct host_interest_s {
     /* remaining bytes of DRAM */
     A_UINT32               hi_dynamic_mem_remaining;                /* 0x110 */
 
-    /* memory track count, configured by host */
-    A_UINT32               hi_dynamic_mem_track_max;                /* 0x114 */
-
-    /* minidump buffer */
-    A_UINT32               hi_minidump;                             /* 0x118 */
-
-    /* bdata's sig and key addr */
-    A_UINT32               hi_bd_sig_key;                           /* 0x11c */
-
 } POSTPACK64;
 
 /* bitmap for hi_test_apps_related */
@@ -368,11 +358,6 @@ PREPACK64 struct host_interest_s {
         (!(HOST_INTEREST->hi_option_flag2 & HI_OPTION_DISABLE_CDC_MAX_PERF_WAR))
 
 #define HI_OPTION_USE_EXT_LDO       0x40 /* use LDO27 for 1.1V instead of PMU */
-#define HI_OPTION_DBUART_SUPPORT    0x80 /* Enable uart debug support */
-#define HT_OPTION_GPIO_WAKEUP_SUPPORT    0x200 /* GPIO wake up support */
-
-#define GPIO_WAKEUP_ENABLED() \
-    (HOST_INTEREST->hi_option_flag2 & HT_OPTION_GPIO_WAKEUP_SUPPORT)
 
 /* hi_reset_flag */
 #define HI_RESET_FLAG_PRESERVE_APP_START         0x01  /* preserve App Start address */
@@ -422,12 +407,9 @@ PREPACK64 struct host_interest_s {
 #define DESC_IN_FW() \
         (HOST_INTEREST->hi_fw_swap & HI_DESC_IN_FW_BIT)
 
-#define HI_ACS_FLAGS_SDIO_SWAP_MAILBOX_SET          (1 << 0)
-#define HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_SET       (1 << 1)
-#define HI_ACS_FLAGS_ALT_DATA_CREDIT_SIZE           (1 << 2)
-
-#define HI_ACS_FLAGS_SDIO_SWAP_MAILBOX_FW_ACK       (1 << 16)
-#define HI_ACS_FLAGS_SDIO_REDUCE_TX_COMPL_FW_ACK    (1 << 17)
+#define HI_ACS_FLAGS_ENABLED        (1 << 0)    /* ACS is enabled */
+#define HI_ACS_FLAGS_USE_WWAN       (1 << 1)    /* Use physical WWAN device */
+#define HI_ACS_FLAGS_TEST_VAP       (1 << 2)    /* Use test VAP */
 
 /* CONSOLE FLAGS
  *

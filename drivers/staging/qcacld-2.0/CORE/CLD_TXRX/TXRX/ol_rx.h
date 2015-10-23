@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011, 2014 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -55,26 +55,5 @@ ol_rx_peer_init(struct ol_txrx_pdev_t *pdev, struct ol_txrx_peer_t *peer);
 
 void
 ol_rx_peer_cleanup(struct ol_txrx_vdev_t *vdev, struct ol_txrx_peer_t *peer);
-
-void
-ol_rx_in_order_deliver(
-    struct ol_txrx_vdev_t *vdev,
-    struct ol_txrx_peer_t *peer,
-    unsigned tid,
-    adf_nbuf_t head_msdu);
-
-void
-ol_rx_offload_paddr_deliver_ind_handler(
-   htt_pdev_handle htt_pdev,
-   u_int32_t msdu_count,
-   u_int32_t * msg_word );
-
-void
-ol_rx_mic_error_handler(
-    ol_txrx_pdev_handle pdev,
-    u_int8_t tid,
-    u_int16_t peer_id,
-    void * msdu_desc,
-    adf_nbuf_t msdu );
 
 #endif /* _OL_RX__H_ */

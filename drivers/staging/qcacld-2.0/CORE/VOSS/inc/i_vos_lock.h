@@ -46,7 +46,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/device.h>
-#if defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
+#ifdef WLAN_OPEN_SOURCE
 #include <linux/wakelock.h>
 #endif
 
@@ -71,19 +71,14 @@ typedef struct vos_lock_s
 
 typedef spinlock_t vos_spin_lock_t;
 
-typedef struct wlan_wake_lock {
 #if defined CONFIG_CNSS
-	struct wakeup_source lock;
-#elif defined(WLAN_OPEN_SOURCE) && defined(CONFIG_HAS_WAKELOCK)
-	struct wake_lock lock;
+typedef struct wakeup_source vos_wake_lock_t;
+#elif defined WLAN_OPEN_SOURCE
+typedef struct wake_lock vos_wake_lock_t;
 #else
-	int lock;
+typedef int vos_wake_lock_t;
 #endif
-	/* Runtime PM Context */
-	void *runtime_pm_context;
-} vos_wake_lock_t;
 
-typedef void *runtime_pm_context_t;
 /*-------------------------------------------------------------------------
   Function declarations and documenation
   ------------------------------------------------------------------------*/

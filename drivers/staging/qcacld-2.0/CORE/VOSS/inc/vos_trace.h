@@ -81,12 +81,6 @@ typedef enum
 
 } VOS_TRACE_LEVEL;
 
-/* By default Data Path module will be enabled ERROR and FATAL level
- * Too many default log level will break performance
- */
-#define VOS_DATA_PATH_TRACE_LEVEL \
-	((1 << VOS_TRACE_LEVEL_FATAL) | (1 << VOS_TRACE_LEVEL_ERROR))
-
 /*--------------------------------------------------------------------------
   Preprocessor definitions and constants
   ------------------------------------------------------------------------*/
@@ -95,6 +89,7 @@ typedef enum
 // below definition is obsolete and is no longer being used in BMP and WM
 // TODO: remove this once this is not used on Android
 #define VOS_ENABLE_TRACING
+#define WCONN_TRACE_KMSG_LOG_BUFF
 #define MAX_VOS_TRACE_RECORDS 4000
 #define INVALID_VOS_TRACE_ADDR 0xffffffff
 #define DEFAULT_VOS_TRACE_DUMP_COUNT 0
@@ -119,9 +114,8 @@ typedef struct  svosTraceRecord
     v_U64_t time;
     v_U8_t module;
     v_U8_t code;
-    v_U16_t session;
+    v_U8_t session;
     v_U32_t data;
-    uint32_t pid;
 }tvosTraceRecord, *tpvosTraceRecord;
 
 typedef struct svosTraceData
@@ -189,8 +183,26 @@ void vos_trace_setLevel( VOS_MODULE_ID module, VOS_TRACE_LEVEL level );
   --------------------------------------------------------------------------*/
 v_BOOL_t vos_trace_getLevel( VOS_MODULE_ID module, VOS_TRACE_LEVEL level );
 
+#ifdef WCONN_TRACE_KMSG_LOG_BUFF
+/*--------------------------------------------------------------------------
+ \brief vos_wconn_trace_init(); - Initializing the spinlock,
+  Initialization would be called at the time of hdd_driver_init()
+
+ \return - returns None
+ --------------------------------------------------------------------------*/
+void vos_wconn_trace_init(void);
+
+/*--------------------------------------------------------------------------
+ \brief vos_wconn_trace_exit(); - De-Initializing the spinlock,
+  De-Initialization would be called at the time of hdd_driver_exit()
+
+ \return - returns None
+ --------------------------------------------------------------------------*/
+void vos_wconn_trace_exit(void);
+#endif
+
 typedef void (*tpvosTraceCb) (void *pMac, tpvosTraceRecord, v_U16_t);
-void vos_trace(v_U8_t module, v_U8_t code, v_U16_t session, v_U32_t data);
+void vos_trace(v_U8_t module, v_U8_t code, v_U8_t session, v_U32_t data);
 void vosTraceRegister(VOS_MODULE_ID, tpvosTraceCb);
 VOS_STATUS vos_trace_spin_lock_init(void);
 void vosTraceInit(void);
