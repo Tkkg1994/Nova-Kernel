@@ -171,9 +171,12 @@ static int msm_comm_get_inst_load(struct msm_vidc_inst *inst,
 			load = inst->core->resources.max_load;
 	}
 
-	if (is_non_realtime_session(inst) &&
-		(quirks & LOAD_CALC_IGNORE_NON_REALTIME_LOAD))
-		load = msm_comm_get_mbs_per_sec(inst) / inst->prop.fps;
+	if (!is_thumbnail_session(inst) && is_non_realtime_session(inst) &&
+		(quirks & LOAD_CALC_IGNORE_NON_REALTIME_LOAD)) {
+		load = msm_comm_get_mbs_per_sec(inst)/inst->prop.fps;
+		dprintk(VIDC_DBG, "NON REALTIME Session so load is: %d", load);
+	} else
+		dprintk(VIDC_DBG, "REALTIME Session so load is: %d", load);
 	return load;
 }
 
