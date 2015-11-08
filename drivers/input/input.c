@@ -29,7 +29,7 @@
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 
-static bool disable_release_keys;
+bool disable_release_keys = false;
 module_param(disable_release_keys, bool, 0755);
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
