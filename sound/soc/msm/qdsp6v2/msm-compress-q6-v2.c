@@ -1464,7 +1464,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			if (prtd->last_buffer) {
 				pr_info("%s: last buffer drain\n", __func__);
 				rc = msm_compr_drain_buffer(prtd, &flags);
-				if (rc) {
+				if (rc || !atomic_read(&prtd->start)) {
 					spin_unlock_irqrestore(&prtd->lock,
 									flags);
 					break;
@@ -1484,7 +1484,7 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 			/* wait for the zero length buffer to be returned */
 			pr_info("%s: zero length buffer drain\n", __func__);
 			rc = msm_compr_drain_buffer(prtd, &flags);
-			if (rc) {
+			if (rc || !atomic_read(&prtd->start)) {
 				spin_unlock_irqrestore(&prtd->lock, flags);
 				break;
 			}
