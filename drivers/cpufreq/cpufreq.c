@@ -1514,12 +1514,12 @@ static unsigned int __cpufreq_get(unsigned int cpu)
 	unsigned int ret_freq = 0;
 	unsigned long flags;
 
-	if (!cpufreq_driver->get || policy == 0)
-		return ret_freq;
-
 	read_lock_irqsave(&cpufreq_driver_lock, flags);
 	policy = per_cpu(cpufreq_cpu_data, cpu);
 	read_unlock_irqrestore(&cpufreq_driver_lock, flags);
+
+	if (!cpufreq_driver->get || policy == 0)
+		return ret_freq;
 
 	ret_freq = cpufreq_driver->get(cpu);
 
