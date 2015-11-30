@@ -42,13 +42,16 @@
 #include <linux/writeback.h>
 #include <linux/pagemap.h>
 
+/* Debugging code for zswap kernel panic */
+#include <linux/mm.h>
+
 /*********************************
 * statistics
 **********************************/
 /* Total bytes used by the compressed storage */
-static u64 zswap_pool_total_size;
+u64 zswap_pool_total_size;
 /* The number of compressed pages currently stored in zswap */
-static atomic_t zswap_stored_pages = ATOMIC_INIT(0);
+atomic_t zswap_stored_pages = ATOMIC_INIT(0);
 
 /*
  * The statistics below are not protected from concurrent access for
@@ -81,7 +84,11 @@ static bool zswap_enabled;
 module_param_named(enabled, zswap_enabled, bool, 0644);
 
 /* Compressor to be used by zswap (fixed at boot for now) */
+#ifdef CONFIG_CRYPTO_LZ4
+#define ZSWAP_COMPRESSOR_DEFAULT "lz4"
+#else
 #define ZSWAP_COMPRESSOR_DEFAULT "lzo"
+#endif
 static char *zswap_compressor = ZSWAP_COMPRESSOR_DEFAULT;
 module_param_named(compressor, zswap_compressor, charp, 0444);
 
@@ -159,6 +166,7 @@ static void __init zswap_comp_exit(void)
 /*********************************
 * data structures
 **********************************/
+
 /*
  * struct zswap_entry
  *
