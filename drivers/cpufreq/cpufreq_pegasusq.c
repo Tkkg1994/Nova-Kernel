@@ -57,9 +57,9 @@
 #define DEF_START_DELAY				(0)
 
 #define UP_THRESHOLD_AT_MIN_FREQ		(40)
-#define FREQ_FOR_RESPONSIVENESS			(1890000)
+#define FREQ_FOR_RESPONSIVENESS			(1728000)
 /* for fast decrease */
-#define FREQ_FOR_FAST_DOWN			(1350000)
+#define FREQ_FOR_FAST_DOWN			(10360000)
 #define UP_THRESHOLD_AT_FAST_DOWN		(80)
 
 static unsigned int min_sampling_rate;
