@@ -258,10 +258,11 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		if (simple_gpu_active != 0)
 			val = simple_gpu_algorithm(level, priv);
 		else
-			val = __secure_tz_entry3(TZ_UPDATE_ID,
-					level,
-					priv->bin.total_time,
-					priv->bin.busy_time);
+			scm_data[0] = level;
+			scm_data[1] = priv->bin.total_time;
+			scm_data[2] = priv->bin.busy_time;
+			__secure_tz_update_entry3(scm_data, sizeof(scm_data),
+						&val, sizeof(val), priv->is_64);
 #else
 		scm_data[0] = level;
 		scm_data[1] = priv->bin.total_time;
