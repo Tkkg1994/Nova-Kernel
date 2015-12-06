@@ -280,6 +280,25 @@ static void intelli_plug_work_fn(struct work_struct *work)
 					msecs_to_jiffies(def_sampling_ms));
 }
 
+void __ref intelli_plug_perf_boost(bool on)
+{
+	unsigned int cpu;
+
+	if (intelli_plug_active) {
+		flush_workqueue(intelliplug_wq);
+		if (on) {
+			for_each_possible_cpu(cpu) {
+				if (!cpu_online(cpu))
+					cpu_up(cpu);
+			}
+		} else {
+			queue_delayed_work_on(0, intelliplug_wq,
+				&intelli_plug_work,
+				msecs_to_jiffies(sampling_time));
+		}
+	}
+}
+
 static void intelli_plug_suspend(void)
 {
 	int cpu = 0;
