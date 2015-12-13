@@ -2732,6 +2732,8 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 #endif
 #ifdef CONFIG_ZSWAP_SAMSUNG
 		.swappiness = vm_swappiness / 2,
+#elif defined CONFIG_ZSWAP
+		.swappiness = vm_swappiness / 2,
 #else
 		.swappiness = vm_swappiness,
 #endif
