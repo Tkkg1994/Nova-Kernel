@@ -814,7 +814,6 @@ again:			remove_next = 1 + (end > next->vm_end);
 		end_changed = true;
 	}
 	vma->vm_pgoff = pgoff;
-
 	if (adjust_next) {
 		next->vm_start += adjust_next << PAGE_SHIFT;
 		next->vm_pgoff += adjust_next;
@@ -2841,7 +2840,7 @@ void exit_mmap(struct mm_struct *mm)
 
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
-	mm->mmap_cache = NULL;
+	vmacache_invalidate(mm);
 	up_write(&mm->mmap_sem);
 
 	WARN_ON(mm->nr_ptes > (FIRST_USER_ADDRESS+PMD_SIZE-1)>>PMD_SHIFT);
@@ -3057,6 +3056,7 @@ int install_special_mapping(struct mm_struct *mm,
 	ret = insert_vm_struct(mm, vma);
 	if (ret)
 		goto out;
+
 	mm->total_vm += len >> PAGE_SHIFT;
 
 	perf_event_mmap(vma);
