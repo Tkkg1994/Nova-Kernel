@@ -266,7 +266,7 @@ MHI_STATUS mhi_spawn_threads(mhi_device_ctxt *mhi_dev_ctxt)
 	mhi_dev_ctxt->st_thread_handle = kthread_run(mhi_state_change_thread,
 							mhi_dev_ctxt,
 							"MHI_STATE_THREAD");
-	if (-ENOMEM == (int)mhi_dev_ctxt->st_thread_handle)
+	if (-ENOMEM == (int)mhi_dev_ctxt->event_thread_handle)
 		return MHI_STATUS_ERROR;
 	return MHI_STATUS_SUCCESS;
 }

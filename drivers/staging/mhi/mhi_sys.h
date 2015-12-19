@@ -91,7 +91,7 @@ extern void *mhi_ipc_log;
 				writel_relaxed(val,			\
 					(volatile void *)(uintptr_t)(base + offset)); \
 				wmb();					\
-				PULSE_L1_EXIT(0); \
+				PULSE_L1_EXIT(0);			\
 				} while (0)
 
 irqreturn_t irq_cb(int msi_number, void *dev_id);
