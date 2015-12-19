@@ -862,10 +862,6 @@ static int mdss_mdp_cmd_panel_on(struct mdss_mdp_ctl *ctl,
 		rc = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_ON, NULL);
 		WARN(rc, "intf %d panel on error (%d)\n", ctl->intf_num, rc);
 
-		mdss_mdp_ctl_intf_event(ctl,
-			MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
-			(void *)&ctx->recovery);
-
 		ctx->panel_power_state = MDSS_PANEL_POWER_ON;
 		if (sctx)
 			sctx->panel_power_state = MDSS_PANEL_POWER_ON;
@@ -940,8 +936,8 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	/*
 	 * tx dcs command if had any
 	 */
-	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF, NULL);
-
+	mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_DSI_CMDLIST_KOFF,
+						(void *)&ctx->recovery);
 	mdss_mdp_cmd_set_stream_size(ctl);
 
 	mdss_mdp_cmd_set_sync_ctx(ctl, sctl);
@@ -1046,10 +1042,6 @@ static void mdss_mdp_cmd_stop_sub(struct mdss_mdp_ctl *ctl,
 	if (cancel_work_sync(&ctx->clk_work))
 		pr_debug("no pending clk work\n");
 
-	mdss_mdp_ctl_intf_event(ctl,
-			MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
-			NULL);
-
 	mdss_mdp_cmd_clk_off(ctx);
 	flush_work(&ctx->pp_done_work);
 	mdss_mdp_cmd_tearcheck_setup(ctl, false);
@@ -1072,7 +1064,7 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		mdss_mdp_cmd_stop_sub(ctl, panel_power_state);
 		if (sctl)
 			mdss_mdp_cmd_stop_sub(sctl, panel_power_state);
-		mutex_lock(&ctl->offlock);
+
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_BLANK,
 				(void *) (long int) panel_power_state);
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
@@ -1080,7 +1072,6 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl, int panel_power_state)
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_PANEL_OFF,
 				(void *) (long int) panel_power_state);
 		WARN(ret, "intf %d unblank error (%d)\n", ctl->intf_num, ret);
-		mutex_unlock(&ctl->offlock);
 	}
 
 	if (mdss_panel_is_power_on(panel_power_state)) {

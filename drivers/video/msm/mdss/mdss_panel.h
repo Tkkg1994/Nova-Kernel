@@ -25,7 +25,6 @@ struct panel_id {
 
 #define DEFAULT_FRAME_RATE	60
 #define DEFAULT_ROTATOR_FRAME_RATE 120
-#define ROTATOR_LOW_FRAME_RATE 30
 #define MDSS_DSI_RST_SEQ_LEN	10
 
 /* panel type list */
@@ -152,10 +151,6 @@ struct mdss_panel_recovery {
  * @MDSS_EVENT_DSI_CMDLIST_KOFF: acquire dsi_mdp_busy lock before kickoff.
  * @MDSS_EVENT_ENABLE_PARTIAL_ROI: Event to update ROI of the panel.
  * @MDSS_EVENT_DSI_STREAM_SIZE: Event to update DSI controller's stream size
- * @MDSS_EVENT_ENABLE_TE: Change TE state, used for factory testing only
- * @MDSS_EVENT_ENABLE_HBM:	Enable "High Brightness Mode" feature on panel
- * @MDSS_EVENT_DSI_RESET_WRITE_PTR: Reset the write pointer coordinates on
- * 				the panel. Also, need to do a s/w reset.
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
@@ -177,10 +172,6 @@ enum mdss_intf_events {
 	MDSS_EVENT_MDNIE_DEFAULT_UPDATE,
 	MDSS_EVENT_ENABLE_PARTIAL_ROI,
 	MDSS_EVENT_DSI_STREAM_SIZE,
-	MDSS_EVENT_REGISTER_RECOVERY_HANDLER,
-	MDSS_EVENT_ENABLE_TE,
-	MDSS_EVENT_ENABLE_HBM,
-	MDSS_EVENT_DSI_RESET_WRITE_PTR,
 #if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OCTA_CMD_FHD_FA2_PT_PANEL)
 	MDSS_EVENT_TE_UPDATE,
 	MDSS_EVENT_TE_UPDATE2,
@@ -266,7 +257,7 @@ struct mipi_panel_info {
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
-	bool force_clk_lane_hs;
+	char force_clk_lane_hs;
 
 	char vsync_enable;
 	char hw_vsync_mode;
@@ -390,7 +381,6 @@ struct mdss_panel_info {
 	u32 min_height;
 
 	u32 cont_splash_enabled;
-	bool cont_splash_esd_rdy;
 	u32 partial_update_enabled;
 	u32 dcs_cmd_by_left;
 	u32 partial_update_roi_merge;
@@ -399,10 +389,6 @@ struct mdss_panel_info {
 	int blank_state;
 
 	int dsi_on_status;
-
-	bool hbm_feature_enabled;
-	bool hbm_state;
-	bool hbm_off_state;
 
 	uint32_t panel_dead;
 
@@ -413,7 +399,6 @@ struct mdss_panel_info {
 	struct mipi_panel_info mipi;
 	struct lvds_panel_info lvds;
 	struct edp_panel_info edp;
-	u32 col_align;
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	struct esd_recovery esd_recovery;
 	int panel_state;
@@ -441,7 +426,6 @@ struct mdss_panel_data {
 	int (*event_handler) (struct mdss_panel_data *pdata, int e, void *arg);
 
 	struct mdss_panel_data *next;
-	struct mdss_panel_data *prev;
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	void *panel_private;

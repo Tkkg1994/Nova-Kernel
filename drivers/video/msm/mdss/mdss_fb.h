@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,15 +32,10 @@
 
 #define MSM_FB_ENABLE_DBGFS
 #define WAIT_FENCE_FIRST_TIMEOUT (3 * MSEC_PER_SEC)
-#define WAIT_FENCE_FINAL_TIMEOUT (7 * MSEC_PER_SEC)
-/* Display op timeout should be greater than the total timeout but not
- * unreasonably large. Set to 1s more than first wait + final wait which
- * are already quite long and proceed without any further waits. */
-#define WAIT_DISP_OP_TIMEOUT (WAIT_FENCE_FIRST_TIMEOUT + \
-		WAIT_FENCE_FINAL_TIMEOUT + 1)
-#define WAIT_MAX_FENCE_TIMEOUT (WAIT_FENCE_FIRST_TIMEOUT + \
-					WAIT_FENCE_FINAL_TIMEOUT)
-#define WAIT_MIN_FENCE_TIMEOUT  (1)
+#define WAIT_FENCE_FINAL_TIMEOUT (10 * MSEC_PER_SEC)
+/* Display op timeout should be greater than total timeout */
+#define WAIT_DISP_OP_TIMEOUT ((WAIT_FENCE_FIRST_TIMEOUT + \
+		WAIT_FENCE_FINAL_TIMEOUT) * MDP_MAX_FENCE_FD)
 
 #ifndef MAX
 #define  MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -130,7 +125,6 @@ struct msm_mdp_interface {
 				uint32_t pid);
 	int (*kickoff_fnc)(struct msm_fb_data_type *mfd,
 					struct mdp_display_commit *data);
-	int (*pre_commit_fnc)(struct msm_fb_data_type *mfd);
 	int (*ioctl_handler)(struct msm_fb_data_type *mfd, u32 cmd, void *arg);
 	void (*dma_fnc)(struct msm_fb_data_type *mfd);
 	int (*cursor_update)(struct msm_fb_data_type *mfd,
@@ -217,6 +211,7 @@ struct msm_fb_data_type {
 #endif
 	u32 bl_updated;
 	u32 bl_level_scaled;
+	u32 bl_level_prev_scaled;
 	struct mutex bl_lock;
 
 	struct platform_device *pdev;
@@ -259,13 +254,6 @@ struct msm_fb_data_type {
 	u32 wait_for_kickoff;
 	int doze_mode;
 };
-
-struct sys_panelinfo {
-	char *panel_name;
-	u64 *panel_ver;
-};
-
-extern struct sys_panelinfo panelinfo;
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
 {
@@ -331,7 +319,6 @@ struct sync_fence *mdss_fb_sync_get_fence(struct sw_sync_timeline *timeline,
 				const char *fence_name, int val);
 int mdss_fb_register_mdp_instance(struct msm_mdp_interface *mdp);
 int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state);
-void mdss_fb_send_panel_reset_event(struct msm_fb_data_type *mfd);
 int mdss_fb_suspres_panel(struct device *dev, void *data);
 int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		     unsigned long arg);
