@@ -4105,7 +4105,7 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 	vma->vm_private_data = entry;
 
 #ifdef CONFIG_TIMA_RKP
-	if ((vma->vm_end - vma->vm_start) && (boot_mode_security == 1)) {
+	if (vma->vm_end - vma->vm_start) {
 		/* iommu optimization- needs to be turned ON from
 		* the tz side.
 		*/

@@ -24,7 +24,6 @@
 
 #define _PAGE_USER_TABLE	(PMD_TYPE_TABLE | PMD_BIT4 | PMD_DOMAIN(DOMAIN_USER))
 #define _PAGE_KERNEL_TABLE	(PMD_TYPE_TABLE | PMD_BIT4 | PMD_DOMAIN(DOMAIN_KERNEL))
-extern int boot_mode_security;
 
 #ifdef CONFIG_ARM_LPAE
 
@@ -137,7 +136,7 @@ static inline void __pmd_populate(pmd_t *pmdp, phys_addr_t pte,
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
         __asm__ __volatile__(".arch_extension sec");
 #endif
-	if (tima_is_pg_protected((unsigned long) pmdp) == 0  && boot_mode_security == 0) {
+	if (tima_is_pg_protected((unsigned long) pmdp) == 0) {
 		pmdp[0] = __pmd(pmdval);
 #ifndef CONFIG_ARM_LPAE
 		pmdp[1] = __pmd(pmdval + 256 * sizeof(pte_t));

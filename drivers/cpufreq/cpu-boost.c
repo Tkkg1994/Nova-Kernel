@@ -40,13 +40,6 @@ struct cpu_sync {
 	unsigned int task_load;
 };
 
-/****************************************************************/
-#ifdef CONFIG_IRLED_GPIO
-extern bool gir_boost_disable;
-#endif
-/****************************************************************/
-
-
 static DEFINE_PER_CPU(struct cpu_sync, sync_info);
 static struct workqueue_struct *cpu_boost_wq;
 
@@ -157,13 +150,6 @@ static int boost_mig_sync_thread(void *data)
 
 	while (1) {
 		wait_event(s->sync_wq, s->pending || kthread_should_stop());
-#ifdef CONFIG_IRLED_GPIO
-		if (unlikely(gir_boost_disable)) {
-			pr_debug("[GPIO_IR][%s] continue~!(cpu:%d)\n", 
-				__func__, raw_smp_processor_id());
-			continue;
-		}
-#endif
 
 		if (kthread_should_stop())
 			break;
@@ -228,14 +214,6 @@ static int boost_migration_notify(struct notifier_block *nb,
 	struct migration_notify_data *mnd = arg;
 	unsigned long flags;
 	struct cpu_sync *s = &per_cpu(sync_info, mnd->dest_cpu);
-
-#ifdef CONFIG_IRLED_GPIO
-	if (unlikely(gir_boost_disable)) {
-		pr_debug("[GPIO_IR][%s] continue~!(cpu:%d)\n", 
-			__func__, raw_smp_processor_id());
-		return NOTIFY_OK;
-	}
-#endif
 
 	if (load_based_syncs && (mnd->load <= migration_load_threshold))
 		return NOTIFY_OK;
@@ -303,14 +281,6 @@ static void cpuboost_input_event(struct input_handle *handle,
 
 	if (!input_boost_freq)
 		return;
-
-#ifdef CONFIG_IRLED_GPIO
-	if (unlikely(gir_boost_disable)) {
-		pr_debug("[GPIO_IR][%s] continue~!(cpu:%d)\n", 
-			__func__, raw_smp_processor_id());
-		return;
-	}
-#endif
 
 	now = ktime_to_us(ktime_get());
 	if (now - last_input_time < MIN_INPUT_INTERVAL)

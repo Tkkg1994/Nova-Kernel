@@ -65,13 +65,6 @@ ENTRY(cpu_v7_switch_mm)
 #ifndef CONFIG_TIMA_RKP
 	mcr	p15, 0, r0, c2, c0, 0		@ set TTB 0
 #else
-	ldr	r1, =boot_mode_security
-	ldr	r1, [r1]
-	cmp	r1, #0
-	bne	1f
-	mcr	p15, 0, r0, c2, c0, 0		@ set TTB 0
-	b	2f
-1:
         stmfd   sp!, {r2, r11}
        /* TZ side expects r0 to be in r11 */
         mov     r11,    r0
@@ -86,7 +79,6 @@ ENTRY(cpu_v7_switch_mm)
 	/* Flush TLB */
 	mcr    p15, 0, r0, c8, c3, 0
 	dsb
-2:
 #endif
 #endif
 

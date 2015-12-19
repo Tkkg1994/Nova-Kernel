@@ -46,10 +46,6 @@
 	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6E3HF2_AMS559DE01_WQXGA_0>;
 	qcom,platform-te-gpio = <&msmgpio 12 0>;
 
-	/*qcom,dsi-panel-bias-vreg;*/
-	qcom,platform-enable-gpio = <&pma8084_gpios 6 0>;
-	qcom,platform-reset-gpio = <&pma8084_gpios 21 0>;
-
 	iovdd-supply = <&pma8084_l26>;
 };
 
@@ -137,7 +133,7 @@
 		stm,tsp-project = "TB_LTE";
 		stm,tsp-coords = <1599 2559>;
 		vdd_keyled-supply = <&pma8084_l23>;
-	};
+	};	
 };
 
 &i2c_3  {

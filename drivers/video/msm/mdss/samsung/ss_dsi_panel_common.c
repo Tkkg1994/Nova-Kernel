@@ -2575,6 +2575,7 @@ static void sending_tune_cmd(struct device *dev, char *src, int len)
 	if (IS_ERR_OR_NULL(vdd))
 		pr_err("%s vdd is error", __func__);
 	else {
+		mdss_samsung_send_cmd(vdd->ctrl_dsi[0], PANEL_LEVE2_KEY_ENABLE);
 #if defined(CONFIG_DUAL_PANEL)
 		vdd->mdnie_tune_data[0].mdnie_tune_packet_tx_cmds_dsi.cmds = mdnie_tune_cmd;
 		vdd->mdnie_tune_data[0].mdnie_tune_packet_tx_cmds_dsi.cmd_cnt = 2;
@@ -2584,21 +2585,12 @@ static void sending_tune_cmd(struct device *dev, char *src, int len)
 
 		/* TODO: Tx command */
 #else
-		if((vdd->ctrl_dsi[DSI_CTRL_0]->cmd_sync_wait_broadcast)
-		&& (vdd->ctrl_dsi[DSI_CTRL_1]->cmd_sync_wait_trigger)){ /* Dual DSI & dsi 1 trigger */
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_1], PANEL_LEVE2_KEY_ENABLE);
-			vdd->mdnie_tune_data[DSI_CTRL_1].mdnie_tune_packet_tx_cmds_dsi.cmds = mdnie_tune_cmd;
-			vdd->mdnie_tune_data[DSI_CTRL_1].mdnie_tune_packet_tx_cmds_dsi.cmd_cnt = 2;
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_1], PANEL_MDNIE_TUNE);
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_1], PANEL_LEVE2_KEY_DISABLE);
-		} else { /* Single DSI, dsi 0 trigger */
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_0], PANEL_LEVE2_KEY_ENABLE);
-			vdd->mdnie_tune_data[DSI_CTRL_0].mdnie_tune_packet_tx_cmds_dsi.cmds = mdnie_tune_cmd;
-			vdd->mdnie_tune_data[DSI_CTRL_0].mdnie_tune_packet_tx_cmds_dsi.cmd_cnt = 2;
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_0], PANEL_MDNIE_TUNE);
-			mdss_samsung_send_cmd(vdd->ctrl_dsi[DSI_CTRL_0], PANEL_LEVE2_KEY_DISABLE);
-		}
+		vdd->mdnie_tune_data[0].mdnie_tune_packet_tx_cmds_dsi.cmds = mdnie_tune_cmd;
+		vdd->mdnie_tune_data[0].mdnie_tune_packet_tx_cmds_dsi.cmd_cnt = 2;
+
+		mdss_samsung_send_cmd(vdd->ctrl_dsi[DISPLAY_1], PANEL_MDNIE_TUNE);
 #endif
+		mdss_samsung_send_cmd(vdd->ctrl_dsi[0], PANEL_LEVE2_KEY_DISABLE);
 	}
 }
 
@@ -3287,6 +3279,8 @@ int hmt_bright_update(struct mdss_dsi_ctrl_pdata *ctrl)
 
 int hmt_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 {
+	msleep(20);
+
 	if (enable) {
 		pr_info("Single Scan Enable ++ \n");
 		mdss_samsung_send_cmd(ctrl, PANEL_HMT_ENABLE);
@@ -3301,6 +3295,8 @@ int hmt_enable(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 
 int hmt_reverse_update(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 {
+	msleep(20);
+
 	if (enable) {
 		pr_info("REVERSE ENABLE ++\n");
 		mdss_samsung_send_cmd(ctrl, PANEL_HMT_REVERSE_ENABLE);
@@ -3865,10 +3861,8 @@ void mdss_samsung_dsi_dump_regs(int dsi_num)
 void mdss_samsung_dsi_te_check(void)
 {
 	struct mdss_dsi_ctrl_pdata **dsi_ctrl = mdss_dsi_get_ctrl();
-	struct samsung_display_driver_data *vdd = samsung_get_vdd();
 	int rc, te_count = 0;
-	int te_max = 20000; /*sampling 200ms */
-	char rddpm_reg = 0;
+	int te_max = 20000; /*samspling 200ms */
 
 	if (dsi_ctrl[DISPLAY_1]->panel_mode == DSI_VIDEO_MODE)
 		return;
@@ -3895,45 +3889,13 @@ void mdss_samsung_dsi_te_check(void)
 		}
 
 		if(te_count == te_max)
-		{
 			pr_err("LDI doesn't generate TE");
-			if (!IS_ERR_OR_NULL(vdd->dtsi_data[DISPLAY_2].ldi_debug0_rx_cmds[vdd->panel_revision].cmds))
-				mdss_samsung_read_nv_mem(dsi_ctrl[DISPLAY_2], &vdd->dtsi_data[DISPLAY_2].ldi_debug0_rx_cmds[vdd->panel_revision], &rddpm_reg, 0);
-			if (!IS_ERR_OR_NULL(vdd->dtsi_data[DISPLAY_1].ldi_debug0_rx_cmds[vdd->panel_revision].cmds))
-				mdss_samsung_read_nv_mem(dsi_ctrl[DISPLAY_1], &vdd->dtsi_data[DISPLAY_1].ldi_debug0_rx_cmds[vdd->panel_revision], &rddpm_reg, 0);
-		}
 		else
 			pr_err("LDI generate TE");
 
 		pr_err(" ============ finish waiting for TE ============\n");
 	} else
 		pr_err("disp_te_gpio is not valid\n");
-}
-void mdss_mdp_underrun_dump_info(void)
-{
-	struct mdss_mdp_pipe *pipe;
-	struct mdss_data_type *mdss_res = mdss_mdp_get_mdata();
-	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(vdd_data.mfd_dsi[0]);
-	int pcount = mdp5_data->mdata->nrgb_pipes+ mdp5_data->mdata->nvig_pipes+mdp5_data->mdata->ndma_pipes;
-
-	pr_err(" ============ %s start ===========\n",__func__);
-	list_for_each_entry(pipe, &mdp5_data->pipes_used, list) {
-		if (pipe)
-			pr_err(" [%4d, %4d, %4d, %4d] -> [%4d, %4d, %4d, %4d]"
-				"|flags = %8d|src_format = %2d|bpp = %2d|ndx = %3d|\n",
-				pipe->src.x, pipe->src.y, pipe->src.w, pipe->src.h,
-				pipe->dst.x, pipe->dst.y, pipe->dst.w, pipe->dst.h,
-				pipe->flags, pipe->src_fmt->format, pipe->src_fmt->bpp,
-				pipe->ndx);
-		pr_err("pipe addr : %p\n", pipe);
-		pcount--;
-		if (!pcount) break;
-	}
-
-	pr_err("mdp_clk = %ld, bus_ab = %llu, bus_ib = %llu\n", mdss_mdp_get_clk_rate(MDSS_CLK_MDP_SRC),
-			mdss_res->bus_scale_table->usecase[mdss_res->curr_bw_uc_idx].vectors[0].ab,
-			mdss_res->bus_scale_table->usecase[mdss_res->curr_bw_uc_idx].vectors[0].ib);
-	pr_err(" ============ %s end =========== \n", __func__);
 }
 
 struct samsung_display_driver_data *samsung_get_vdd(void)

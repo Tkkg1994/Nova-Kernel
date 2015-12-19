@@ -302,7 +302,7 @@ static struct gpiomux_setting gpio_uart_rx_config = {
 static struct gpiomux_setting es705_gpio_uart_rx_config = {
 	.func = GPIOMUX_FUNC_2,
 	.drv  = GPIOMUX_DRV_16MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_UP,
 };
 #endif
 static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
@@ -3133,8 +3133,7 @@ static struct msm_gpiomux_config gpio_nc_configs[] __initdata = {
 	defined(CONFIG_MACH_TRLTE_VZW) || defined(CONFIG_MACH_TRLTE_USC) || \
 	defined(CONFIG_MACH_TRLTE_CAN) || defined(CONFIG_MACH_TBLTE_VZW) || \
 	defined(CONFIG_MACH_TBLTE_ATT) || defined(CONFIG_MACH_TBLTE_TMO) || \
-	defined(CONFIG_MACH_TBLTE_CHN) || defined(CONFIG_MACH_TBLTE_USC) || \
-	defined(CONFIG_MACH_TRLTE_SPR)
+	defined(CONFIG_MACH_TBLTE_CHN) || defined(CONFIG_MACH_TBLTE_USC)
 
 	/* CTI_PAIR2 */
 	GPIOMUX_SET_NC(123),

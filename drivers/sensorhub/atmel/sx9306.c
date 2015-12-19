@@ -349,22 +349,20 @@ static s32 sx9306_get_capMain(struct sx9306_p *data, u8 channel)
 
 static s32 sx9306_calc_capMain(struct sx9306_p *data)
 {
-	s32 capMain;
+	s32 capMain = 0;
 #ifdef CONFIG_SENSORS_SX9306_TEMPERATURE_COMPENSATION
-	s32 capRef;
+	s32 capRef = sx9306_get_capMain(data, REF_SENSOR);
 
-	if (data->calData[0] > 0) {
-		capRef = sx9306_get_capMain(data, REF_SENSOR);
-		capMain = sx9306_get_capMain(data, MAIN_SENSOR);
-		capMain = capMain - ((capRef - data->calData[3]) *
-				TOUCH_CHECK_SLOPE);
-
-		pr_info("[SX9306]: %s - After temp comp CapsMain: %d(%d)\n",
-			__func__, capMain, capRef);
-	} else
-#endif
 	capMain = sx9306_get_capMain(data, MAIN_SENSOR);
+	capMain = capMain - ((capRef - data->calData[3]) *
+		TOUCH_CHECK_SLOPE);
 
+	pr_info("[SX9306]: %s - After temp comp CapsMain: %d(%d)\n",
+		__func__, capMain, capRef);
+
+#else
+	capMain = sx9306_get_capMain(data, MAIN_SENSOR);
+#endif
 	return capMain;
 }
 

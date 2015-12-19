@@ -79,8 +79,6 @@ static int __do_dek_crypt(pub_crypto_request_t *req, char *ret) {
 		return -1;
 	}
 
-	request_send(&g_pub_crypto_control, req);
-
 	nl_msg_size = pub_crypto_request_get_msg(req, &nl_msg);
 	if(nl_msg_size <= 0) {
 		PUB_CRYPTO_LOGE("invalid opcode %d\n", req->opcode);
@@ -106,56 +104,52 @@ static int __do_dek_crypt(pub_crypto_request_t *req, char *ret) {
 		PUB_CRYPTO_LOGE("Error while sending bak to user, err id: %d\n", rc);
 		return -1;
 	}
+	
+	{
+		request_send(&g_pub_crypto_control, req);
 
-	/*
-	 * In a very rare case, response comes before request gets into pending list.
-	 */
-	if(req->state != PUB_CRYPTO_REQ_FINISHED)
-		request_wait_answer(&g_pub_crypto_control, req);
-	else
-		PUB_CRYPTO_LOGE("request already finished, skip waiting\n");
+   		skb_out = skb_dequeue(&crypto_sock->sk_receive_queue);
 
-	skb_out = skb_dequeue(&crypto_sock->sk_receive_queue);
+   		if(req->state != PUB_CRYPTO_REQ_FINISHED) {
+   			PUB_CRYPTO_LOGE("FIPS_CRYPTO_ERROR!!!\n");
+   			/*
+   			 * TODO :
+   			 * Request not finished by an interrupt or abort.
+   			 */
+   			rc = -EINTR;
+   			goto out;
+   		}
 
-	if(req->state != PUB_CRYPTO_REQ_FINISHED) {
-		PUB_CRYPTO_LOGE("FIPS_CRYPTO_ERROR!!!\n");
-		/*
-		 * TODO :
-		 * Request not finished by an interrupt or abort.
-		 */
-		rc = -EINTR;
-		goto out;
-	}
+   		if(req->aborted) {
+   			PUB_CRYPTO_LOGE("Request aborted!!!\n");
+   			rc = -ETIMEDOUT;
+   			goto out;
+   		}
 
-	if(req->aborted) {
-		PUB_CRYPTO_LOGE("Request aborted!!!\n");
-		rc = -ETIMEDOUT;
-		goto out;
-	}
+   		if(req->result.ret < 0) {
+   			PUB_CRYPTO_LOGE("failed to opcode(%d)!!!\n", req->opcode);
+   			rc = req->result.ret;
+   			goto out;
+   		}
 
-	if(req->result.ret < 0) {
-		PUB_CRYPTO_LOGE("failed to opcode(%d)!!!\n", req->opcode);
-		rc = req->result.ret;
-		goto out;
-	}
-
-	switch(req->opcode) {
-	case OP_DH_ENC:
-	case OP_DH_DEC:
-		dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
-		memcpy(ret, &(req->result.dek), sizeof(dek_t));
-		//dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
-		rc = 0;
-		break;
-	case OP_RSA_ENC:
-	case OP_RSA_DEC:
-		memcpy(ret, &(req->result.dek), sizeof(dek_t));
-		rc = 0;
-		break;
-	default:
-		PUB_CRYPTO_LOGE("Not supported opcode(%d)!!!\n", req->opcode);
-		rc = -EOPNOTSUPP;
-		break;
+   		switch(req->opcode) {
+   		case OP_DH_ENC:
+   		case OP_DH_DEC:
+   			dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
+   			memcpy(ret, &(req->result.dek), sizeof(dek_t));
+   			//dump(req->result.dek.buf, req->result.dek.len, "req->result.dek");
+   			rc = 0;
+   			break;
+   		case OP_RSA_ENC:
+   		case OP_RSA_DEC:
+   			memcpy(ret, &(req->result.dek), sizeof(dek_t));
+   			rc = 0;
+   			break;
+   		default:
+   			PUB_CRYPTO_LOGE("Not supported opcode(%d)!!!\n", req->opcode);
+   			rc = -EOPNOTSUPP;
+   			break;
+   		}
 	}
 
 out:
@@ -364,13 +358,23 @@ static void request_send(pub_crypto_control_t *con,
 	list_add_tail(&req->list, &con->pending_list);
 	req->state = PUB_CRYPTO_REQ_PENDING;
 
+	req_dump(req, "request sent");
+	request_wait_answer(con, req);
+	req_dump(req, "request answered");
+
+
 	PUB_CRYPTO_LOGD("exit, control unlock\n");
 	spin_unlock(&con->lock);
 }
 
 static void request_wait_answer(pub_crypto_control_t *con,
-		pub_crypto_request_t *req) {
+		pub_crypto_request_t *req)
+__releases(con->lock)
+__acquires(con->lock) {
 	int intr;
+
+	spin_unlock(&con->lock);
+	PUB_CRYPTO_LOGD("control unlock before sleeping\n");
 
 	while (req->state != PUB_CRYPTO_REQ_FINISHED) {
 		/*
@@ -394,6 +398,9 @@ static void request_wait_answer(pub_crypto_control_t *con,
 			break;
 		}
 	}
+
+	PUB_CRYPTO_LOGD("control lock, process waken up\n");
+	spin_lock(&con->lock);
 }
 
 static pub_crypto_request_t *request_find(pub_crypto_control_t *con,
@@ -435,16 +442,12 @@ static pub_crypto_request_t *request_alloc(u32 opcode) {
 
 static void request_free(pub_crypto_request_t *req)
 {
+	req_dump(req, "request freed");
+	list_del(&req->list);
+
 	if(req) {
-		req_dump(req, "request freed");
-		/*
-		 * TODO : lock needed here?
-		 */
-		list_del(&req->list);
 		memset(req, 0, sizeof(pub_crypto_request_t));
 		kmem_cache_free(pub_crypto_req_cachep, req);
-	} else {
-		PUB_CRYPTO_LOGE("req is NULL, skip free\n");
 	}
 }
 

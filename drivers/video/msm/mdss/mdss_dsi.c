@@ -108,8 +108,6 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-#if !defined(CONFIG_SEC_KCCAT6_PROJECT)
-
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if(dsi_panel_pm_ctrl)
 #endif
@@ -121,36 +119,16 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				__func__);
 		}
 	}
-#endif
 
+	pr_info("%s: disp_en_gpio set low	\n", __func__);
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio)){
+	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio))
 		gpio_set_value((ctrl_pdata->disp_en_gpio), 0);/* VDDR :1.5*/
-		pr_info("%s: disp_en_gpio set low	\n", __func__);
-	}
 #else
-	if (gpio_is_valid(ctrl_pdata->disp_en_gpio)){
+	if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);/* VDDR :1.5*/
-			pr_info("%s: disp_en_gpio set low	\n", __func__);
-	}
 #endif
-#if defined(CONFIG_SEC_KCCAT6_PROJECT)
 
-	usleep_range(1000,1000);
-	
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	if(dsi_panel_pm_ctrl)
-#endif
-	{
-		ret = regulator_disable(
-			(ctrl_pdata->shared_pdata).vdd_vreg);
-		if (ret) {
-			pr_err("%s: Failed to disable regulator.\n",
-				__func__);
-		}
-	}
-
-#endif
 	usleep_range(4000, 4000);
 
 /*
@@ -233,24 +211,8 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 	i--;
 	usleep_range(4000, 4000);
-#if defined(CONFIG_SEC_KCCAT6_PROJECT)
 
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	if(dsi_panel_pm_ctrl)
-#endif
-	{
-		ret = regulator_enable( /*VDD */
-			(ctrl_pdata->shared_pdata).vdd_vreg);
-		if (ret) {
-			pr_err("%s: Failed to enable vdd regulator.\n",
-				__func__);
-			return ret;
-		}
-	}
-	
-	usleep_range(1000,1000);
-#endif
-
+	pr_info("%s : disp_en_gpio = %d\n", __func__, ctrl_pdata->disp_en_gpio);
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 		pr_info("%s : Set High LCD Enable disp_en GPIO \n", __func__);
@@ -263,7 +225,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 #endif
 
-#if !defined(CONFIG_SEC_KCCAT6_PROJECT)
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if(dsi_panel_pm_ctrl)
 #endif
@@ -276,7 +237,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			return ret;
 		}
 	}
-#endif
 	usleep_range(4000, 4000);
 
 #if 0
@@ -1621,6 +1581,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 			pr_err("%s: Panel power on failed\n", __func__);
 			return rc;
 		}
+
 		pinfo->blank_state = MDSS_PANEL_BLANK_UNBLANK;
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 		ctrl_pdata->ctrl_state |=
@@ -1628,12 +1589,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	} else {
 		pinfo->panel_power_state = MDSS_PANEL_POWER_OFF;
 	}
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	rc = mdss_dsi_request_gpios(ctrl_pdata);
-	if (rc) {
-		pr_err("gpio request failed\n");
-	}
-#endif
+
 	rc = mdss_register_panel(ctrl_pdev, &(ctrl_pdata->panel_data));
 	if (rc) {
 		pr_err("%s: unable to register MIPI DSI panel\n", __func__);

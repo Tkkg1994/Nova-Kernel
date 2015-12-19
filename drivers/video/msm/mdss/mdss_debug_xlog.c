@@ -221,10 +221,7 @@ void mdss_xlog_tout_handler(const char *name, ...)
 
 	MDSS_XLOG(0xffff, 0xffff, 0xffff, 0xffff, 0xffff);
 	mdss_xlog_dump();
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	mdss_samsung_dsi_te_check();
-	mdss_mdp_underrun_dump_info();
-#endif
+
 	if (dead && mdd->logd.panic_on_err)
 		panic(name);
 }

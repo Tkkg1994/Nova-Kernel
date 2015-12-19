@@ -946,6 +946,7 @@ static long dek_do_ioctl_kek(unsigned int minor, unsigned int cmd,
 #endif
 			break;
 		case KEK_TYPE_DH_PUB:
+#ifdef CONFIG_SDP_IOCTL_PRIV
 			if (SDPK_Dpub[key_arr_idx].len > 0) {
 				memcpy(req.key.buf, SDPK_Dpub[key_arr_idx].buf, SDPK_Dpub[key_arr_idx].len);
 				req.key.len = SDPK_Dpub[key_arr_idx].len;
@@ -956,10 +957,13 @@ static long dek_do_ioctl_kek(unsigned int minor, unsigned int cmd,
 				ret = -EIO;
 				goto err;
 			}
-
+#else
+			DEK_LOGE("SDPK_Dpri not exposed\n");
+			ret = -EOPNOTSUPP;
+			goto err;
+#endif
 			break;
 		case KEK_TYPE_DH_PRIV:
-#ifdef CONFIG_SDP_IOCTL_PRIV
 			if (SDPK_Dpri[key_arr_idx].len > 0) {
 				memcpy(req.key.buf, SDPK_Dpri[key_arr_idx].buf, SDPK_Dpri[key_arr_idx].len);
 				req.key.len = SDPK_Dpri[key_arr_idx].len;
@@ -970,11 +974,6 @@ static long dek_do_ioctl_kek(unsigned int minor, unsigned int cmd,
 				ret = -EIO;
 				goto err;
 			}
-#else
-			DEK_LOGE("SDPK_Dpri not exposed\n");
-			ret = -EOPNOTSUPP;
-			goto err;
-#endif
 			break;
 		default:
 			DEK_LOGE("invalid key type\n");

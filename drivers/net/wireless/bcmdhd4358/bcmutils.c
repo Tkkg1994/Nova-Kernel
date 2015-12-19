@@ -2219,11 +2219,7 @@ bcm_ip_cksum(uint8 *buf, uint32 len, uint32 sum)
  * with savings in not having to use an indirect access, had it been dynamically
  * allocated.
  */
-#ifdef DHD_PKTID_AUDIT_ENABLED
-#define BCM_MWBMAP_ITEMS_MAX    (16 * 1024)  /* May increase to 16K */
-#else
-#define BCM_MWBMAP_ITEMS_MAX    (4 * 1024)  /* May increase to 4K */
-#endif /* DHD_PKTID_AUDIT_ENABLED */
+#define BCM_MWBMAP_ITEMS_MAX    (4 * 1024)  /* May increase to 16K */
 
 #define BCM_MWBMAP_BITS_WORD    (NBITS(uint32))
 #define BCM_MWBMAP_WORDS_MAX    (BCM_MWBMAP_ITEMS_MAX / BCM_MWBMAP_BITS_WORD)

@@ -1013,9 +1013,6 @@ static void  mdss_panel_init(struct samsung_display_driver_data *vdd)
 
 	vdd->support_mdnie_lite = true;
 
-	vdd->mdnie_tune_size1 = 4;
-	vdd->mdnie_tune_size2 = 157;
-
 	/* ON/OFF */
 	vdd->panel_func.samsung_panel_on_pre = mdss_panel_on_pre;
 	vdd->panel_func.samsung_panel_on_post = mdss_panel_on_post;

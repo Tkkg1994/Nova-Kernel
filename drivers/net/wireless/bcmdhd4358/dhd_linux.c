@@ -118,9 +118,8 @@
 #define MEMDUMP_WATCHDOG_MS	250
 #define MAX_RETRY	10
 static int file_cnt = 0;
-#endif /* DHD_DEBUG_PAGEALLOC */
-
 dhd_pub_t *g_dhdp = NULL;
+#endif /* DHD_DEBUG_PAGEALLOC */
 
 
 
@@ -2558,7 +2557,6 @@ dhd_start_xmit(struct sk_buff *skb, struct net_device *net)
 
 	ifp = DHD_DEV_IFP(net);
 	ifidx = DHD_DEV_IFIDX(net);
-	BUZZZ_LOG(START_XMIT_BGN, 2, (uint32)ifidx, (uintptr)skb);
 
 	ASSERT(ifidx == dhd_net2idx(dhd, net));
 	ASSERT((ifp != NULL) && (ifp == dhd->iflist[ifidx]));
@@ -2656,8 +2654,6 @@ done:
 	DHD_GENERAL_UNLOCK(&dhd->pub, flags);
 	DHD_PERIM_UNLOCK_TRY(DHD_FWDER_UNIT(dhd), TRUE);
 	DHD_OS_WAKE_UNLOCK(&dhd->pub);
-
-	BUZZZ_LOG(START_XMIT_END, 0);
 
 	/* Return ok: we always eat the packet */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20))
@@ -5143,8 +5139,9 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	dhd->dhd_state = dhd_state;
 
 	dhd_found++;
+#ifdef DHD_DEBUG_PAGEALLOC
 	g_dhdp = &dhd->pub;
-	dhd->pub.pktidassert = 0;
+#endif /* DHD_DEBUG_PAGEALLOC */
 	return &dhd->pub;
 
 fail:
@@ -7335,7 +7332,9 @@ dhd_free(dhd_pub_t *dhdp)
 			dhd != (dhd_info_t *)dhd_os_prealloc(dhdp, DHD_PREALLOC_DHD_INFO, 0, FALSE))
 			MFREE(dhd->pub.osh, dhd, sizeof(*dhd));
 		dhd = NULL;
+#ifdef DHD_DEBUG_PAGEALLOC
 		g_dhdp = NULL;
+#endif /* DHD_DEBUG_PAGEALLOC */
 	}
 }
 
@@ -7390,7 +7389,6 @@ dhd_module_cleanup(void)
 static void __exit
 dhd_module_exit(void)
 {
-	buzzz_detach();
 	dhd_module_cleanup();
 	unregister_reboot_notifier(&dhd_reboot_notifier);
 }
@@ -7403,7 +7401,6 @@ dhd_module_init(void)
 
 	DHD_ERROR(("%s in\n", __FUNCTION__));
 
-	buzzz_attach();
 	DHD_PERIM_RADIO_INIT();
 
 	if (firmware_path[0] != '\0') {
@@ -9382,14 +9379,8 @@ void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 	DHD_ERROR(("%s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n", __FUNCTION__,
 		(uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
 #endif /* __ARM_ARCH_7A__ */
-
 	if (dhdp->memdump_enabled == DUMP_MEMONLY) {
 		BUG_ON(1);
-	}
-
-	if (dhdp->memdump_enabled == DUMP_TRACE) {
-		BUZZZ_LOG(DHD_BUS_MEMDUMP, 2, (uint32)__virt_to_phys((ulong)buf), size);
-		buzzz_panic(1);
 	}
 
 	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq, (void *)dump,
@@ -9799,8 +9790,6 @@ void dhd_page_corrupt_cb(void *addr_corrupt, size_t len)
 
 	DHD_ERROR(("%s: Got dhd_page_corrupt_cb 0x%p %d\n", __FUNCTION__, addr_corrupt, len));
 
-	buzzz_panic(0);
-
 	/* Start the watchdog timer to check file system */
 	DHD_OS_WD_WAKE_LOCK(dhdp);
 	dhd_watchdog_ms = MEMDUMP_WATCHDOG_MS;
@@ -9814,29 +9803,6 @@ void dhd_page_corrupt_cb(void *addr_corrupt, size_t len)
 }
 EXPORT_SYMBOL(dhd_page_corrupt_cb);
 #endif /* DHD_DEBUG_PAGEALLOC */
-
-#ifdef DHD_PKTID_AUDIT_ENABLED
-void dhd_pktaudit_fail_cb(void)
-{
-	dhd_pub_t *dhdp = g_dhdp;
-
-#ifdef DHD_DEBUG_PAGEALLOC
-	dhd_info_t *dhd = (dhd_info_t *)dhdp->info;
-	/* Start the watchdog timer to check file system */
-	DHD_OS_WD_WAKE_LOCK(dhdp);
-	dhd_watchdog_ms = MEMDUMP_WATCHDOG_MS;
-	mod_timer(&dhd->timer, jiffies + msecs_to_jiffies(dhd_watchdog_ms));
-	dhd->wd_timer_valid = TRUE;
-#else
-	dhdp->memdump_enabled = DUMP_TRACE;
-#endif /* DHD_DEBUG_PAGEALLOC  */
-
-	DHD_ERROR(("%s: Got Pkt Id Audit failure \n", __FUNCTION__));
-
-	dhd_bus_mem_dump(dhdp);
-	/* Take the dongle side dump and then BUG_ON() */
-}
-#endif /* DHD_PKTID_AUDIT_ENABLED */
 
 #if defined(CUSTOMER_HW4)
 void dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
@@ -9875,84 +9841,3 @@ void dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 	}
 }
 #endif /* CUSTOMER_HW4 */
-
-void dhd_buff_colour_fail_cb(void)
-{
-	dhd_pub_t *dhdp = g_dhdp;
-
-	dhdp->memdump_enabled = DUMP_TRACE;
-	dhd_bus_mem_dump(dhdp);
-}
-
-#ifdef BUZZZ_LOG_ENABLED
-static int
-dhd_buzzz_thread(void *data)
-{
-	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
-
-	DAEMONIZE("dhd_buzzz");
-
-	/*  signal: thread has started */
-	complete(&tsk->completed);
-
-	/* Run until signal received */
-	while (1) {
-		if (down_interruptible(&tsk->sema) == 0) {
-			if (tsk->terminated) {
-				break;
-			}
-			printk("%s: start to dump...\n", __FUNCTION__);
-			buzzz_dump();
-
-			/* Once you are done with taking the logs
-			 * Call BUG_ON to crash. Note that if
-			 * buzzz_panic was called with 1 then buzzz_crash
-			 * would crash else it won't
-			 */
-			buzzz_crash();
-		} else {
-			break;
-		}
-	}
-	complete_and_exit(&tsk->completed, 0);
-}
-
-void* dhd_os_create_buzzz_thread(void)
-{
-	tsk_ctl_t *thr_buzzz_ctl = NULL;
-
-	thr_buzzz_ctl = kmalloc(sizeof(tsk_ctl_t), GFP_KERNEL);
-	if (!thr_buzzz_ctl) {
-		return NULL;
-	}
-
-	PROC_START(dhd_buzzz_thread, NULL, thr_buzzz_ctl, 0, "dhd_buzzz");
-
-	return (void *)thr_buzzz_ctl;
-}
-
-void dhd_os_destroy_buzzz_thread(void *thr_hdl)
-{
-	tsk_ctl_t *thr_buzzz_ctl = (tsk_ctl_t *)thr_hdl;
-
-	if (!thr_buzzz_ctl) {
-		return;
-	}
-
-	PROC_STOP(thr_buzzz_ctl);
-	kfree(thr_buzzz_ctl);
-}
-
-void dhd_os_sched_buzzz_thread(void *thr_hdl)
-{
-	tsk_ctl_t *thr_buzzz_ctl = (tsk_ctl_t *)thr_hdl;
-
-	if (!thr_buzzz_ctl) {
-		return;
-	}
-
-	if (thr_buzzz_ctl->thr_pid >= 0) {
-		up(&thr_buzzz_ctl->sema);
-	}
-}
-#endif /* BUZZZ_LOG_ENABLED */

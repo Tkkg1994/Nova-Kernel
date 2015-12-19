@@ -50,10 +50,6 @@
 	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6E3HA2_AMS567DJ01_WQHD_0>;
 	qcom,platform-te-gpio = <&msmgpio 12 0>;
 
-	/*qcom,dsi-panel-bias-vreg;*/
-	qcom,platform-enable-gpio = <&pma8084_gpios 6 0>;
-	qcom,platform-reset-gpio = <&pma8084_gpios 21 0>;
-
 	iovdd-supply = <&pma8084_l26>;
 };
 
@@ -78,14 +74,13 @@
 		reg = <0xf9960000 0x1000>,
 			<0xf9944000 0x19000>;
 		reg-names = "core_mem", "bam_mem";
-		interrupt-names = "core_irq", "bam_irq";
-
+		interrupt-names = "core_irq", "bam_irq", "wakeup_irq";
 	#address-cells = <0>;
 		interrupt-parent = <&uart1>;
-		interrupts = <0 1>;
+		interrupts = <0 1 2>;
 	#interrupt-cells = <1>;
 		interrupt-map-mask = <0xffffffff>;
-		interrupt-map = <0 &intc 0 116 0 1 &intc 0 239 0>;
+		interrupt-map = <0 &intc 0 116 0 1 &intc 0 239 0 2 &msmgpio 60 0>;
 		qcom,tx-gpio = <&msmgpio 59 0x00>;
 		qcom,rx-gpio = <&msmgpio 60 0x00>;
 		qcom,bam-tx-ep-pipe-index = <6>;
@@ -96,16 +91,13 @@
 		qcom,msm-bus,vectors-KBps = <84 512 0 0>, <84 512 500 800>;
 	};
 
-
 	codec {
 			compatible = "dspg,dbmd2-uart";
 			reset-gpio = <300>;
-			wakeup-gpio = <&msmgpio 91 0>;
-			sv-gpio = <&msmgpio 76 0>;
+			wakeup-gpio = <&msmgpio 76 0>;
+			sensory-gpio = <&msmgpio 91 0>;
 			uart_device = "/dev/ttyHS3";
 			auto_detection = <1>;
-			qcom,inject-rx-on-wakeup = <1>;
-			qcom,rx-char-to-inject = <0xFD>;
 
 			freq = <32768>;
 	};
@@ -425,11 +417,11 @@
 			cypress,i2c-pull-up = <1>;
 		};
 	};
-
+	
 	/*VE_SW for irled*/
 	samsung,irled_gpio{
 		compatible = "gpio_ir";
-		samsung,irda_fet_control = <&msmgpio 85 0>;
+		samsung,irda_fet_control = <&msmgpio 85 0>;	
 		samsung,ir_led_en_gpio = <301>;
 
 	};
@@ -515,7 +507,7 @@
 		qcom,msm-bus,vectors-KBps =
 			<86 512 0 0>,
 			<86 512 500 800>;
-	};
+	};	
 };
 
 &wlan_vreg {
@@ -781,7 +773,7 @@ gpio@cc00 { /* GPIO 13 */
 		qcom,out-strength = <2>;	/* Medium drive strength */
 		qcom,master-en = <1>;		/* Enable GPIO */
 	};
-
+	
 };
 
 &pma8084_mpps {

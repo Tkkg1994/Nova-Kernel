@@ -161,8 +161,6 @@
 #define pud_clear(pudp)		do { } while (0)
 #define set_pud(pud,pudp)	do { } while (0)
 
-extern int boot_mode_security;
-
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 {
 	return (pmd_t *)pud;
@@ -184,7 +182,7 @@ static inline void copy_pmd(pmd_t *pmdpd, pmd_t *pmdps)
 	unsigned long tima_wr_out;
 	unsigned long pmd_base;
 
-	if (tima_is_pg_protected((unsigned long) pmdpd) == 0 && boot_mode_security == 0) {
+	if (tima_is_pg_protected((unsigned long) pmdpd) == 0) {
 		pmdpd[0] = pmdps[0];
 		pmdpd[1] = pmdps[1];
 		flush_pmd_entry(pmdpd);
@@ -255,11 +253,6 @@ static inline void pmd_clear(pmd_t *pmdp)
 	unsigned long cmd_id = 0x3f80a221;
 	unsigned long tima_wr_out;
 
-	if (tima_is_pg_protected((unsigned long) pmdp) == 0 && boot_mode_security == 0) {
-		pmdp[0] = __pmd(0);
-		pmdp[1] = __pmd(0);
-		clean_pmd_entry(pmdp);
-	} else {
 	cpu_dcache_clean_area(pmdp, 8);	
 	__asm__ __volatile__ (
 		"stmfd  sp!,{r0, r1, r11}\n"
@@ -288,7 +281,6 @@ static inline void pmd_clear(pmd_t *pmdp)
 		if (pmdp[0] != 0 || pmdp[1] != 0 || tima_wr_out!=0)
 			printk(KERN_ERR"pmdp[0] %lx - pmdp[1] %lx in tima_wr_out = %lx\n", (unsigned long)pmdp[0], (unsigned long)pmdp[1], tima_wr_out);
 		clean_pmd_entry(pmdp);
-	}
 }
 #else
 #define pmd_clear(pmdp)			\

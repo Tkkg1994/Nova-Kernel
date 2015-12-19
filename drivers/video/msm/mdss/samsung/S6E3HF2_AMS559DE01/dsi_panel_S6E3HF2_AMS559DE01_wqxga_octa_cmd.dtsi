@@ -21,7 +21,7 @@
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-panel-destination = "display_1";
 
-		qcom,mdss-dsi-panel-timings =  [FA 4B 41 00 66 81 34 4C 41 03 04 A0];
+		qcom,mdss-dsi-panel-timings = [FE 56 3C 00 74 88 3C 56 4A 03 04 A0];
 
 		qcom,mdss-dsi-off-command=[
 			05 01 00 00 00 00 02 28 00
@@ -48,8 +48,8 @@
 		/*qcom,mdss-dsi-fbc-lossy-mode-idx=*/
 
 		qcom,mdss-dsi-h-back-porch = <108>;
-		qcom,mdss-dsi-h-front-porch = <212>;
-		qcom,mdss-dsi-h-pulse-width = <15>;
+		qcom,mdss-dsi-h-front-porch = <15>;
+		qcom,mdss-dsi-h-pulse-width = <212>;
 		qcom,mdss-dsi-h-sync-skew = <0>;
 		qcom,mdss-dsi-v-back-porch = <6>;
 		qcom,mdss-dsi-v-front-porch = <10>;
@@ -167,7 +167,7 @@
 		qcom,mdss-dsi-bpp = <24>;
 		qcom,mdss-dsi-panel-destination = "display_2";
 
-		qcom,mdss-dsi-panel-timings =  [FA 4B 41 00 66 81 34 4C 41 03 04 A0];
+		qcom,mdss-dsi-panel-timings = [FE 56 3C 00 74 88 3C 56 4A 03 04 A0];
 
 		qcom,mdss-dsi-on-command= [
 			05 01 00 00 05 00 02 11 00 			/* Sleep out, wait 5ms(0x05) */
@@ -237,8 +237,8 @@
 		/*qcom,mdss-dsi-fbc-lossy-mode-idx=*/
 
 		qcom,mdss-dsi-h-back-porch = <108>;
-		qcom,mdss-dsi-h-front-porch = <212>;
-		qcom,mdss-dsi-h-pulse-width = <15>;
+		qcom,mdss-dsi-h-front-porch = <15>;
+		qcom,mdss-dsi-h-pulse-width = <212>;
 		qcom,mdss-dsi-h-sync-skew = <0>;
 		qcom,mdss-dsi-v-back-porch = <6>;
 		qcom,mdss-dsi-v-front-porch = <10>;

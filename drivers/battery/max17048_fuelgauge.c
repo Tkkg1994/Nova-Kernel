@@ -35,6 +35,7 @@ static enum power_supply_property max17048_fuelgauge_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TEMP_AMBIENT,
 	POWER_SUPPLY_PROP_MANUFACTURER,
+	POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN,
 };
 #if 0
 static int max17048_write_reg(struct i2c_client *client, int reg, u8 value)
@@ -962,6 +963,9 @@ static int max17048_fg_get_property(struct power_supply *psy,
 			/* Target Temperature */
 		case POWER_SUPPLY_PROP_TEMP_AMBIENT:
 			break;
+		case POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN:
+			val->intval = fuelgauge->capacity_max;
+			break;
 		case POWER_SUPPLY_PROP_MANUFACTURER:
 			fg_read_all_regs(fuelgauge->client);
 			break;
@@ -1018,6 +1022,12 @@ static int max17048_fg_set_property(struct power_supply *psy,
 		break;
 		/* Target Temperature */
 	case POWER_SUPPLY_PROP_TEMP_AMBIENT:
+		break;
+	case POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN:
+		pr_info("%s: capacity_max changed, %d -> %d\n",
+			__func__, fuelgauge->capacity_max, val->intval);
+		fuelgauge->capacity_max = val->intval;
+		fuelgauge->initial_update_of_soc = true;
 		break;
 	default:
 		return -EINVAL;

@@ -20,7 +20,7 @@ typedef struct __chamber_info {
 
 #define NO_DIRECTORY_SEPARATOR_IN_CHAMBER_PATH 1
 /* Debug */
-#define CHAMBER_DEBUG		0
+#define CHAMBER_DEBUG		1
 
 #if CHAMBER_DEBUG
 #define CHAMBER_LOGD(FMT, ...) printk("SDP_CHAMBER[%d] %s :: " FMT , current->pid, __func__, ##__VA_ARGS__)

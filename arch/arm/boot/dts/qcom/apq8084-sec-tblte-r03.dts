@@ -45,10 +45,6 @@
 	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6E3HF2_AMS559DE01_WQXGA_0>;
 	qcom,platform-te-gpio = <&msmgpio 12 0>;
 
-	/*qcom,dsi-panel-bias-vreg;*/
-	qcom,platform-enable-gpio = <&pma8084_gpios 6 0>;
-	qcom,platform-reset-gpio = <&pma8084_gpios 21 0>;
-
 	iovdd-supply = <&pma8084_l26>;
 };
 
@@ -135,14 +131,14 @@
 	fts_i2c@49 {
 		stm,tsp-project = "TB_LTE";
 		stm,tsp-coords = <1599 2559>;
-	};
+	};	
 };
 
 &i2c_3  {
 	wacom_g5sp_i2c@56 {
 		wacom,panel-coords = <1 0 0 12032 0 7489 1 0 2047>;
 		wacom,basic_model = "TB_LTE";
-	};
+	};	
 };
 
 &soc {

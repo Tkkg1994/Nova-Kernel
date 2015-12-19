@@ -95,6 +95,7 @@ static struct device_attribute sec_battery_attrs[] = {
 #endif
 	SEC_BATTERY_ATTR(set_stability_test),
 	SEC_BATTERY_ATTR(batt_inbat_voltage),
+	SEC_BATTERY_ATTR(batt_capacity_max),
 };
 #if defined(CONFIG_QPNP_BMS)
 static char *pm_batt_supplied_to[] = {
@@ -166,6 +167,15 @@ char *sec_bat_health_str[] = {
 #if defined(CONFIG_TMM_CHG_CTRL)
 static int tuner_running_status;
 #endif
+
+static int fg_reset;
+static int sec_bat_get_fg_reset(char *val)
+{
+	fg_reset = strncmp(val, "1", 1) ? 0 : 1;
+	pr_info("%s, fg_reset:%d\n", __func__, fg_reset);
+        return 1;
+}
+__setup("fg_reset=", sec_bat_get_fg_reset);
 
 int poweroff_charging;
 static int sec_bat_is_lpm_check(char *str)
@@ -1736,6 +1746,12 @@ static void sec_bat_do_fullcharged(
 			POWER_SUPPLY_PROP_STATUS, value);
 	}
 
+#if !defined(CONFIG_DISABLE_SAVE_CAPACITY_MAX)
+	value.intval = POWER_SUPPLY_TYPE_BATTERY;
+	psy_do_property(battery->pdata->fuelgauge_name, set,
+		POWER_SUPPLY_PROP_CHARGE_FULL, value);
+#endif
+
 	/* platform can NOT get information of battery
 	 * because wakeup time is too short to check uevent
 	 * To make sure that target is wakeup if full-charged,
@@ -2805,6 +2821,13 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				ret);
 		break;
+#if !defined(CONFIG_DISABLE_SAVE_CAPACITY_MAX)
+	case BATT_CAPACITY_MAX:
+		psy_do_property(battery->pdata->fuelgauge_name, get,
+				POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN, value);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
+		break;
+#endif
 	default:
 		i = -EINVAL;
 	}
@@ -3219,6 +3242,21 @@ ssize_t sec_bat_store_attrs(
 		}
 	case BATT_INBAT_VOLTAGE:
 		break;
+#if !defined(CONFIG_DISABLE_SAVE_CAPACITY_MAX)
+	case BATT_CAPACITY_MAX:
+		if (sscanf(buf, "%d\n", &x) == 1 && !fg_reset) {
+			union power_supply_propval value;
+			dev_err(battery->dev,
+					"%s: BATT_CAPACITY_MAX(%d)\n", __func__, x);
+			if (x  > 800 && x < 1200) {
+				value.intval = x;
+				psy_do_property(battery->pdata->fuelgauge_name, set,
+						POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN, value);
+				ret = count;
+			}
+		}
+		break;
+#endif
 	default:
 		ret = -EINVAL;
 	}

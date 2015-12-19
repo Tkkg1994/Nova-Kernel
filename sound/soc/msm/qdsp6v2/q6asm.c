@@ -3540,7 +3540,7 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 		pr_err("%s: mmap APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	pr_info("%s: Session[%d]\n", __func__, ac->session);
+	pr_debug("%s: Session[%d]\n", __func__, ac->session);
 
 	bufcnt_t = (is_contiguous) ? 1 : bufcnt;
 	bufsz_t = (is_contiguous) ? (bufsz * bufcnt) : bufsz;
@@ -3574,14 +3574,14 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 	q6asm_add_mmaphdr(ac, &mmap_regions->hdr, cmd_size, TRUE,
 					((ac->session << 8) | dir));
 	atomic_set(&ac->mem_state, 1);
-	pr_info("%s: mmap_region=0x%p token=0x%x\n", __func__,
+	pr_debug("%s: mmap_region=0x%p token=0x%x\n", __func__,
 		mmap_regions, ((ac->session << 8) | dir));
 
 	mmap_regions->hdr.opcode = ASM_CMD_SHARED_MEM_MAP_REGIONS;
 	mmap_regions->mem_pool_id = ADSP_MEMORY_MAP_SHMEM8_4K_POOL;
 	mmap_regions->num_regions = bufcnt_t; /*bufcnt & 0x00ff; */
 	mmap_regions->property_flag = 0x00;
-	pr_info("%s: map_regions->nregions = %d\n", __func__,
+	pr_debug("%s: map_regions->nregions = %d\n", __func__,
 		mmap_regions->num_regions);
 	payload = ((u8 *) mmap_region_cmd +
 		sizeof(struct avs_cmd_shared_mem_map_regions));
@@ -3623,7 +3623,7 @@ static int q6asm_memory_map_regions(struct audio_client *ac, int dir,
 		buffer_node[i].mmap_hdl = ac->port[dir].tmp_hdl;
 		list_add_tail(&buffer_node[i].list,
 			&ac->port[dir].mem_map_handle);
-		pr_info("%s: i=%d, bufadd[i] = 0x%pa, maphdl[i] = 0x%x\n",
+		pr_debug("%s: i=%d, bufadd[i] = 0x%pa, maphdl[i] = 0x%x\n",
 			__func__, i, &buffer_node[i].buf_phys_addr,
 			buffer_node[i].mmap_hdl);
 	}
@@ -3653,7 +3653,7 @@ static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
 		pr_err("%s: mmap APR handle NULL\n", __func__);
 		return -EINVAL;
 	}
-	pr_info("%s: Session[%d]\n", __func__, ac->session);
+	pr_debug("%s: Session[%d]\n", __func__, ac->session);
 
 	cmd_size = sizeof(struct avs_cmd_shared_mem_unmap_regions);
 	q6asm_add_mmaphdr(ac, &mem_unmap.hdr, cmd_size,
@@ -3673,7 +3673,7 @@ static int q6asm_memory_unmap_regions(struct audio_client *ac, int dir)
 		}
 	}
 
-	pr_info("%s: mem_unmap-mem_map_handle: 0x%x\n",
+	pr_debug("%s: mem_unmap-mem_map_handle: 0x%x\n",
 			__func__, mem_unmap.mem_map_handle);
 
 	if (mem_unmap.mem_map_handle == 0) {

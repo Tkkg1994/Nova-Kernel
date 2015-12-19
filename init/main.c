@@ -494,7 +494,7 @@ static int __init do_early_param(char *param, char *val, const char *unused)
 	}
 	/* Check Security Mode , 0 : normal mode, 1 : security mode */
 	if ((strncmp(param, "androidboot.security_mode", 26) == 0)) {
-	        if ((strncmp(val, "1526595585", 10) == 0)) {
+	        if ((strncmp(val, "1", 1) == 0)) {
 				pr_info("Security Boot Mode \n");
 				boot_mode_security = 1;
 			}

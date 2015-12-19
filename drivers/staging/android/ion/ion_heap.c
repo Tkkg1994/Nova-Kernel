@@ -81,7 +81,7 @@ int ion_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
 	int i;
 	int ret;
 #ifdef CONFIG_TIMA_RKP
-        if ((buffer->size) && (boot_mode_security == 1)) {
+        if (buffer->size) {
         /* iommu optimization- needs to be turned ON from
          * the tz side.
          */

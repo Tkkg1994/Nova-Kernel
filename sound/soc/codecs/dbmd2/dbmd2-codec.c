@@ -14,6 +14,7 @@
  */
 
 /* #define DEBUG */
+
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include <linux/cdev.h>
@@ -40,17 +41,9 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <linux/spi/spi.h>
-#include <linux/wait.h>
 
 #include "sbl.h"
 #include "dbmd2-export.h"
-
-#include <linux/platform_data/msm_serial_hs.h>
-
-#define MSM_G1
-//#define USE_WAKEUP_FROM_UART 1
-#define USE_WAKEUP_GPIO_FOR_DETECTION 1
-#define USE_SLEEPMODE_GPIO_FOR_WAKEUP 1
 
 /* This register has changed - the buffer size is no longer specified.
  * Instead set it either to 0 (use part of D2's memory for noise reduction) or
@@ -64,23 +57,20 @@
 struct dbd2_platform_data {
 	unsigned gpio_wakeup;
 	unsigned gpio_reset;
-#ifndef USE_WAKEUP_FROM_UART
-	unsigned gpio_sv;
-	int sv_irq;
-#endif
+	unsigned gpio_sensory;
+	int sensory_irq;
 	int irq_inuse;
 };
 
 /* To support sysfs node  */
 static struct class *ns_class;
 static struct device *dbd2_dev, *gram_dev, *net_dev;
+static irqreturn_t dbmd2_sensory_interrupt(int irq, void *dev);
 
-#ifndef USE_WAKEUP_FROM_UART
-irqreturn_t dbmd2_sv_interrupt(int irq, void *dev);
-#endif
+#define MSM_G1
 
 
-#define DRIVER_VERSION			"1.520"
+#define DRIVER_VERSION			"1.501"
 #define DBD2_FIRMWARE_NAME		"dbd2_fw.bin"
 #define DBD2_MODEL_NAME			"A-Model.bin"
 
@@ -111,21 +101,20 @@ irqreturn_t dbmd2_sv_interrupt(int irq, void *dev);
 #define DBD2_AUDIO_BUFFER_SIZE				0x80090000
 #define DBD2_NUM_OF_SMP_IN_BUF				0x800A0000
 #define DBD2_LAST_MAX_SMP_VALUE				0x800B0000
-#define DBD2_LAST_DETECT_WORD_NUM			0x800C0000
+#define DBD2_LAST_DETECT_WORD_NUM			0x80550000
 #define DBD2_DETECT_TRIGER_LEVEL			0x800D0000
 #define DBD2_DETECT_VERIFICATION_LEVEL			0x800E0000
 #define DBD2_LOAD_NEW_ACUSTIC_MODEL			0x800F0000
 #define DBD2_PRESENT_CLOCK_CONFIG			0x80100000
 #define DBD2_UART_XON					0x80110000
 #define DBD2_AUDIO_BUFFER_CONVERSION			0x80120000
-#define DBD2_AUDIO_HISTORY				0x80120000
 #define DBD2_UART_XOFF					0x80130000
 #define DBD2_LAST_DURATION				0x80140000
 #define DBD2_LAST_ERROR					0x80150000
 #define DBD2_MIC_GAIN					0x80160000
-#define DBD2_WAKEUP_FROM_UART				0x80170000
 #define DBD2_FW_ID					0x80190000
 #define DBD2_FAST_CLK_FREQ				0x801B0000
+#define DBD2_BUFFERING_BACKLOG_SIZE			0x801C0000
 #define DBD2_POST_TRIGGER_AUDIO_BUF			0x80200000
 #define DBD2_POST_DETECTION_CLOCK_CONFIG		0x80210000
 #define DBD2_GPIO_CFG					0x80220000
@@ -137,34 +126,30 @@ irqreturn_t dbmd2_sv_interrupt(int irq, void *dev);
 #define DBD2_GET_D2PARAM				0x80270000
 #define DBD2_SET_D2PARAM				0x80260000
 
-#define DBD2_EXIT_FW_SLEEP_MODE_GPIO			0x802A0000
-
-#define DBD2_D2PARAM_WORDID             0x54
-#define DBD2_D2PARAM_ALTWORDID          0x55
-
 #define DBD2_READ_CHECKSUM				0x805A0E00
 #define DBD2_FIRMWARE_BOOT				0x805A0B00
 
 #define DBD2_8KHZ				0x0008
 
 #define DBD2_AUDIO_MODE_PCM			0
-#define DBD2_AUDIO_MODE_MU_LAW			0x1000
+#define DBD2_AUDIO_MODE_MU_LAW			1
 
 #define UART_TTY_MAX_WRITE_SZ			4096
 
 #define UART_HW_FIFO_SIZE			16
 
+
 #define UART_TTY_WRITE_SZ			8
-#define UART_TTY_READ_SZ			UART_TTY_MAX_READ_SZ
+
 
 #ifdef MSM_G1
-#define UART_TTY_MAX_READ_SZ			512
+#define UART_TTY_MAX_READ_SZ			2048
 #define UART_TTY_BOOT_BAUD_RATE			115200
 #define UART_SYNC_LENGTH			1000 /* in msec */
-#define TTY_MAX_HW_BUF_SIZE			512
+#define TTY_MAX_HW_BUF_SIZE			8192
 #else
 #define UART_TTY_MAX_READ_SZ			512
-#define UART_TTY_BOOT_BAUD_RATE			115200
+#define UART_TTY_BOOT_BAUD_RATE			57600
 #define UART_SYNC_LENGTH			300 /* in msec */
 #define TTY_MAX_HW_BUF_SIZE			2048
 #endif
@@ -172,19 +157,10 @@ irqreturn_t dbmd2_sv_interrupt(int irq, void *dev);
 #define UART_TTY_BOOT_STOP_BITS			2
 #define UART_TTY_MAX_EAGAIN_RETRY		50
 
-
+#define UART_TTY_READ_SZ			UART_TTY_MAX_READ_SZ
 #define DETECTION_MODE_PHRASE			0
-#define DETECTION_MODE_VOICE_ENERGY		0x10
+#define DETECTION_MODE_BABY			0x10
 #define DMD2_OPERATION_MODE_MASK		0x0f
-
-#define DBMD2_EXITSLEEP_ENABLE			0x80
-#define DBMD2_EXITSLEEP_DISABLE			0x00
-
-#ifdef MSM_G1
-#define DBMD2_EXITSLEEP_GPIO			0x0A
-#else
-#define DBMD2_EXITSLEEP_GPIO			0x07
-#endif
 
 /* DBD2 intrnal data stucture */
 
@@ -201,7 +177,7 @@ struct dbd2_data {
 	bool					device_ready;
 	bool					change_speed;
 	struct clk				*clk;
-	struct work_struct			sv_work;
+	struct work_struct			sensory_work;
 	struct work_struct			uevent_work;
 	unsigned int				audio_buffer_size;
 	unsigned int				audio_mode;
@@ -219,9 +195,6 @@ struct dbd2_data {
 	struct kfifo				pcm_kfifo;
 	int					a_model_loaded;
 	atomic_t				audio_owner;
-#ifdef USE_WAKEUP_FROM_UART
-	atomic_t				do_detection;
-#endif
 	int					auto_buffering;
 	int					auto_detection;
 	int					buffering;
@@ -252,13 +225,6 @@ struct dbd2_data {
 	u32					gpio_reg_config;
 	u32					detection_mode;
 	u32					lpm_mode;
-	atomic_t				uart_tty_enabled;
-	atomic_t				keep_uart_tty_enabled;
-	atomic_t				uart_prt_counter;
-#ifdef USE_WAKEUP_FROM_UART
-	wait_queue_head_t			irq_wq;
-	struct task_struct			*detection_thread;
-#endif
 };
 
 /* Global Variables */
@@ -281,7 +247,6 @@ static int dbmd2_uart_write_sync(struct dbd2_data *dbd2, const u8 *buf,
 				 int len);
 static void dbmd2_uart_close_file(struct dbd2_data *dbd2);
 static int dbmd2_uart_open_file(struct dbd2_data *dbd2);
-static int dbmd2_uart_open_file_only(struct dbd2_data *dbd2);
 static int dbmd2_uart_configure_tty(struct dbd2_data *dbd2,
 				    struct tty_struct *tty, u32 bps, int stop,
 				    int parity, int flow);
@@ -291,16 +256,15 @@ static int dbd2_set_uart_speed1(struct dbd2_data *dbd2, int index);
 
 static int dbd2_set_microphone_mode(struct dbd2_data *dbd2, int mode);
 
-static int dbd2_wake(struct dbd2_data *dbd2);
-
 static void dbd2_clk_enable(bool enable)
 {
+	int rc;
+
 	pr_info("%s start (%s)\n", __func__, enable ? "ON" : "OFF");
 	dbd2_data->clk = clk_get(dbd2_data->dev, "dbmd2_clk");
 	if (IS_ERR(dbd2_data->clk))
 		return;
 	if (enable) {
-		int rc;
 		rc = clk_prepare_enable(dbd2_data->clk);
 		if (rc < 0)
 			pr_info("%s: clk_prepare_enable failed\n", __func__);
@@ -309,59 +273,26 @@ static void dbd2_clk_enable(bool enable)
 		clk_put(dbd2_data->clk);
 	}
 }
-static void dbd2_uart_tty_enable(bool enable)
+
+static void dbd2_uart_clk_enable(bool enable)
 {
-	if (!dbd2_data)
-		return;
-	if (enable) {
-		if (atomic_read(&dbd2_data->uart_tty_enabled) == 0) {
-			atomic_set(&dbd2_data->uart_tty_enabled,1);
-			atomic_inc(&dbd2_data->uart_prt_counter);
-			if (atomic_read(&dbd2_data->uart_prt_counter) > 1)
-				dev_err(dbd2_data->dev,
-					"%s: uart_prt_counter >1 after open\n",
-					__func__);
-			if (!(dbd2_data->uart_open))
-				dbmd2_uart_open_file_only(dbd2_data);
 
-		}
-	} else {
-		if (atomic_read(&dbd2_data->keep_uart_tty_enabled) == 0) {
-			if (atomic_read(&dbd2_data->uart_tty_enabled) == 1) {
-				if ((dbd2_data->uart_open))
-					dbmd2_uart_close_file(dbd2_data);
-
-				atomic_set(&dbd2_data->uart_tty_enabled,0);
-				atomic_dec(&dbd2_data->uart_prt_counter);
-				if (atomic_read(&dbd2_data->uart_prt_counter) != 0)
-					dev_err(dbd2_data->dev,
-					"%s: uart_prt_counter !=0 after close\n",
-					__func__);
-			}
-
-		}
-	}
 }
 
 static void uart_lock(struct mutex *lock)
 {
 	mutex_lock(lock);
-	dbd2_uart_tty_enable(1);
+	dbd2_uart_clk_enable(1);
 }
 
 static void uart_unlock(struct mutex *lock)
 {
-	dbd2_uart_tty_enable(0);
+	dbd2_uart_clk_enable(0);
 	mutex_unlock(lock);
 }
 
 static void dbd2_flush_rx_fifo(struct dbd2_data *dbd2)
 {
-	if (!dbd2->uart_open) {
-		dev_err(dbd2->dev, "%s: Uart is not opened !!!\n", __func__);
-		return;
-	}
-
 	tty_buffer_flush(dbd2->uart_tty);
 	tty_ldisc_flush(dbd2->uart_tty);
 }
@@ -388,8 +319,6 @@ static int dbd2_buf_to_int(const char *buf)
 static int dbd2_set_bytes_per_sample(struct dbd2_data *dbd2, unsigned int mode)
 {
 	int ret;
-	u16 history;
-	u16 reg_val;
 
 	/* Changing the buffer conversion causes trouble: adapting the
 	 * UART baudrate doesn't work anymore (firmware bug?) */
@@ -398,25 +327,8 @@ static int dbd2_set_bytes_per_sample(struct dbd2_data *dbd2, unsigned int mode)
 	     (dbd2->bytes_per_sample == 1)))
 		return 0;
 
-	ret = dbd2_send_cmd_short(dbd2, DBD2_AUDIO_BUFFER_CONVERSION, &history);
-
-	if (ret < 0) {
-		dev_err(dbd2->dev, "%s: failed to read register: %d\n",
-				__func__, ret);
-		return ret;
-	}
-
-	/* Keep history configuration */
-	history &= 0x0fff;
-
-	reg_val = (((u16)mode | history) & 0xffff);
-
-	dev_info(dbd2->dev, "%s: setting audio_buf_conv register to 0x%x\n"
-		, __func__, (u32)reg_val);
-
-
 	ret = dbd2_send_cmd(dbd2,
-				  DBD2_AUDIO_BUFFER_CONVERSION | reg_val ,
+				  DBD2_AUDIO_BUFFER_CONVERSION | mode,
 				  NULL);
 	if (ret < 0) {
 		dev_err(dbd2->dev,
@@ -427,11 +339,9 @@ static int dbd2_set_bytes_per_sample(struct dbd2_data *dbd2, unsigned int mode)
 	switch (mode) {
 	case DBD2_AUDIO_MODE_PCM:
 		dbd2->bytes_per_sample = 2;
-		dbd2->audio_mode = mode;
 		break;
 	case DBD2_AUDIO_MODE_MU_LAW:
 		dbd2->bytes_per_sample = 1;
-		dbd2->audio_mode = mode;
 		break;
 	default:
 		break;
@@ -440,34 +350,39 @@ static int dbd2_set_bytes_per_sample(struct dbd2_data *dbd2, unsigned int mode)
 	return 0;
 }
 
-static int dbd2_set_backlog_len(struct dbd2_data *dbd2, u16 history)
-{
-	int ret;
-	u16 mode;
-
-	history &= 0x0fff;
-
-	mode = ((u16)dbd2->audio_mode | history);
-
-	dev_info(dbd2->dev, "%s: history 0x%x, mode 0x%x\n",
-		__func__, (u32)history, (u32)mode);
-
-	ret = dbd2_send_cmd(dbd2,
-				  DBD2_AUDIO_BUFFER_CONVERSION | mode ,
-				  NULL);
-	if (ret < 0) {
-		dev_err(dbd2->dev,
-			"failed to set backlog size\n");
-		return ret;
-	}
-
-	return 0;
-}
-
-
 static int dbd2_sleeping(struct dbd2_data *dbd2)
 {
 	return dbd2->asleep;
+}
+
+static int dbd2_wake(struct dbd2_data *dbd2)
+{
+	int ret = 0;
+	u16 fwver = 0xffff;
+
+	/* if chip not sleeping there is nothing to do */
+	if (!dbd2_sleeping(dbd2))
+		return 0;
+	/* deassert wake pin */
+	gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
+	/* give some time to wakeup */
+	usleep_range(5000, 6000);
+	/* make it not sleeping */
+	dbd2->asleep = false;
+
+	/* test if firmware is up */
+	ret = dbd2_send_cmd_short(dbd2, DBD2_GET_FW_VER, &fwver);
+	if (ret < 0) {
+		dev_err(dbd2->dev, "sync error did not not wakeup\n");
+		/* make it not sleeping */
+		dbd2->asleep = true;
+		return -EIO;
+	}
+	/* assert gpio pin */
+	gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
+
+	dev_info(dbd2->dev, "%s: wake up\n", __func__);
+	return 0;
 }
 
 enum dbmd2_states {
@@ -505,33 +420,23 @@ static int dbd2_set_mode(struct dbd2_data *dbd2, int mode)
 	dev_info(dbd2->dev, "%s: mode: %d\n", __func__, mode);
 
 	/* nothing to do */
-	if (dbd2_sleeping(dbd2) && mode == DBMD2_SLEEP_PLL_OFF)
-		return DBMD2_SLEEP_PLL_OFF;
+	if (dbd2_sleeping(dbd2) && mode == DBMD2_HIBERNATE)
+		return DBMD2_HIBERNATE;
 
 	/* wakeup chip */
 	ret = dbd2_wake(dbd2);
 	if (ret)
 		return -EIO;
 
-	atomic_set(&dbd2->keep_uart_tty_enabled,1);
-
 	dbd2->buffering = 0;
 
 	dbd2->pdata.irq_inuse = 0;
-#ifdef USE_WAKEUP_FROM_UART
-	if (atomic_read(&dbd2->do_detection) == 1) {
-		atomic_set(&dbd2->do_detection, 0);
-		msleep(15);
-	}
-#endif
 
 	/* anything special to do */
 	switch (mode) {
 	case DBMD2_HIBERNATE:
 		dbd2->asleep = true;
-#ifndef USE_WAKEUP_GPIO_FOR_DETECTION
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-#endif
+		gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
 		break;
 	case DBMD2_IDLE:
 
@@ -545,20 +450,10 @@ static int dbd2_set_mode(struct dbd2_data *dbd2, int mode)
 	case DBMD2_DETECTION:
 		dbd2->pdata.irq_inuse = 1;
 		mode |= dbd2->detection_mode;
-#ifdef USE_WAKEUP_FROM_UART
-		atomic_set(&dbd2->do_detection, 1);
-		wake_up_interruptible(&dbd2->irq_wq);
-#endif
-		atomic_set(&dbd2->keep_uart_tty_enabled,0);
 		break;
 	case DBMD2_SLEEP_PLL_ON:
 		break;
 	case DBMD2_SLEEP_PLL_OFF:
-#if (USE_SLEEPMODE_GPIO_FOR_WAKEUP)
-		dbd2->asleep = true;
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-#endif
-		atomic_set(&dbd2->keep_uart_tty_enabled,0);
 		break;
 
 	default:
@@ -573,121 +468,19 @@ static int dbd2_set_mode(struct dbd2_data *dbd2, int mode)
 
 	if (mode == DBMD2_BUFFERING) {
 		dbd2->buffering = 1;
-		schedule_work(&dbd2->sv_work);
-	}
-	if (mode != DBMD2_SLEEP_PLL_OFF) {
-		if ((mode & DMD2_OPERATION_MODE_MASK) != dbd2_get_mode(dbd2))
-				dev_err(dbd2->dev, "failed to set mode !!!\n");
-
+		schedule_work(&dbd2->sensory_work);
 	}
 
 	return 0;
-}
-
-
-
-#if !USE_WAKEUP_GPIO_FOR_DETECTION
-static int dbd2_wake_from_wakeup_gpio(struct dbd2_data *dbd2)
-{
-	int ret = 0;
-	u16 fwver = 0xffff;
-
-	/* if chip not sleeping there is nothing to do */
-	if (!dbd2_sleeping(dbd2))
-		return 0;
-	/* deassert wake pin */
-	gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-	/* give some time to wakeup */
-	usleep_range(5000, 6000);
-	/* make it not sleeping */
-	dbd2->asleep = false;
-
-	/* test if firmware is up */
-	ret = dbd2_send_cmd_short(dbd2, DBD2_GET_FW_VER, &fwver);
-	if (ret < 0) {
-		dev_err(dbd2->dev, "sync error did not not wakeup\n");
-		/* make it not sleeping */
-		dbd2->asleep = true;
-		return -EIO;
-	}
-	/* assert gpio pin */
-	gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
-
-	dev_info(dbd2->dev, "%s: wake up\n", __func__);
-	return 0;
-}
-#endif
-
-#if USE_SLEEPMODE_GPIO_FOR_WAKEUP
-static int dbd2_wake_from_exitfromsleep_gpio(struct dbd2_data *dbd2)
-{
-	int mode;
-	int retries = RETRY_COUNT;
-
-	/* if chip not sleeping there is nothing to do */
-	if (!dbd2_sleeping(dbd2))
-		return 0;
-
-	/* deassert wake pin */
-	gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
-	/* give some time to wakeup */
-	//usleep_range(5000, 6000);
-	/* make it not sleeping */
-	dbd2->asleep = false;
-
-	do {
-		msleep(200);
-
-		mode = dbd2_get_mode(dbd2);
-
-		if (mode < 0) {
-			dev_dbg(dbd2->dev, "wakeup, readmode retries left %d\n",
-				retries);
-		}
-	} while (mode < 0 && --retries > 0);
-
-	if (retries == 0) {
-		dev_err(dbd2->dev, "Unable to read mode after wakeup\n");
-		/* make it not sleeping */
-		dbd2->asleep = true;
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-		return -EIO;
-	}
-
-
-	if (mode != DBMD2_IDLE) {
-		dev_err(dbd2->dev, "FW woke up not in IDLE mode (ret %d)\n"
-			, mode);
-		/* make it not sleeping */
-		dbd2->asleep = true;
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-		return -EIO;
-	}
-
-	atomic_set(&dbd2->keep_uart_tty_enabled,1);
-
-	dev_info(dbd2->dev, "\n%s: woke up\n", __func__);
-	return 0;
-}
-#endif
-
-
-static int dbd2_wake(struct dbd2_data *dbd2)
-{
-#if USE_SLEEPMODE_GPIO_FOR_WAKEUP
-	return dbd2_wake_from_exitfromsleep_gpio(dbd2);
-#elif !USE_WAKEUP_GPIO_FOR_DETECTION
-	return dbd2_wake_from_wakeup_gpio(dbd2);
-#else
-	return 0;
-#endif
 }
 
 static int dbd2_wait_till_alive(struct dbd2_data *dbd2)
 {
 	u16 result;
 	int ret = 0;
-	unsigned long stimeout = jiffies + msecs_to_jiffies(1000);
+	int state;
+	int timeout = 2000000; /* 2s timeout */
+	unsigned long stimeout = jiffies + msecs_to_jiffies(200);
 
 	msleep(100);
 
@@ -715,12 +508,11 @@ static int dbd2_wait_till_alive(struct dbd2_data *dbd2)
 			dev_err(dbd2->dev, "%s(): failed = 0x%d\n", __func__,
 				ret);
 	} else {
-		int state;
-		int timeout = 2000000; /* 2s timeout */
 		do {
 			state = dbd2_get_mode(dbd2);
 			/* wait around 50ms if state not changed */
 			/* XXX reconsider this */
+			return 1;
 			if (state < 0) {
 				usleep_range(50000, 51000);
 				timeout -= 50000;
@@ -789,10 +581,8 @@ static int dbmd2_uart_read(struct dbd2_data *dbd2, u8 *buf, int len)
 	/* XXX hack */
 	unsigned long us_per_transfer = (1000000 * 10) / (57600 + 28800);
 
-	if (!dbd2->uart_open) {
-		dev_err(dbd2->dev, "%s: Uart is not opened !!!\n", __func__);
+	if (!dbd2->uart_open)
 		return -EIO;
-	}
 
 	us_per_transfer *= (unsigned long)bytes_to_read;
 
@@ -824,10 +614,8 @@ static int dbmd2_uart_write(struct dbd2_data *dbd2, const u8 *buf, int len)
 	int bytes_wr = 0;
 	mm_segment_t oldfs;
 
-	if (!dbd2->uart_open) {
-		dev_err(dbd2->dev, "%s: Uart is not opened !!!\n", __func__);
+	if (!dbd2->uart_open)
 		return -EIO;
-	}
 
 	/* we may call from user context via char dev, so allow
 	 * read buffer in kernel address space */
@@ -869,10 +657,8 @@ static int dbmd2_uart_read_sync(struct dbd2_data *dbd2, u8 *buf, int len)
 
 	timeout = jiffies + msecs_to_jiffies(1000);
 
-	if (!dbd2->uart_open) {
-		dev_err(dbd2->dev, "%s: Uart is not opened !!!\n", __func__);
+	if (!dbd2->uart_open)
 		return -ENODEV;
-	}
 
 	/* we may call from user context via char dev, so allow
 	 * read buffer in kernel address space */
@@ -957,10 +743,8 @@ static int dbmd2_uart_configure_tty(struct dbd2_data *dbd2,
 	int rc = 0;
 	struct ktermios termios;
 
-	if (!dbd2->uart_open) {
-		dev_err(dbd2->dev, "%s: Uart is not opened !!!\n", __func__);
+	if (!dbd2->uart_open)
 		return -EIO;
-	}
 
 	memcpy(&termios, &(tty->termios), sizeof(termios));
 
@@ -1033,12 +817,12 @@ static int dbd2_set_uart_speed(struct dbd2_data *dbd2, int index)
 		/* A speed of 3Mbaud available only in sleep mode */
 		state = dbd2_get_mode(dbd2);
 		if (state < 0) {
-			dev_err(dbd2->dev, "device not responding\n");
+			dev_dbg(dbd2->dev, "device not responding\n");
 			goto out;
 		}
 		ret = dbd2_set_mode(dbd2, DBMD2_SLEEP_PLL_ON);
 		if (ret) {
-			dev_err(dbd2->dev,
+			dev_dbg(dbd2->dev,
 				"failed to set device to sleep mode\n");
 			goto out;
 		}
@@ -1047,7 +831,7 @@ static int dbd2_set_uart_speed(struct dbd2_data *dbd2, int index)
 	ret = dbd2_send_cmd(dbd2, DBD2_PRESENT_CLOCK_CONFIG |
 			    dbd2->clock_config[index], NULL);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "could not set new uart speed\n");
+		dev_dbg(dbd2->dev, "could not set new uart speed\n");
 		goto out_change_mode;
 	}
 
@@ -1098,56 +882,6 @@ static void dbmd2_uart_close_file(struct dbd2_data *dbd2)
 	}
 	atomic_set(&dbd2->stop_uart_probing, 0);
 }
-
-static int dbmd2_uart_open_file_only(struct dbd2_data *dbd2)
-{
-	int ret = 0;
-	struct file *fp;
-	int attempt = 0;
-	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
-
-	if (dbd2->uart_open)
-		return 0;
-
-	/*
-	 * Wait for the device node to appear in the filesystem. This can take
-	 * some time if the kernel is still booting up and filesystems are
-	 * being mounted.
-	 */
-	do {
-		if (attempt > 0)
-			msleep(50);
-#if 0
-		dev_info(dbd2->dev,
-			"%s(): probing for tty on %s (attempt %d)\n",
-			 __func__, dbd2->uart_dev, ++attempt);
-#endif
-		fp = filp_open(dbd2->uart_dev, O_RDWR | O_NONBLOCK | O_NOCTTY,
-			       0);
-
-		ret = PTR_ERR(fp);
-	} while (time_before(jiffies, timeout) && IS_ERR_OR_NULL(fp));
-
-	if (IS_ERR_OR_NULL(fp)) {
-		dev_err(dbd2->dev, "UART device node open failed %d\n", ret);
-		return -ENODEV;
-	}
-
-	/* set uart_dev members */
-	dbd2->uart_file = fp;
-	dbd2->uart_tty = ((struct tty_file_private *)fp->private_data)->tty;
-	dbd2->uart_ld = tty_ldisc_ref(dbd2->uart_tty);
-	dbd2->uart_open = 1;
-
-	dbmd2_uart_configure_tty(dbd2,
-				 dbd2->uart_tty,
-				 dbd2->uart_speed[0],
-				 UART_TTY_STOP_BITS,
-				 0, 0);
-
-	return 0;
-}
-
 
 static int dbmd2_uart_open_file(struct dbd2_data *dbd2)
 {
@@ -1205,11 +939,9 @@ static int dbmd2_uart_open_file(struct dbd2_data *dbd2)
 	do {
 		ret = request_firmware(&dbd2->fw, DBD2_FIRMWARE_NAME,
 				       dbd2->dev);
-		if (ret < 0) {
+		if (ret < 0)
 			dev_dbg(dbd2->dev, "request firmware failed\n");
-			msleep(500);
-		}
-	} while (ret < 0 && dbd2->firmware_retries++ < RETRY_COUNT*2);
+	} while (ret < 0 && dbd2->firmware_retries++ < RETRY_COUNT);
 
 	if (!dbd2->fw) {
 		dev_err(dbd2->dev, "firmware request failed\n");
@@ -1258,41 +990,19 @@ static int dbmd2_uart_open_file(struct dbd2_data *dbd2)
 
 	(void)dbd2_send_cmd(dbd2, DBD2_GPIO_CFG | dbd2->gpio_reg_config, NULL);
 
-#if USE_SLEEPMODE_GPIO_FOR_WAKEUP
-	ret = dbd2_send_cmd(dbd2, DBD2_EXIT_FW_SLEEP_MODE_GPIO |
-		DBMD2_EXITSLEEP_ENABLE | DBMD2_EXITSLEEP_GPIO, NULL);
-	if (ret < 0)
-		dev_err(dbd2->dev, "error setting exit from sleep gpio\n");
-#endif
-
 	dbd2_set_bytes_per_sample(dbd2, dbd2->audio_mode);
-
-	/* Set Backlog to 2 */
-	ret = dbd2_set_backlog_len(dbd2, 2);
-
-
-	if (ret < 0)
-		dev_err(dbd2->dev,
-			"could not backlog history configuration\n");
 
 	ret = dbd2_set_microphone_mode(dbd2, dbd2->init_mic_config);
 
 	if (ret < 0)
-		dev_err(dbd2->dev,
+		dev_dbg(dbd2->dev,
 			"could not set microphone mode\n");
 
 	ret = dbd2_send_cmd(dbd2, DBD2_POST_DETECTION_CLOCK_CONFIG |
-			    dbd2->clock_config[0], NULL);
+			    dbd2->clock_config[1], NULL);
 	if (ret < 0)
-		dev_err(dbd2->dev,
+		dev_dbg(dbd2->dev,
 			"could not set post detection clock configuration\n");
-#ifdef USE_WAKEUP_FROM_UART
-	ret = dbd2_send_cmd(dbd2, DBD2_WAKEUP_FROM_UART |
-			    0x40, NULL);
-	if (ret < 0)
-		dev_err(dbd2->dev,
-			"could not set wakeup from uart configuration\n");
-#endif
 
 	(void)dbd2_send_cmd(dbd2,
 			    DBD2_FAST_CLK_FREQ | (dbd2->freq / 1000),
@@ -1302,27 +1012,13 @@ static int dbmd2_uart_open_file(struct dbd2_data *dbd2)
 
 	ret = dbd2_send_cmd_short(dbd2, DBD2_GET_FW_VER, &fwver);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "could not read firmware version\n");
+		dev_dbg(dbd2->dev, "could not read firmware version\n");
 		goto out;
 	}
 
 	dev_info(dbd2->dev, "firmware 0x%x ready\n", fwver);
 
 	dbd2_set_uart_speed(dbd2, DBD2_UART_SPEED_57600);
-
-	ret = dbd2_set_mode(dbd2, DBMD2_IDLE);
-	if (ret) {
-		dev_err(dbd2->dev, "failed to set device to idle mode\n");
-		goto out;
-	}
-
-
-	ret = dbd2_set_mode(dbd2, DBMD2_SLEEP_PLL_OFF);
-	if (ret) {
-		dev_err(dbd2->dev, "failed to set device to idle mode\n");
-		goto out;
-	}
-
 
 out:
 	/* disable high speed clock after firmware loading */
@@ -1359,7 +1055,7 @@ static int dbmd2_uart_open(struct dbd2_data *dbd2)
 					      (void *)dbd2,
 					      "dbmd2 probe thread");
 	if (IS_ERR_OR_NULL(dbd2->uart_probe_thread)) {
-		dev_err(dbd2->dev,
+		dev_dbg(dbd2->dev,
 			"%s(): can't create dbmd2 uart probe thread = %p\n",
 			__func__, dbd2->uart_probe_thread);
 		rc = -ENOMEM;
@@ -1481,14 +1177,14 @@ static int dbd2_send_spi_cmd(struct dbd2_data *dbd2, u32 command, u16 *response)
 	if (response) {
 		ret = dbmd2_spi_read(dbd2, recv, 5);
 		if (ret < 0) {
-			dev_err(dbd2->dev, "dbmd2_spi_read failed =%d\n", ret);
+			dev_dbg(dbd2->dev, "dbmd2_spi_read failed =%d\n", ret);
 			return ret;
 		}
 		recv[5] = 0;
 		ret = kstrtou16((const char *)&recv[1], 16, response);
 		if (ret < 0) {
-			dev_err(dbd2->dev, "dbmd2_spi_read failed -%d\n", ret);
-			dev_err(dbd2->dev, "%x:%x:%x:%x:\n", recv[1], recv[2],
+			dev_dbg(dbd2->dev, "dbmd2_spi_read failed -%d\n", ret);
+			dev_dbg(dbd2->dev, "%x:%x:%x:%x:\n", recv[1], recv[2],
 				recv[3], recv[4]);
 			return ret;
 		}
@@ -1544,8 +1240,8 @@ static int dbd2_send_uart_cmd(
 
 
 		if (ret < 0) {
-			dev_err(dbd2->dev, "dbmd2_uart_read failed\n");
-			dev_err(dbd2->dev, "%x:%x:%x:%x:\n", recv[0], recv[1],
+			dev_dbg(dbd2->dev, "dbmd2_uart_read failed\n");
+			dev_dbg(dbd2->dev, "%x:%x:%x:%x:\n", recv[0], recv[1],
 				recv[2], recv[3]);
 			return ret;
 		}
@@ -1576,7 +1272,7 @@ static int dbd2_send_spi_cmd_boot(struct dbd2_data *dbd2, u32 command)
 
 	ret = dbmd2_spi_write(dbd2, send, 2);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "send_spi_cmd_boot ret = %d\n", ret);
+		dev_dbg(dbd2->dev, "send_spi_cmd_boot ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1597,7 +1293,7 @@ static int dbd2_send_i2c_cmd_boot(struct dbd2_data *dbd2, u32 command)
 
 	ret = i2c_master_send(dbd2->client, send, 2);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "i2c_master_send failed ret = %d\n", ret);
+		dev_dbg(dbd2->dev, "i2c_master_send failed ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1620,7 +1316,7 @@ static int dbd2_send_i2c_cmd_short(
 
 	ret = i2c_master_send(dbd2->client, send, 2);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "i2c_master_send failed ret = %d\n", ret);
+		dev_dbg(dbd2->dev, "i2c_master_send failed ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1634,7 +1330,7 @@ static int dbd2_send_i2c_cmd_short(
 	if (response) {
 		ret = i2c_master_recv(dbd2->client, recv, 2);
 		if (ret < 0) {
-			dev_err(dbd2->dev, "i2c_master_recv failed\n");
+			dev_dbg(dbd2->dev, "i2c_master_recv failed\n");
 			return ret;
 		}
 		if (response)
@@ -1654,14 +1350,14 @@ static int dbd2_send_spi_cmd_short(
 	char recv[7];
 	int ret = 0;
 
-	snprintf(tmp, 3, "%02x", (command >> 16) & 0xff);
+	ret = snprintf(tmp, 3, "%02x", (command >> 16) & 0xff);
 	send[0] = tmp[0];
 	send[1] = tmp[1];
 	send[2] = 'r';
 
 	ret = dbmd2_spi_write(dbd2, send, 3);
 	if (ret < 0) {
-		dev_err(dbd2->dev, "dbmd2_spi_write failed ret = %d\n", ret);
+		dev_dbg(dbd2->dev, "dbmd2_spi_write failed ret = %d\n", ret);
 		return ret;
 	}
 
@@ -1675,14 +1371,14 @@ static int dbd2_send_spi_cmd_short(
 	if (response) {
 		ret = dbmd2_spi_read(dbd2, recv, 6);
 		if (ret < 0) {
-			dev_err(dbd2->dev, "dbmd2_spi_read failed\n");
+			dev_dbg(dbd2->dev, "dbmd2_spi_read failed\n");
 			return ret;
 		}
 		recv[6] = 0;
 		ret = kstrtou16((const char *)&recv[2], 16, response);
 		if (ret < 0) {
-			dev_err(dbd2->dev, "dbmd2_spi_read conversion failed\n");
-			dev_err(dbd2->dev, "%x:%x:%x:%x:\n",
+			dev_dbg(dbd2->dev, "dbmd2_spi_read conversion failed\n");
+			dev_dbg(dbd2->dev, "%x:%x:%x:%x:\n",
 				recv[1], recv[2], recv[3], recv[4]);
 			return ret;
 		}
@@ -1725,9 +1421,9 @@ static int dbd2_send_uart_cmd_short(
 		/* recv[5] = 0; */
 		ret = kstrtou16(recv, 16, response);
 		if (ret < 0) {
-			dev_err(dbd2->dev,
+			dev_dbg(dbd2->dev,
 				"dbmd2_uart_read conversion failed\n");
-			dev_err(dbd2->dev, "%x:%x:%x:%x:\n", recv[0], recv[1],
+			dev_dbg(dbd2->dev, "%x:%x:%x:%x:\n", recv[0], recv[1],
 				recv[2], recv[3]);
 			return ret;
 		}
@@ -1781,7 +1477,7 @@ static int dbd2_send_i2c_data(
 		ret = i2c_master_send(dbd2->client, i2c_cmds,
 				min(to_copy, MAX_CMD_SEND_SIZE));
 		if (ret < 0) {
-			dev_err(dbd2->dev, "i2c_master_send failed ret=%d\n",
+			dev_dbg(dbd2->dev, "i2c_master_send failed ret=%d\n",
 				ret);
 			break;
 		}
@@ -1812,13 +1508,13 @@ static int dbmd2_wait_for_ok(struct dbd2_data *dbd2)
 
 	rc = dbmd2_uart_read_sync(dbd2, (u8 *)(&(resp[0])), 3);
 	if (rc < 0) {
-		dev_err(dbd2->dev, "fail to read ok from uart: error = %d\n",
+		dev_dbg(dbd2->dev, "fail to read ok from uart: error = %d\n",
 			rc);
 		return rc;
 	}
 	rc = strncmp(match, resp, 2);
 	if (rc)
-		dev_err(dbd2->dev, "result = %d : %x:%x:%x\n", rc,
+		dev_dbg(dbd2->dev, "result = %d : %x:%x:%x\n", rc,
 			resp[0], resp[1], resp[2]);
 	if (rc)
 		rc = strncmp(match + 1, resp, 2);
@@ -1843,7 +1539,7 @@ static int dbmd2_uart_sync(struct dbd2_data *dbmd2)
 
 	buf = kzalloc(size, GFP_KERNEL);
 	if (!buf) {
-		dev_err(dbmd2->dev,
+		dev_dbg(dbmd2->dev,
 				"%s: failure: no memory for sync buffer\n",
 				__func__);
 		return -ENOMEM;
@@ -1910,8 +1606,6 @@ static int dbd2_verify_checksum(
 		}
 		ret = memcmp(fw_checksum, (void *)&rx_checksum[2], 4);
 	} else {
-		dev_dbg(dbd2->dev, "%s: dbd2 verify spi boot checksum\n",
-			__func__);
 		ret = dbd2_send_spi_cmd_boot(dbd2, DBD2_READ_CHECKSUM);
 		if (ret < 0) {
 			dev_dbg(dbd2->dev, "could not read checksum\n");
@@ -2023,6 +1717,30 @@ static int dbd2_boot_firmware(struct dbd2_data *dbd2)
 	return 0;
 }
 
+static void dbd2_get_firmware_version(
+		const char *data, size_t size, char *version)
+{
+	int i, j;
+
+	version[0] = 0;
+	for (i = size - 13; i > 0; i--) {
+		if ((data[i]   == 'v') && (data[i+2]  == 'e') &&
+		    (data[i+4] == 'r') && (data[i+6]  == 's') &&
+		    (data[i+8] == 'i') && (data[i+10] == 'o')) {
+			for (j = 0; i + j < size; j++) {
+				version[j] = data[i];
+				i += 2;
+				if (((version[j] > 0) && (version[j] < 32))
+				    || (version[j] > 126))
+					return;
+				if (version[j] == 0)
+					version[j] = ' ';
+			}
+			version[j] = 0;
+			return;
+		}
+	}
+}
 
 static int dbd2_reset(struct dbd2_data *dbd2)
 {
@@ -2071,6 +1789,7 @@ static int dbd2_load_firmware(struct dbd2_data *dbd2)
 {
 	int ret = 0;
 	const char *fw_checksum;
+	char fw_version[100];
 	u8 sync_spi[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 	u8 sbl_spi[] = {
 		0x5A, 0x04, 0x4c, 0x00, 0x00,
@@ -2083,6 +1802,9 @@ static int dbd2_load_firmware(struct dbd2_data *dbd2)
 		return -1;
 
 	fw_checksum = &dbd2->fw->data[dbd2->fw->size - 4];
+	dbd2_get_firmware_version(dbd2->fw->data, dbd2->fw->size, fw_version);
+	if (strlen(fw_version) > 0)
+		dev_info(dbd2->dev, "firmware %s\n", fw_version);
 
 	if (!dbd2->client && !dbd2->client_spi) {
 		/* sbl */
@@ -2202,7 +1924,7 @@ static void dbd2_acoustic_model_load(struct dbd2_data *dbd2, const u8 *data,
 	int retry = RETRY_COUNT;
 	u32 checksum;
 
-	flush_work(&dbd2_data->sv_work);
+	flush_work(&dbd2_data->sensory_work);
 
 	uart_lock(&dbd2->lock);
 
@@ -2226,7 +1948,7 @@ static void dbd2_acoustic_model_load(struct dbd2_data *dbd2, const u8 *data,
 		if (ret != 0) {
 			dev_err(dbd2->dev,
 				"failed to change UART speed to highspeed\n");
-			goto out_change_speed;
+			goto out_unlock;
 		}
 	}
 
@@ -2296,7 +2018,6 @@ out_change_speed:
 				"failed to change UART speed to normal\n");
 	}
 out_unlock:
-	dbd2->device_ready = true;
 	uart_unlock(&dbd2->lock);
 }
 
@@ -2435,41 +2156,6 @@ static void dbd2_net_bin_ready(const struct firmware *fw, void *context)
 /* ------------------------------------------------------------------------
  * sysfs attributes
  * ------------------------------------------------------------------------ */
-static int dbd2_d2param_get(struct dbd2_data *dbd2, u32 addr)
-{
-	int ret = 0;
-	u16 val = 0xffff;
-
-	uart_lock(&dbd2->lock);
-	ret = dbd2_wake(dbd2);
-	if (ret < 0) {
-		dev_err(dbd2->dev, "%s: unable to wake\n", __func__);
-		goto out;
-	}
-
-	ret = dbd2_send_cmd(dbd2, DBD2_SET_D2PARAM_ADDR | addr, NULL);
-
-	if (ret < 0) {
-		dev_err(dbd2->dev, "%s: failed to set d2paramaddr: %d\n",
-				__func__, ret);
-		goto out;
-	}
-
-	ret = dbd2_send_cmd_short(dbd2, DBD2_GET_D2PARAM, &val);
-
-	if (ret < 0) {
-		dev_err(dbd2->dev, "%s: failed to read d2param: %d\n",
-				__func__, ret);
-		goto out;
-	}
-
-	ret = (int)val;
-
-out:
-	uart_unlock(&dbd2->lock);
-	return ret;
-}
-
 static ssize_t dbd2_reg_show(struct device *dev, u32 command,
 			     struct device_attribute *attr, char *buf)
 {
@@ -2479,21 +2165,11 @@ static ssize_t dbd2_reg_show(struct device *dev, u32 command,
 
 	uart_lock(&dbd2->lock);
 
-	ret = dbd2_wake(dbd2);
-	if (ret < 0) {
-		dev_err(dbd2->dev, "unable to wake\n");
-		goto out_unlock;
-	}
-
-
 	ret = dbd2_send_cmd_short(dbd2, command, &val);
 	if (ret < 0) {
 		dev_err(dbd2->dev, "get reg %x error\n", command);
 		goto out_unlock;
 	}
-
-	if (command == DBD2_AUDIO_HISTORY)
-		val = val & 0x0fff;
 
 	ret = sprintf(buf, "0x%x\n", val);
 out_unlock:
@@ -2512,13 +2188,6 @@ static ssize_t dbd2_reg_show_long(struct device *dev, u32 command,
 	u32 result;
 
 	uart_lock(&dbd2->lock);
-
-	ret = dbd2_wake(dbd2);
-	if (ret < 0) {
-		dev_err(dbd2->dev, "unable to wake\n");
-		goto out_unlock;
-	}
-
 
 	ret = dbd2_send_cmd_short(dbd2, command1, &val);
 	if (ret < 0) {
@@ -2580,22 +2249,10 @@ static ssize_t dbd2_reg_store(struct device *dev, u32 command,
 	}
 
 	if (command == DBD2_AUDIO_BUFFER_CONVERSION) {
-		u16 mode = val & 0x1000;
-		ret = dbd2_set_bytes_per_sample(dbd2, mode);
-		if (ret) {
+		ret = dbd2_set_bytes_per_sample(dbd2, val);
+		if (ret)
 			size = ret;
-			goto out_unlock;
-		}
-		command = DBD2_AUDIO_HISTORY;
-	}
-
-	if (command == DBD2_AUDIO_HISTORY) {
-		ret = dbd2_set_backlog_len(dbd2, val);
-		if (ret < 0) {
-			dev_err(dbd2->dev, "set history error\n");
-			size = ret;
-			goto out_unlock;
-		}
+		goto out_unlock;
 	}
 
 	ret = dbd2_send_cmd(dbd2, command | (u32)val, NULL);
@@ -2949,51 +2606,19 @@ static ssize_t dbd2_uartspeed_store(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t size)
 {
-	int ret = 0, index = -1;
+	int ret;
 	int val = dbd2_buf_to_int(buf);
 	struct dbd2_data *dbd2 = dev_get_drvdata(dev);
 
 	if (!dbd2->device_ready)
 		return -EAGAIN;
 
-	switch (val) {
-	case DBD2_UART_SPEED_57600:
-	case DBD2_UART_SPEED_1000000:
-	case DBD2_UART_SPEED_3000000:
-		dev_dbg(dbd2->dev,
-				"%s: setting D2 clock to: 0x%04x\n",
-				__func__, (u16)val);
-		uart_lock(&dbd2->lock);
-		ret = dbd2_set_uart_speed(dbd2, val);
-		uart_unlock(&dbd2->lock);
-		break;
-
-	case 57600:
-		index = DBD2_UART_SPEED_57600;
-		break;
-	case 1000000:
-		index = DBD2_UART_SPEED_1000000;
-		break;
-	case 3000000:
-		index = DBD2_UART_SPEED_3000000;
-		break;
-
-	default:
-		dev_err(dbd2->dev,
-				"%s: illegal value - 0x%04x\n",
-				__func__, (u16)val);
+	if (val < 0)
 		return -EIO;
 
-	}
-
-	if (index >= 0) {
-		dev_err(dbd2->dev,
-				"%s: setting TTY speed to: %d Baud/s\n",
-				__func__, (u16)val);
-		uart_lock(&dbd2->lock);
-		ret = dbd2_set_uart_speed1(dbd2, index);
-		uart_unlock(&dbd2->lock);
-	}
+	uart_unlock(&dbd2->lock);
+	ret = dbd2_set_uart_speed(dbd2, val);
+	uart_unlock(&dbd2->lock);
 
 	if (ret != 0)
 		return ret;
@@ -3033,7 +2658,7 @@ static ssize_t dbd2_backlog_size_show(struct device *dev,
 				      struct device_attribute *attr,
 				      char *buf)
 {
-	return dbd2_reg_show(dev, DBD2_AUDIO_HISTORY, attr, buf);
+	return dbd2_reg_show(dev, DBD2_BUFFERING_BACKLOG_SIZE, attr, buf);
 }
 
 static ssize_t dbd2_backlog_size_store(struct device *dev,
@@ -3041,7 +2666,7 @@ static ssize_t dbd2_backlog_size_store(struct device *dev,
 				       const char *buf,
 				       size_t size)
 {
-	return dbd2_reg_store(dev, DBD2_AUDIO_HISTORY, attr, buf,
+	return dbd2_reg_store(dev, DBD2_BUFFERING_BACKLOG_SIZE, attr, buf,
 			      size);
 }
 
@@ -3130,7 +2755,7 @@ static ssize_t dbd2_reset_store(struct device *dev,
 
 	dbd2->buffering = 0;
 
-	flush_work(&dbd2->sv_work);
+	flush_work(&dbd2->sensory_work);
 
 	uart_lock(&dbd2->lock);
 
@@ -3241,7 +2866,7 @@ static ssize_t dbd2_readsmps_start(struct device *dev,
 	}
 
 	dbd2->buffering = 1;
-	schedule_work(&dbd2->sv_work);
+	schedule_work(&dbd2->sensory_work);
 
 out:
 	uart_unlock(&dbd2->lock);
@@ -3649,18 +3274,9 @@ int dbmd2_get_frames(char *buffer, unsigned int channels, unsigned int frames)
 	struct dbd2_data *dbd2 = dbd2_data;
 	unsigned int samples_avail;
 	unsigned int samples;
-	unsigned int total;
+	unsigned int total = frames * dbd2->bytes_per_sample * channels;
+	unsigned int i;
 	u16 tmp[2];
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
-	total = frames * dbd2->bytes_per_sample * channels;
 
 	if (channels > 2 || channels < 1)
 		return -EINVAL;
@@ -3673,7 +3289,6 @@ int dbmd2_get_frames(char *buffer, unsigned int channels, unsigned int frames)
 		return -1;
 
 	if (channels == 1) {
-		unsigned int i;
 		for (i = 0; i < samples; i++) {
 			if (kfifo_out(&dbd2->pcm_kfifo,
 				      tmp,
@@ -3725,15 +3340,17 @@ EXPORT_SYMBOL(dbmd2_start_buffering);
 
 void dbmd2_stop_buffering(void)
 {
+	int ret;
+
 	if (!dbd2_data->auto_buffering)
 		return;
 
 	dbd2_data->buffering = 0;
 
-	flush_work(&dbd2_data->sv_work);
+	flush_work(&dbd2_data->sensory_work);
 
 	uart_lock(&dbd2_data->lock);
-	dbd2_set_mode(dbd2_data, DBMD2_IDLE);
+	ret = dbd2_set_mode(dbd2_data, DBMD2_IDLE);
 	uart_unlock(&dbd2_data->lock);
 }
 EXPORT_SYMBOL(dbmd2_stop_buffering);
@@ -3806,20 +3423,11 @@ struct snd_soc_dai_driver dbmd2_dais[] = {
 static unsigned int dbmd2_dev_read(struct snd_soc_codec *codec,
 				   unsigned int reg)
 {
-	struct dbd2_data *dbd2;
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 	u16 val = 0;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 
 	if (reg == DUMMY_REGISTER)
 		return 0;
@@ -3847,19 +3455,10 @@ static int dbmd2_dev_write(struct snd_soc_codec *codec,
 			   unsigned int reg,
 			   unsigned int val)
 {
-	struct dbd2_data *dbd2;
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int ret;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 
 	if (!snd_soc_codec_writable_register(codec, reg)) {
 		dev_err(dbd2->dev, "register not writable\n");
@@ -3892,24 +3491,16 @@ out_unlock:
 static int dbmd2_control_get(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct soc_mixer_control *mc =
 			(struct soc_mixer_control *)kcontrol->private_value;
-	struct dbd2_data *dbd2;
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	unsigned short val, reg = mc->reg;
 	int max = mc->max;
 	int mask = (1 << fls(max)) - 1;
 	int ret;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 
 	uart_lock(&dbd2->lock);
 
@@ -3940,7 +3531,7 @@ static int dbmd2_control_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct soc_mixer_control *mc =
 			(struct soc_mixer_control *)kcontrol->private_value;
-	struct dbd2_data *dbd2;
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	unsigned short val = ucontrol->value.integer.value[0];
 	unsigned short reg = mc->reg;
 	int max = mc->max;
@@ -3948,15 +3539,6 @@ static int dbmd2_control_put(struct snd_kcontrol *kcontrol,
 	int ret;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 
 	if (!snd_soc_codec_writable_register(codec, reg)) {
 		dev_err(dbd2->dev, "register not writable\n");
@@ -3989,20 +3571,12 @@ out_unlock:
 static int dbmd2_operation_mode_get(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	unsigned short val;
 	int ret;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 	if (dbd2_sleeping(dbd2)) {
 		/* report hibernate */
 		ucontrol->value.integer.value[0] = 3;
@@ -4044,27 +3618,13 @@ out_unlock:
 static int dbmd2_operation_mode_set(struct snd_kcontrol *kcontrol,
 				    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
 	dbd2 = dbd2_data;
 
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 	uart_lock(&dbd2->lock);
-
-	ret = dbd2_wake(dbd2);
-	if (ret < 0) {
-		dev_err(dbd2->dev, "%s: unable to wake\n", __func__);
-		goto out_unlock;
-	}
-
 
 	if (ucontrol->value.integer.value[0] == 0)
 		dbd2_set_mode(dbd2, DBMD2_IDLE);
@@ -4081,7 +3641,6 @@ static int dbmd2_operation_mode_set(struct snd_kcontrol *kcontrol,
 	else
 		ret = -EINVAL;
 
-out_unlock:
 	uart_unlock(&dbd2->lock);
 
 	return ret;
@@ -4106,74 +3665,46 @@ static const unsigned int dbmd2_mic_analog_gain_tlv[] = {
 static int dbmd2_amodel_load_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	ucontrol->value.integer.value[0] = 3;
 	return 0;
 }
 
 static int dbmd2_amodel_load_set(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	unsigned short value = ucontrol->value.integer.value[0];
+	int ret;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	dev_dbg(dbd2->dev, "%s: value - %d\n", __func__, value);
 
 	if (!dbd2->device_ready) {
 		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
 		return 0;
 	}
 
-
 	if (value == 0) {
-		int ret;
 		dev_info(dbd2->dev, "sleep mode: %d\n", value);
 
 		uart_lock(&dbd2->lock);
-
-		if (dbd2_sleeping(dbd2)) {
-			uart_unlock(&dbd2->lock);
-			return 0;
-		}
-
-
-		ret = dbd2_set_mode(dbd2, DBMD2_IDLE);
-
-		if (ret)
-			dev_err(dbd2->dev, "failed to set device to idle mode\n");
-
 		ret = dbd2_set_uart_speed(dbd2, DBD2_UART_SPEED_57600);
-
 		if (ret)
-			dev_err(dbd2->dev, "failed to change UART speed to normal amodel\n");
-
-		ret = dbd2_set_mode(dbd2, DBMD2_SLEEP_PLL_OFF);
-
-		if (ret)
+			dev_err(dbd2->dev, "failed to change UART speed to normal\n");
+		ret = dbd2_set_mode(dbd2, DBMD2_SLEEP_PLL_ON);
+		if (ret) 
 			dev_err(dbd2->dev, "failed to set device to sleep mode\n");
-
-
-
 		uart_unlock(&dbd2->lock);
-
 		return 0;
 	} else if (value > 2) {
 		dev_err(dbd2->dev, "Unsupported mode:%d\n", value);
 		return -1;
 	}
 
-	dev_info(dbd2->dev, "Detection mode mode: %d\n", value);
-
 	mutex_lock(&dbd2->lock);
-
 	dbd2->change_speed = 1;
 
 	if (value == 2)
-		dbd2->detection_mode = DETECTION_MODE_VOICE_ENERGY;
+		dbd2->detection_mode = DETECTION_MODE_BABY;
 	else
 		dbd2->detection_mode = DETECTION_MODE_PHRASE;
 
@@ -4183,22 +3714,13 @@ static int dbmd2_amodel_load_set(struct snd_kcontrol *kcontrol,
 	return dbd2_load_new_acoustic_model(dbd2);
 }
 
-#ifdef MSM_G1
 static int dbmd2_lpm_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 	ucontrol->value.enumerated.item[0] = dbd2->lpm_mode;
 
 	return 0;
@@ -4207,34 +3729,22 @@ static int dbmd2_lpm_get(struct snd_kcontrol *kcontrol,
 static int dbmd2_lpm_set(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int value = ucontrol->value.enumerated.item[0];
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
 	dbd2->lpm_mode = value;
 	return 0;
 }
-#endif
 
 static int dbmd2_wakeup_get(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
 	ucontrol->value.enumerated.item[0] = dbd2_sleeping(dbd2);
 
 	return 0;
@@ -4243,34 +3753,21 @@ static int dbmd2_wakeup_get(struct snd_kcontrol *kcontrol,
 static int dbmd2_wakeup_set(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int value = ucontrol->value.enumerated.item[0];
 
 	dbd2 = dbd2_data;
 
-	if (!dbd2)
-		return -EAGAIN;
-
 	mutex_lock(&dbd2->lock);
 	if (value) {
-#if USE_SLEEPMODE_GPIO_FOR_WAKEUP
 		gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
 		dbd2->asleep = true;
-#elif !USE_WAKEUP_GPIO_FOR_DETECTION
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
-		dbd2->asleep = true;
-#endif
 	} else {
-#if USE_SLEEPMODE_GPIO_FOR_WAKEUP
 		gpio_set_value(dbd2->pdata.gpio_wakeup, 0);
 		dbd2->asleep = false;
-#elif !USE_WAKEUP_GPIO_FOR_DETECTION
-		gpio_set_value(dbd2->pdata.gpio_wakeup, 1);
-		dbd2->asleep = false;
-#endif
 	}
 	mutex_unlock(&dbd2->lock);
-
 	return 0;
 }
 
@@ -4292,24 +3789,18 @@ enum dbmd2_microphone_type {
 
 static int dbd2_set_microphone_mode(struct dbd2_data *dbd2, int mode)
 {
-	int ret1 = 0;
-	int ret2 = 0;
+	int ret1, ret2;
 
 	/* set new mode and return old one */
 
 	dev_info(dbd2->dev, "%s: mode: %d\n", __func__, mode);
 
-	ret1 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE2_CONFIGURATION,
-			    NULL);
-	if (ret1 < 0) {
-		dev_err(dbd2->dev, "failed to set mode 0x%x\n", mode);
-		return -1;
-	}
-
 	/* anything special to do */
 	switch (mode) {
 	case DBMD2_MIC_MODE_DISABLE:
 		ret1 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE1_CONFIGURATION,
+				    NULL);
+		ret2 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE2_CONFIGURATION,
 				    NULL);
 		break;
 	case DBMD2_MIC_MODE_DIGITAL_LEFT:
@@ -4317,11 +3808,16 @@ static int dbd2_set_microphone_mode(struct dbd2_data *dbd2, int mode)
 			DBD2_MICROPHONE1_CONFIGURATION |
 			dbd2->mic_config[DBMD2_MIC_TYPE_DIGITAL_LEFT], NULL);
 
+		ret2 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE2_CONFIGURATION,
+			NULL);
 		break;
 	case DBMD2_MIC_MODE_DIGITAL_RIGHT:
 		ret1 = dbd2_send_cmd(dbd2,
 			DBD2_MICROPHONE1_CONFIGURATION |
 			dbd2->mic_config[DBMD2_MIC_TYPE_DIGITAL_RIGHT], NULL);
+
+		ret2 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE2_CONFIGURATION,
+				    NULL);
 		break;
 	case DBMD2_MIC_MODE_DIGITAL_STEREO_TRIG_ON_LEFT:
 		ret1 = dbd2_send_cmd(dbd2,
@@ -4345,6 +3841,9 @@ static int dbd2_set_microphone_mode(struct dbd2_data *dbd2, int mode)
 		ret1 = dbd2_send_cmd(dbd2,
 			DBD2_MICROPHONE1_CONFIGURATION |
 			dbd2->mic_config[DBMD2_MIC_TYPE_ANALOG], NULL);
+
+		ret2 = dbd2_send_cmd(dbd2, DBD2_MICROPHONE2_CONFIGURATION,
+				    NULL);
 		break;
 	default:
 		dev_err(dbd2->dev, "Unsupported microphone mode 0x%x\n", mode);
@@ -4364,30 +3863,14 @@ static int dbd2_set_microphone_mode(struct dbd2_data *dbd2, int mode)
 static int dbmd2_microphone_mode_get(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	unsigned short val, val2;
-	int ret = 0;
+	int ret;
 
 	dbd2 = dbd2_data;
 
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
-
-
 	uart_lock(&dbd2->lock);
-
-	/* just return 0 - the user needs to wakeup first */
-	if (dbd2_sleeping(dbd2)) {
-		dev_err(dbd2->dev, "device sleeping\n");
-		goto out_unlock;
-	}
-
 
 	ret = dbd2_send_cmd_short(dbd2, DBD2_MICROPHONE1_CONFIGURATION, &val);
 	if (ret < 0) {
@@ -4437,32 +3920,15 @@ out_unlock:
 }
 
 static int dbmd2_microphone_mode_set(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
+				     struct snd_ctl_elem_value *ucontrol)
 {
-	struct dbd2_data *dbd2;
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
 	dbd2 = dbd2_data;
 
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
-
-
 	uart_lock(&dbd2->lock);
-
-	if (dbd2_sleeping(dbd2)) {
-		dev_err(dbd2->dev, "device sleeping\n");
-		goto out_unlock;
-	}
-
-
-	dev_dbg(dbd2->dev, "%s: value - %d\n", __func__,
-			(int)ucontrol->value.integer.value[0]);
 
 	/* anything special to do */
 	switch (ucontrol->value.integer.value[0]) {
@@ -4495,8 +3961,9 @@ static int dbmd2_microphone_mode_set(struct snd_kcontrol *kcontrol,
 		ret = -EINVAL;
 		break;
 	}
-out_unlock:
+
 	uart_unlock(&dbd2->lock);
+
 	return ret;
 }
 
@@ -4526,7 +3993,7 @@ static const struct snd_kcontrol_new dbmd2_snd_controls[] = {
 		dbmd2_control_get, dbmd2_control_put,
 		dbmd2_mic_analog_gain_tlv),
 #ifdef MSM_G1
-	SOC_SINGLE_EXT("ES705 Voice Wakeup Enable", 0, 0, 3, 0,
+	SOC_SINGLE_EXT("ES705 Voice Wakeup Enable", 0, 0, 2, 0,
 			    dbmd2_amodel_load_get,
 			    dbmd2_amodel_load_set),
 	SOC_SINGLE_BOOL_EXT("ES705 Voice LPM Enable",
@@ -4535,8 +4002,10 @@ static const struct snd_kcontrol_new dbmd2_snd_controls[] = {
 			    dbmd2_lpm_set),
 
 #endif
-	SOC_SINGLE_EXT("Load acoustic model", 0, 0, 3, 0,
-		dbmd2_amodel_load_get, dbmd2_amodel_load_set),
+	SOC_SINGLE_EXT("Load acoustic model", 0, 0, 2, 0,
+			    dbmd2_amodel_load_get,
+			    dbmd2_amodel_load_set),
+
 	SOC_SINGLE_BOOL_EXT("Set wakeup",
 			    0,
 			    dbmd2_wakeup_get,
@@ -4546,7 +4015,7 @@ static const struct snd_kcontrol_new dbmd2_snd_controls[] = {
 	SOC_SINGLE("Verification Level", 0x0e, 0, 0xffff, 0),
 	SOC_SINGLE("Duration", 0x14, 0, 0xffff, 0),
 	SOC_SINGLE("Error", 0x15, 0, 0xffff, 0),
-	SOC_SINGLE_EXT("Backlog size", 0x12, 0, 0x0fff, 0,
+	SOC_SINGLE_EXT("Backlog size", 0x1B, 0, 0xffff, 0,
 		dbmd2_control_get, dbmd2_control_put),
 	SOC_ENUM_EXT("Microphone mode", dbmd2_microphone_mode_enum,
 		dbmd2_microphone_mode_get, dbmd2_microphone_mode_set),
@@ -4599,18 +4068,10 @@ static int dbmd2_dev_resume(struct snd_soc_codec *codec)
 static int dbmd2_is_writeable_register(struct snd_soc_codec *codec,
 				       unsigned int reg)
 {
-	struct dbd2_data *dbd2;
+	struct dbd2_data *dbd2 = snd_soc_codec_get_drvdata(codec);
 	int ret = 1;
 
 	dbd2 = dbd2_data;
-
-	if (!dbd2)
-		return -EAGAIN;
-
-	if (!dbd2->device_ready) {
-		dev_err(dbd2->dev, "%s: device not ready\n", __func__);
-		return -EAGAIN;
-	}
 
 	switch (reg) {
 	case 0xc:
@@ -4712,7 +4173,6 @@ out:
 }
 
 static char tbuf[UART_TTY_MAX_READ_SZ];
-static char tbuf_temp[TTY_MAX_HW_BUF_SIZE];
 
 static int dbmd2_read_data_serial(struct dbd2_data *dbd2,
 				  unsigned int bytes_to_read)
@@ -4722,7 +4182,7 @@ static int dbmd2_read_data_serial(struct dbd2_data *dbd2,
 	/* unsigned int i = 0; */
 	/* stuck for more than 1s means something went wrong */
 	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
-	int cur_temp_buf_index = 0;
+
 	mm_segment_t oldfs;
 
 	/* we may call from user context via char dev, so allow
@@ -4740,16 +4200,15 @@ static int dbmd2_read_data_serial(struct dbd2_data *dbd2,
 					       dbd2->uart_file,
 					       (char __user *)tbuf, count);
 
-		if (ret > 0) {
+		if (ret >= 0) {
 			bytes_to_read -= ret;
-			memcpy(tbuf_temp+cur_temp_buf_index, tbuf, ret);
-			cur_temp_buf_index += ret;
-		} else if (ret == 0 || ret == -EAGAIN) {
-			usleep_range(2000, 2100);
-		} else {
+			kfifo_in(&dbd2->pcm_kfifo, tbuf, ret);
+		} else if (ret != -EAGAIN) {
 			dev_err(dbd2->dev,
 				"fail to read err= %d bytes to read=%d\n",
 				ret, bytes_to_read);
+		} else {
+			usleep_range(2000, 2100);
 		}
 	} while (time_before(jiffies, timeout) && bytes_to_read);
 
@@ -4759,10 +4218,7 @@ static int dbmd2_read_data_serial(struct dbd2_data *dbd2,
 			bytes_to_read);
 		ret = -EIO;
 		goto out;
-	} else {
-		kfifo_in(&dbd2->pcm_kfifo, tbuf_temp, cur_temp_buf_index);
 	}
-
 
 	ret = 0;
 out:
@@ -4777,44 +4233,26 @@ static void dbmd2_uevent_work(struct work_struct *work)
 	struct dbd2_data *dbd2 = container_of(work, struct dbd2_data,
 		uevent_work);
 	char tmp[100];
+	u16 word_id =0xffff;
+	int ret ;
 	char * const envp[] = { tmp, NULL };
 
 
-	if (dbd2->detection_mode == DETECTION_MODE_VOICE_ENERGY) {
+	if (dbd2->detection_mode == DETECTION_MODE_BABY) {
 		sprintf(tmp, "VOICE_WAKEUP_WORD_ID=LPSD");
-		dev_info(dbd2->dev, "%s: VOICE ENERGY\n", __func__);
 	} else {
-		int event_id = 0xffff;
-		int ret;
 
 		uart_lock(&dbd2->lock);
-
-		ret = dbd2_set_uart_speed(dbd2, DBD2_UART_SPEED_1000000);
-		if (ret)
-			dev_warn(dbd2->dev,
-					"%s: failed switch to higher speed\n",
-					__func__);
+		ret = dbd2_set_uart_speed1(dbd2, DBD2_UART_SPEED_1000000);
+		if (ret) 
+			dev_err(dbd2->dev, "%s-failed switch to higher speed\n",__func__);
+		ret = dbd2_send_cmd_short(dbd2, DBD2_LAST_DETECT_WORD_NUM, &word_id); 
+		if (ret < 0) {
+			dev_err(dbd2->dev, "sync error did not not wakeup\n");
+		}
 		uart_unlock(&dbd2->lock);
-
-		event_id = dbd2_d2param_get(dbd2, DBD2_D2PARAM_ALTWORDID);
-
-		if (event_id < 0) {
-			dev_err(dbd2->dev,
-					"%s: failed reading WordID\n",
-					__func__);
-			return;
-		}
-
-		if (event_id == 3) {
-			/* as per SV Algo implementer's recommendation
-			 * --> it 1 */
-			dev_dbg(dbd2->dev, "%s: fixing to 1\n", __func__);
-			event_id = 1;
-		}
-
-		dev_info(dbd2->dev, "%s: last WordID:%d\n", __func__, event_id);
-
-		snprintf(tmp, sizeof(tmp), "VOICE_WAKEUP_WORD_ID=%d", event_id);
+	
+		snprintf(tmp, sizeof(tmp), "VOICE_WAKEUP_WORD_ID=%u",word_id);
 	}
 	kobject_uevent_env(&dbd2->dev->kobj, KOBJ_CHANGE, (char **)envp);
 	dbd2->detection_mode = 0;
@@ -4831,43 +4269,12 @@ void dbmd2_remote_register_event_callback(event_cb func)
 
 static void dbmd2_uevent_work(struct work_struct *work)
 {
-	struct dbd2_data *dbd2 = container_of(
-			work, struct dbd2_data,	uevent_work);
+	struct dbd2_data *dbd2 = container_of(work, struct dbd2_data,
+		uevent_work);
 	int event_id;
-	int ret;
 
-	if (dbd2->detection_mode == DETECTION_MODE_VOICE_ENERGY) {
-		dev_info(dbd2->dev, "%s: VOICE ENERGY\n", __func__);
-		event_id = 0;
-	} else {
-		dev_info(dbd2->dev, "%s: PASSPHRASE\n", __func__);
-
-		uart_lock(&dbd2->lock);
-		ret = dbd2_set_uart_speed(dbd2, DBD2_UART_SPEED_1000000);
-		if (ret)
-			dev_warn(dbd2->dev,
-					"%s: failed switch to higher speed\n",
-					__func__);
-		uart_unlock(&dbd2->lock);
-
-		event_id = dbd2_d2param_get(dbd2, DBD2_D2PARAM_ALTWORDID);
-
-		if (event_id < 0) {
-			dev_err(dbd2->dev,
-					"%s: failed reading WordID\n",
-					__func__);
-			return;
-		}
-
-		dev_info(dbd2->dev, "%s: last WordID:%d\n", __func__, event_id);
-
-		if (event_id == 3) {
-			/* as per SV Algo implementer's recommendation
-			 * --> it 1 */
-			dev_dbg(dbd2->dev, "%s: fixing to 1\n", __func__);
-			event_id = 1;
-		}
-	}
+	/* FIXME: need to read from D2 to identify event id. */
+	event_id = 1;
 
 	if (dbd2->event_callback)
 		dbd2->event_callback(event_id);
@@ -4898,9 +4305,10 @@ out:
 	return nr_samples;
 }
 
-static void dbmd2_sv_work(struct work_struct *work)
+static void dbmd2_sensory_work(struct work_struct *work)
 {
-	struct dbd2_data *dbd2 = container_of(work, struct dbd2_data, sv_work);
+	struct dbd2_data *dbd2 = container_of(work, struct dbd2_data,
+		sensory_work);
 	int ret;
 	int bytes_per_sample = dbd2->bytes_per_sample;
 	unsigned int bytes_to_read;
@@ -4917,7 +4325,7 @@ static void dbmd2_sv_work(struct work_struct *work)
 	kfifo_reset(&dbd2->pcm_kfifo);
 
 	if (!dbd2->client && !dbd2->client_spi) {
-		ret = dbd2_set_uart_speed(dbd2, DBD2_UART_SPEED_1000000);
+		ret = dbd2_set_uart_speed1(dbd2, DBD2_UART_SPEED_1000000);
 		if (ret) {
 			dev_err(dbd2->dev, "failed switch to higher speed\n");
 			goto out_fail_unlock;
@@ -5001,12 +4409,6 @@ static void dbmd2_sv_work(struct work_struct *work)
 out_fail:
 	uart_lock(&dbd2->lock);
 	dbd2->buffering = 0;
-
-	if (dbd2_sleeping(dbd2)) {
-		uart_unlock(&dbd2->lock);
-		return;
-	}
-
 	ret = dbd2_set_mode(dbd2, DBMD2_IDLE);
 	if (ret) {
 		dev_err(dbd2->dev, "failed to set device to idle mode\n");
@@ -5017,93 +4419,31 @@ out_fail:
 		if (ret)
 			dev_err(dbd2->dev, "failed to change UART speed to normal\n");
 	}
-	ret = dbd2_set_mode(dbd2, DBMD2_SLEEP_PLL_OFF);
-	if (ret) {
-		dev_err(dbd2->dev, "failed to set device to sleep mode\n");
-		goto out_fail_unlock;
-	}
-
 out_fail_unlock:
 	uart_unlock(&dbd2->lock);
 }
 
-static void dbmd2_detection(struct dbd2_data *dbd2)
-{
-	dbd2->detection_state = 1;
-
-	schedule_work(&dbd2->uevent_work);
-
-	dbd2->buffering = 1;
-	schedule_work(&dbd2->sv_work);
-	//queue_work(system_long_wq, &dbd2->sv_work);
-
-	dev_info(dbd2->dev, "%s - SV EVENT\n", __func__);
-}
-
-#ifndef USE_WAKEUP_FROM_UART
-
-irqreturn_t dbmd2_sv_interrupt(int irq, void *dev)
+static irqreturn_t dbmd2_sensory_interrupt(int irq, void *dev)
 {
 	struct dbd2_data *dbd2 = (struct dbd2_data *)dev;
-	u16 state;
 
 	dev_dbg(dbd2->dev, "%s\n", __func__);
+
 	if ((dbd2->device_ready) && (dbd2->pdata.irq_inuse)) {
+		dbd2->buffering = 1;
+		dbd2->detection_state = 1;
 
-		uart_lock(&dbd2->lock);
-		state = dbd2_get_mode(dbd2);
-		atomic_set(&dbd2->keep_uart_tty_enabled,1);
-		uart_unlock(&dbd2->lock);
+		dbd2->buffering = 1;
+		schedule_work(&dbd2->sensory_work);
 
-		if(state < 0) {
-			dev_err(dbd2->dev, "%s - Failed to read mode\n", __func__);
-		} else if ( state != DBMD2_DETECTION){
-			dbd2->pdata.irq_inuse = 0;
-			dbmd2_detection(dbd2);
-		}
+		schedule_work(&dbd2->uevent_work);
+
+		pr_info("SENSORY EVENT\n");
+		dev_info(dbd2->dev, "%s - SENSORY EVENT\n", __func__);
 	}
-	return IRQ_HANDLED;
-}
-
-irqreturn_t dbmd2_sv_interrupt_fn(int irq, void *dev)
-{
-	struct dbd2_data *dbd2 = (struct dbd2_data *)dev;
-
-	if (dbd2 && (dbd2->device_ready) && (dbd2->pdata.irq_inuse))
-
-		return IRQ_WAKE_THREAD;
 
 	return IRQ_HANDLED;
 }
-
-#else
-
-static int dbmd2_detect_interrupt_thread(void *dev)
-{
-	int ret;
-	struct dbd2_data *dbd2 = (struct dbd2_data *)dev;
-	u8 data[2];
-
-	while (!kthread_should_stop()) {
-		wait_event_interruptible(dbd2->irq_wq,
-					 kthread_should_stop() ||
-					 atomic_read(&dbd2->do_detection) == 1);
-
-		while (atomic_read(&dbd2->do_detection) == 1) {
-			ret = dbmd2_uart_read(dbd2, data, 2);
-			if (ret > 0 && (data[0] == 0xfd || data[1] == 0xfd)) {
-				dbmd2_detection(dbd2);
-				break;
-			}
-			msleep(10);
-		}
-		atomic_set(&dbd2->do_detection, 0);
-	}
-
-	return 0;
-}
-
-#endif
 
 /* Access to the audio buffer is controlled through "audio_owner". Either the
  * character device or the ALSA-capture device can be opened. */
@@ -5123,7 +4463,7 @@ static int dbmd2_record_release(struct inode *inode, struct file *file)
 	dbd2_data->buffering = 0;
 	uart_unlock(&dbd2_data->lock);
 
-	flush_work(&dbd2_data->sv_work);
+	flush_work(&dbd2_data->sensory_work);
 
 	atomic_dec(&dbd2_data->audio_owner);
 
@@ -5152,18 +4492,18 @@ static ssize_t dbmd2_record_read(struct file *file,
 	ssize_t to_copy = count_want;
 	int avail;
 	unsigned int copied, total_copied = 0;
+	int ret;
 	unsigned long timeout = jiffies + msecs_to_jiffies(2000);
 
 	avail = kfifo_len(&dbd2->pcm_kfifo);
 
-	if ((avail == 0) &&  (dbd2->buffering)) {
+	if ((avail == 0)&&  (dbd2->buffering)) {
 		usleep_range(100000, 110000);
 		avail = kfifo_len(&dbd2->pcm_kfifo);
 	}
 
 	while ((total_copied < count_want) && time_before(jiffies, timeout)
 		&& avail) {
-		int ret;
 
 		to_copy = avail;
 		if (count_want - total_copied < avail)
@@ -5266,49 +4606,36 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 #ifdef MSM_G1
 		dbd2->freq = 32768;
 #else
-		dbd2->freq = 32768;
+	dbd2->freq = 24576000;
 #endif
 	}
 
 	dbd2_clk_enable(true);
 	msleep(100);
-#ifndef USE_WAKEUP_FROM_UART
-	/* Speaker Verification */
-	pdata->gpio_sv = of_get_named_gpio(np, "sv-gpio", 0);
-	if (!gpio_is_valid(pdata->gpio_sv)) {
-		dev_err(dbd2->dev, "sv gpio invalid %d\n",
-			pdata->gpio_sv);
+
+/* sensory */
+	pdata->gpio_sensory = of_get_named_gpio(np, "sensory-gpio", 0);
+	if (!gpio_is_valid(pdata->gpio_sensory)) {
+		dev_err(dbd2->dev, "sensory gpio invalid %d\n",
+			pdata->gpio_sensory);
 		goto err_gpio_free;
 	}
 
-	ret = gpio_request(pdata->gpio_sv, "DBMD2 sv");
+	ret = gpio_request(pdata->gpio_sensory, "DBMD2 sensory");
 	if (ret < 0) {
-		dev_err(dbd2->dev, "error requesting sv gpio\n");
+		dev_err(dbd2->dev, "error requesting sensory gpio\n");
 		goto err_gpio_free;
 	}
-	gpio_direction_input(pdata->gpio_sv);
+	gpio_direction_input(pdata->gpio_sensory);
 
 /* interrupt gpio */
-	pdata->sv_irq = ret = gpio_to_irq(pdata->gpio_sv);
+	pdata->sensory_irq = ret = gpio_to_irq(pdata->gpio_sensory);
 	if (ret < 0) {
 		dev_err(dbd2->dev, "cannot mapped gpio to irq\n");
 		goto err_gpio_free2;
 	}
-#else
-	init_waitqueue_head(&dbd2->irq_wq);
-	atomic_set(&dbd2->do_detection, 0);
-
-	dbd2->detection_thread = kthread_run(dbmd2_detect_interrupt_thread,
-					     (void *)dbd2,
-					     "dbmd2 detection thread");
-	if (IS_ERR_OR_NULL(dbd2->detection_thread)) {
-		dev_err(dbd2->dev, "cannot start detection thread\n");
-		goto err_gpio_free;
-	}
-#endif
 
 /* wakeup */
-#if (USE_SLEEPMODE_GPIO_FOR_WAKEUP || !USE_WAKEUP_GPIO_FOR_DETECTION)
 	pdata->gpio_wakeup = of_get_named_gpio(np, "wakeup-gpio", 0);
 	if (!gpio_is_valid(pdata->gpio_wakeup)) {
 		dev_err(dbd2->dev, "wakeup gpio invalid %d\n",
@@ -5324,8 +4651,8 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 	/* keep the wakeup pin low */
 	gpio_direction_output(pdata->gpio_wakeup, 0);
 	gpio_set_value(pdata->gpio_wakeup, 0);
-#endif
-	INIT_WORK(&dbd2->sv_work, dbmd2_sv_work);
+
+	INIT_WORK(&dbd2->sensory_work, dbmd2_sensory_work);
 	INIT_WORK(&dbd2->uevent_work, dbmd2_uevent_work);
 	mutex_init(&dbd2->lock);
 
@@ -5353,7 +4680,7 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 #ifdef MSM_G1
 	dbd2->clock_config[2] = 0x0000; /* DSP clock 148MHz; UART 3Mb */
 #else
-	dbd2->clock_config[2] = 0x0000; /* DSP clock 148MHz; UART 3Mb */
+	dbd2->clock_config[2] = 0x1000; /* DSP clock 148MHz; UART 3Mb */
 #endif
 	ret = of_property_read_u16_array(np, "clock_config",
 					 (u16 *)&(dbd2->clock_config), 3);
@@ -5367,7 +4694,7 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 #ifdef MSM_G1
 	dbd2->uart_speed[2] = 1000000;
 #else
-	dbd2->uart_speed[2] = 1000000;
+	dbd2->uart_speed[2] = 3000000;
 #endif
 	ret = of_property_read_u32_array(np, "uart_speed",
 					 (u32 *)&(dbd2->uart_speed), 3);
@@ -5399,14 +4726,11 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 		dev_err(dbd2->dev, "invalid 'mic_mode'\n");
 		goto err_kfifo_free;
 	}
-#if USE_WAKEUP_GPIO_FOR_DETECTION
-	dbd2->gpio_reg_config =  0x53F;
-#else
+
 #ifdef MSM_G1
 	dbd2->gpio_reg_config =  0x53A;
 #else
-	dbd2->gpio_reg_config =  0x537;
-#endif
+	dbd2->gpio_reg_config =  0x532;
 #endif
 	ret = of_property_read_u32(np,
 		"dbd2_gpio_cfg", &dbd2->gpio_reg_config);
@@ -5424,8 +4748,7 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 
 	ret = of_property_read_u32(np, "audio_mode", &dbd2->audio_mode);
 	if ((ret && ret != -EINVAL) ||
-	    (dbd2->audio_mode != DBD2_AUDIO_MODE_PCM
-	&& dbd2->audio_mode != DBD2_AUDIO_MODE_MU_LAW)) {
+	    (dbd2->audio_mode != 0 && dbd2->audio_mode != 1)) {
 		dev_err(dbd2->dev, "invalid 'audio_mode'\n");
 		goto err_kfifo_free;
 	}
@@ -5446,23 +4769,21 @@ static int dbmd2_common_probe(struct dbd2_data *dbd2)
 	}
 
 	pdata->irq_inuse = 0;
-#ifndef USE_WAKEUP_FROM_UART
-	ret = request_threaded_irq(dbd2->pdata.sv_irq,
-				  dbmd2_sv_interrupt_fn,
-				  dbmd2_sv_interrupt,
+	ret = request_irq(dbd2->pdata.sensory_irq, dbmd2_sensory_interrupt,
 				  IRQF_TRIGGER_RISING,
-				  "dbmd2_sv", dbd2);
+				  "dbmd2_sensory", dbd2);
 	if (ret < 0) {
 		dev_err(dbd2->dev, "cannot get irq\n");
 		goto err_kfifo_free;
 	}
 
-	ret = irq_set_irq_wake(dbd2->pdata.sv_irq, 1);
+	ret = irq_set_irq_wake(dbd2->pdata.sensory_irq, 1);
 	if (ret < 0) {
 			dev_err(dbd2->dev, "cannot set irq_set_irq_wake\n");
 			goto err_free_irq;
 	}
-#endif
+	enable_irq(dbd2->pdata.sensory_irq);
+
 	ns_class = class_create(THIS_MODULE, "voice_trigger");
 	if (IS_ERR(ns_class)) {
 		dev_err(dbd2->dev, "failed to create class\n");
@@ -5549,21 +4870,12 @@ err_kfifo_free:
 	kfifo_free(&dbd2->pcm_kfifo);
 err_free_irq:
 	dbd2->pdata.irq_inuse = 0;
-#ifndef USE_WAKEUP_FROM_UART
-	irq_set_irq_wake(dbd2->pdata.sv_irq, 0);
-	free_irq(dbd2->pdata.sv_irq, dbd2);
-#endif
+	irq_set_irq_wake(dbd2->pdata.sensory_irq, 0);
+	free_irq(dbd2->pdata.sensory_irq, dbd2);
 err_gpio_free3:
-#if (USE_SLEEPMODE_GPIO_FOR_WAKEUP || !USE_WAKEUP_GPIO_FOR_DETECTION)
 	gpio_free(dbd2->pdata.gpio_wakeup);
-#endif
 err_gpio_free2:
-#ifndef USE_WAKEUP_FROM_UART
-	gpio_free(dbd2->pdata.gpio_sv);
-#else
-	kthread_stop(dbd2->detection_thread);
-	dbd2->detection_thread = NULL;
-#endif
+	gpio_free(dbd2->pdata.gpio_sensory);
 err_gpio_free:
 	gpio_free(dbd2->pdata.gpio_reset);
 err_kfree3:
@@ -5673,21 +4985,12 @@ static void dbmd2_common_remove(struct dbd2_data *dbd2)
 	device_unregister(dbd2_dev);
 	class_destroy(ns_class);
 	dbd2->pdata.irq_inuse = 0;
-#ifndef USE_WAKEUP_FROM_UART
-	disable_irq(dbd2->pdata.sv_irq);
-	irq_set_irq_wake(dbd2->pdata.sv_irq, 0);
-	free_irq(dbd2->pdata.sv_irq, dbd2);
-#endif
-#if (USE_SLEEPMODE_GPIO_FOR_WAKEUP || !USE_WAKEUP_GPIO_FOR_DETECTION)
+	disable_irq(dbd2->pdata.sensory_irq);
+	irq_set_irq_wake(dbd2->pdata.sensory_irq, 0);
+	free_irq(dbd2->pdata.sensory_irq, dbd2);
 	gpio_free(dbd2->pdata.gpio_wakeup);
-#endif
 	gpio_free(dbd2->pdata.gpio_reset);
-#ifndef USE_WAKEUP_FROM_UART
-	gpio_free(dbd2->pdata.gpio_sv);
-#else
-	kthread_stop(dbd2->detection_thread);
-	dbd2->detection_thread = NULL;
-#endif
+	gpio_free(dbd2->pdata.gpio_sensory);
 	kfifo_free(&dbd2->pcm_kfifo);
 	kfree(dbd2->amodel_fw_name);
 	vfree(dbd2->amodel_buf);

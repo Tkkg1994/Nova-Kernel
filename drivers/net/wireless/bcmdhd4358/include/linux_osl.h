@@ -175,10 +175,6 @@ extern void osl_dma_unmap(osl_t *osh, uint pa, uint size, int direction);
 /* API for DMA addressing capability */
 #define OSL_DMADDRWIDTH(osh, addrwidth) ({BCM_REFERENCE(osh); BCM_REFERENCE(addrwidth);})
 
-/* API for CPU relax */
-extern void osl_cpu_relax(void);
-#define OSL_CPU_RELAX() osl_cpu_relax()
-
 #if (defined(USE_KMALLOC_FOR_FLOW_RING) && defined(__ARM_ARCH_7A__))
 	extern void osl_cache_flush(void *va, uint size);
 	extern void osl_cache_inv(void *va, uint size);
@@ -329,9 +325,11 @@ extern int osl_error(int bcmerror);
 #ifdef CONFIG_DHD_USE_STATIC_BUF
 #define	PKTGET_STATIC(osh, len, send)		osl_pktget_static((osh), (len))
 #define	PKTFREE_STATIC(osh, skb, send)		osl_pktfree_static((osh), (skb), (send))
+#define PKTCLEAR_STATIC(osh)		osl_pktclear_static((osh))
 #else
 #define	PKTGET_STATIC	PKTGET
 #define	PKTFREE_STATIC	PKTFREE
+#define PKTCLEAR_STATIC(osh)
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
 #define	PKTDATA(osh, skb)		({BCM_REFERENCE(osh); (((struct sk_buff*)(skb))->data);})
 #define	PKTLEN(osh, skb)		({BCM_REFERENCE(osh); (((struct sk_buff*)(skb))->len);})
@@ -530,6 +528,7 @@ extern void osl_ctfpool_stats(osl_t *osh, void *b);
 extern void osl_pktfree(osl_t *osh, void *skb, bool send);
 extern void *osl_pktget_static(osl_t *osh, uint len);
 extern void osl_pktfree_static(osl_t *osh, void *skb, bool send);
+extern void osl_pktclear_static(osl_t *osh);
 extern void osl_pktclone(osl_t *osh, void **pkt);
 
 extern void *osl_pkt_frmnative(osl_t *osh, void *skb);

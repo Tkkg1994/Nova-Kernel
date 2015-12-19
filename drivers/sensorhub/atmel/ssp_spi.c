@@ -35,6 +35,11 @@ static int do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 	msg->dead = false;
 	msg->done = done;
 
+	if (data->bSuspended) {
+		pr_err("[SSP]: %s - Sensorhub is suspended.!!\n", __func__);
+		return -1;
+	}
+
 	mutex_lock(&data->comm_mutex);
 
 	gpio_set_value_cansleep(data->ap_int, 0);
@@ -46,12 +51,6 @@ static int do_transfer(struct ssp_data *data, struct ssp_msg *msg,
 			status = -1;
 			goto exit;
 		}
-	}
-
-	if (data->bSuspended) {
-		pr_err("[SSP]: %s - Sensorhub is suspended.!!\n", __func__);
-		mutex_unlock(&data->comm_mutex);
-		return -1;
 	}
 
 	status = spi_write(data->spi, msg, 9) >= 0;

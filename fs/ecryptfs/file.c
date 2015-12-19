@@ -349,40 +349,26 @@ static int ecryptfs_open(struct inode *inode, struct file *file)
 		goto out;
 	}
 	rc = read_or_initialize_metadata(ecryptfs_dentry);
-	if (rc) {
-#ifdef CONFIG_SDP
-	    if(file->f_flags & O_SDP){
-            printk("Failed to initialize metadata, "
-                    "but let it continue cause current call is from SDP API\n");
-            mutex_lock(&crypt_stat->cs_mutex);
-            crypt_stat->flags &= ~(ECRYPTFS_KEY_VALID);
-            mutex_unlock(&crypt_stat->cs_mutex);
-            rc = 0;
-            /*
-             * Letting this continue doesn't mean to allow read/writing. It will anyway fail later.
-             *
-             * 1. In this stage, ecryptfs_stat won't have key/iv and encryption ctx.
-             * 2. ECRYPTFS_KEY_VALID bit is off, next attempt will try reading metadata again.
-             * 3. Skip DEK conversion. it cannot be done anyway.
-             */
-            goto out;
-	    }
-#endif
+	if (rc)
 		goto out_put;
-	}
 #ifdef CONFIG_SDP
 	if (crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE) {
-#ifdef CONFIG_SDP_KEY_DUMP
-        if (S_ISREG(ecryptfs_dentry->d_inode->i_mode)) {
-            if(get_sdp_sysfs_key_dump()) {
-                printk("FEK[%s] : ", ecryptfs_dentry->d_name.name);
-                dek_dump(crypt_stat->key, 32);
-            }
-	}
-#endif
-
 		if (ecryptfs_is_persona_locked(crypt_stat->userid)) {
 			ecryptfs_printk(KERN_INFO, "ecryptfs_open: persona is locked, rc=%d\n", rc);
+#if 0
+			if (file->f_flags & O_SDP) {
+				ecryptfs_printk(KERN_INFO, "ecryptfs_open: O_SDP is set, allow open, rc=%d\n", rc);
+				mutex_lock(&crypt_stat->cs_mutex);
+				crypt_stat->flags &= ~(ECRYPTFS_KEY_VALID);
+				mutex_unlock(&crypt_stat->cs_mutex);
+			} else {
+				mutex_lock(&crypt_stat->cs_mutex);
+				crypt_stat->flags &= ~(ECRYPTFS_KEY_VALID);
+				mutex_unlock(&crypt_stat->cs_mutex);
+				rc = -EACCES;
+				goto out_put;
+			}
+#endif
 		} else {
 			int dek_type = crypt_stat->sdp_dek.type;
 
@@ -571,14 +557,6 @@ ecryptfs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct file *lower_file = NULL;
 	long rc = -ENOIOCTLCMD;
 
-#ifdef CONFIG_SDP
-	rc = ecryptfs_do_sdp_ioctl(file, cmd, arg);
-	if (rc == 0)
-		return rc;
-#else
-	printk("%s CONFIG_SDP not enabled \n", __func__);
-#endif
-
 	if (ecryptfs_file_to_private(file))
 		lower_file = ecryptfs_file_to_lower(file);
 	if (lower_file && lower_file->f_op && lower_file->f_op->compat_ioctl)
@@ -607,7 +585,8 @@ int is_file_name_match(struct ecryptfs_mount_crypt_stat *mcs,
 	for (i = 0; i < ENC_NAME_FILTER_MAX_INSTANCE; i++) {
 		int len = 0;
 		struct dentry *p = fp_dentry;
-		if (!strlen(mcs->enc_filter_name[i]))
+		if (!mcs->enc_filter_name[i] ||
+			 !strlen(mcs->enc_filter_name[i]))
 			break;
 
 		while (1) {
@@ -657,7 +636,7 @@ int is_file_ext_match(struct ecryptfs_mount_crypt_stat *mcs, char *str)
 		return 0;
 
 	for (i = 0; i < ENC_EXT_FILTER_MAX_INSTANCE; i++) {
-		if (!strlen(mcs->enc_filter_ext[i]))
+		if (!mcs->enc_filter_ext[i] || !strlen(mcs->enc_filter_ext[i]))
 			return 0;
 		if (strlen(ext) != strlen(mcs->enc_filter_ext[i]))
 			continue;

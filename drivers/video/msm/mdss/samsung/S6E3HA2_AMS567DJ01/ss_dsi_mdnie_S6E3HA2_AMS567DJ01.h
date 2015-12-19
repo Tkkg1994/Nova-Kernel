@@ -792,7 +792,7 @@ static char DSI0_HBM_CE_MDNIE_2[] = {
 	0x01, //cs_gain 10
 	0x40,
 	0x00, //curve_1_b
-	0x6b, //curve_1_a
+	0x7b, //curve_1_a
 	0x03, //curve_2_b
 	0x48, //curve_2_a
 	0x08, //curve_3_b
@@ -817,26 +817,26 @@ static char DSI0_HBM_CE_MDNIE_2[] = {
 	0x28, //curve12_a
 	0x19, //curve13_b
 	0x22, //curve13_a
-	0x03, //curve14_b
-	0xb3, //curve14_a
-	0x03, //curve15_b
-	0xb3, //curve15_a
-	0x03, //curve16_b
-	0xb3, //curve16_a
-	0x03, //curve17_b
-	0xb3, //curve17_a
-	0x27, //curve18_b
-	0x21, //curve18_a
-	0x34, //curve19_b
-	0x1c, //curve19_a
-	0x40, //curve20_b
-	0x19, //curve20_a
-	0x45, //curve21_b
-	0x18, //curve21_a
-	0x58, //curve22_b
-	0x15, //curve22_a
-	0x58, //curve23_b
-	0x15, //curve23_a
+	0x70, //curve14_b
+	0xf7, //curve14_a
+	0x70, //curve15_b
+	0xf7, //curve15_a
+	0x70, //curve16_b
+	0xf7, //curve16_a
+	0x70, //curve17_b
+	0xf7, //curve17_a
+	0x66, //curve18_b
+	0x1a, //curve18_a
+	0x76, //curve19_b
+	0x14, //curve19_a
+	0x82, //curve20_b
+	0x11, //curve20_a
+	0x92, //curve21_b
+	0x0e, //curve21_a
+	0x98, //curve22_b
+	0x0d, //curve22_a
+	0x9f, //curve23_b
+	0x0c, //curve23_a
 	0x00, //curve24_b
 	0xFF, //curve24_a
 	0x30, //linear_on ascr_skin_on strength 0 0 00000
@@ -859,8 +859,8 @@ static char DSI0_HBM_CE_MDNIE_2[] = {
 	0x34,
 	0x83,
 	0xff, //ascr_skin_Rr
-	0x30, //ascr_skin_Rg
-	0x30, //ascr_skin_Rb
+	0x50, //ascr_skin_Rg
+	0x60, //ascr_skin_Rb
 	0xff, //ascr_skin_Yr
 	0xff, //ascr_skin_Yg
 	0x00, //ascr_skin_Yb
@@ -921,7 +921,7 @@ static char DSI0_HBM_CE_TEXT_MDNIE_2[] = {
 	0x7f, //lce_bin_size_ratio
 	0x00, //lce_dark_th 000
 	0x40, //lce_min_ref_offset
-	0x06, //nr fa de cs gamma 0 0000
+	0x07, //nr fa de cs gamma 0 0000
 	0xff, //nr_mask_th
 	0x00, //de_gain 10
 	0x60,
@@ -1011,13 +1011,13 @@ static char DSI0_HBM_CE_TEXT_MDNIE_2[] = {
 	0x30, //linear_on ascr_skin_on strength 0 0 00000
 	0x67, //ascr_skin_cb
 	0xa9, //ascr_skin_cr
-	0x56, //ascr_dist_up
+	0x17, //ascr_dist_up
 	0x29, //ascr_dist_down
 	0x19, //ascr_dist_right
-	0x67, //ascr_dist_left
+	0x27, //ascr_dist_left
 	0x00, //ascr_div_up 20
-	0x17,
-	0xd0,
+	0x59,
+	0x0b,
 	0x00, //ascr_div_down
 	0x31,
 	0xf4,
@@ -1025,13 +1025,13 @@ static char DSI0_HBM_CE_TEXT_MDNIE_2[] = {
 	0x51,
 	0xec,
 	0x00, //ascr_div_left
-	0x13,
-	0xe2,
+	0x34,
+	0x83,
 	0xff, //ascr_skin_Rr
-	0xa0, //ascr_skin_Rg
-	0xa0, //ascr_skin_Rb
+	0x50, //ascr_skin_Rg
+	0x60, //ascr_skin_Rb
 	0xff, //ascr_skin_Yr
-	0x90, //ascr_skin_Yg
+	0xff, //ascr_skin_Yg
 	0x00, //ascr_skin_Yb
 	0xff, //ascr_skin_Mr
 	0x00, //ascr_skin_Mg

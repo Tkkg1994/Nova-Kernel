@@ -61,5 +61,4 @@ void msm_hs_set_mctrl(struct uart_port *uport,
 
 struct uart_port * msm_hs_get_port_by_id(int num);
 int msm_hs_get_clock_state(struct uart_port *uport);
-int msm_hs_get_clock_count(struct uart_port *uport);
 #endif

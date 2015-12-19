@@ -44,10 +44,6 @@
 	qcom,dsi-pref-prim-pan = <&ss_dsi_panel_S6E3HF2_AMS559DE01_WQXGA_0>;
 	qcom,platform-te-gpio = <&msmgpio 12 0>;
 
-	/*qcom,dsi-panel-bias-vreg;*/
-	qcom,platform-enable-gpio = <&pma8084_gpios 6 0>;
-	qcom,platform-reset-gpio = <&pma8084_gpios 21 0>;
-
 	iovdd-supply = <&pma8084_l26>;
 };
 
@@ -135,7 +131,7 @@
 		stm,tsp-project = "TB_LTE";
 		stm,tsp-coords = <1599 2559>;
 		vdd_keyled-supply = <&pma8084_l23>;
-	};
+	};	
 };
 
 &i2c_3  {
@@ -157,7 +153,7 @@
 
 /* Device tree for Japan starts from here  */
 	/delete-node/ i2c@f9926000;
-
+	
 	sec_nfc {
 		compatible = "sec-nfc";
 		sec-nfc,pon-gpio = 	<&msmgpio 121 0x00>;
@@ -171,14 +167,14 @@
 	};
 
 	/delete-node/cover_uart;
-
+	
 	/* NEED TO CHANGE THE FOLLOWING DEVICE ENTRY */
 	felica_uart: serial@f9920000 {
 		compatible = "qcom,msm-lsuart-v14";
 		interrupts = <0 110 0>;
 		reg = <0xf9920000 0x1000>;
 		status = "ok";
-
+		
 		qcom,config-gpio = <4>;
 		qcom,tx-gpio = <&msmgpio 27 0x00>;
 		qcom,rx-gpio = <&msmgpio 28 0x00>;
@@ -213,7 +209,7 @@
 	earjack {
 		/delete-property/ qcom,earjack-fsa_en-expander-gpio;
 	};
-
+	
 	sound {
 		qcom,earjack-fsa_en_gpio = <310>;
 	};

@@ -2123,12 +2123,9 @@ static int msm_hs_check_clock_off(struct uart_port *uport)
 {
 	unsigned long sr_status;
 	unsigned long flags;
-#ifdef CONFIG_MSM_BT_POWER
-//	unsigned int data;
-#endif
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
 	struct circ_buf *tx_buf = &uport->state->xmit;
-    struct platform_device *pdev = to_platform_device(uport->dev);
+	struct platform_device *pdev = to_platform_device(uport->dev);
 
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
@@ -2396,24 +2393,28 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	unsigned long flags;
 	unsigned int data;
 	int ret = 0;
-    struct platform_device *pdev = to_platform_device(uport->dev);
+	int cur_clk_state;
+	struct platform_device *pdev = to_platform_device(uport->dev);
 
+	/*
+	 * cancel the hrtimer first so that
+	 * clk_state can not change in flight
+	 */
+	hrtimer_cancel(&msm_uport->clk_off_timer);
+	flush_work(&msm_uport->clock_off_w);
+	cur_clk_state = msm_uport->clk_state;
+	msm_hs_clock_vote(msm_uport);
 	mutex_lock(&msm_uport->clk_mutex);
 	spin_lock_irqsave(&uport->lock, flags);
 
 #ifdef CONFIG_MSM_BT_POWER
-	if (msm_uport->clk_state == MSM_HS_CLK_REQUEST_OFF) {
-		/* Pulling RFR line high */
-		msm_hs_write(uport, UART_DM_CR, RFR_LOW);
-		/* Enable auto RFR */
-		data = msm_hs_read(uport, UART_DM_MR1);
-		data |= UARTDM_MR1_RX_RDY_CTL_BMSK;
-		msm_hs_write(uport, UART_DM_MR1, data);
-		mb();
+	if (cur_clk_state == MSM_HS_CLK_REQUEST_OFF) {
+		msm_uport->clk_state = MSM_HS_CLK_ON;
+		msm_hs_enable_flow_control(uport);
 	}
 #endif
 
-	switch (msm_uport->clk_state) {
+	switch (cur_clk_state) {
 	case MSM_HS_CLK_OFF:
 		if (pdev->id == 0)
 			printk(KERN_INFO "(msm_serial_hs) msm_hs_check_clock_on - dma wake lock\n");
@@ -2424,10 +2425,10 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 			disable_irq_nosync(msm_uport->wakeup.irq);
 
 		spin_unlock_irqrestore(&uport->lock, flags);
-
 		mutex_unlock(&msm_uport->clk_mutex);
 		ret = msm_hs_clock_vote(msm_uport);
 		mutex_lock(&msm_uport->clk_mutex);
+                spin_lock_irqsave(&uport->lock, flags);
 		if (ret) {
 			MSM_HS_INFO("Clock ON Failure"
 			"For UART CLK Stalling HSUART\n");
@@ -2437,10 +2438,8 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 		/* uport-irq was disabled when clocked off */
 		enable_irq(uport->irq);
 
-		spin_lock_irqsave(&uport->lock, flags);
 		/* else fall-through */
 	case MSM_HS_CLK_REQUEST_OFF:
-		hrtimer_cancel(&msm_uport->clk_off_timer);
 		if (msm_uport->rx.flush == FLUSH_STOP) {
 			spin_unlock_irqrestore(&uport->lock, flags);
 			MSM_HS_DBG("%s:Calling wait forxcompletion\n",
@@ -2456,8 +2455,6 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 		}
 		MSM_HS_DBG("%s:clock state %d\n\n", __func__,
 				msm_uport->clk_state);
-		if (msm_uport->clk_state == MSM_HS_CLK_REQUEST_OFF)
-				msm_uport->clk_state = MSM_HS_CLK_ON;
 		if (msm_uport->rx.flush == FLUSH_STOP ||
 		    msm_uport->rx.flush == FLUSH_SHUTDOWN) {
 			msm_hs_write(uport, UART_DM_CR, RESET_RX);
@@ -2489,6 +2486,7 @@ void msm_hs_request_clock_on(struct uart_port *uport)
 	dump_uart_hs_registers(msm_uport);
 	spin_unlock_irqrestore(&uport->lock, flags);
 	mutex_unlock(&msm_uport->clk_mutex);
+	msm_hs_clock_unvote(msm_uport);
 }
 EXPORT_SYMBOL(msm_hs_request_clock_on);
 

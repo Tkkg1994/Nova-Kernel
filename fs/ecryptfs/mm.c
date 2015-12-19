@@ -19,25 +19,21 @@ extern spinlock_t inode_sb_list_lock;
 static int ecryptfs_mm_debug = 0;
 DEFINE_MUTEX(ecryptfs_mm_mutex);
 
-struct ecryptfs_mm_drop_cache_param {
-    int user_id;
-};
-
 static void ecryptfs_mm_drop_pagecache(struct super_block *sb, void *arg)
 {
 	struct inode *inode, *toput_inode = NULL;
-	struct ecryptfs_mm_drop_cache_param *param = arg;
+	int ecryptfs_mm_userid = (int)arg;
 
-	//printk("%s() sb:%s, userid:%d\n", __func__, sb->s_type->name, param->user_id);
+	//printk("%s() sb:%s, userid:%d\n", __func__, sb->s_type->name, ecryptfs_mm_userid);
 
 	if(!strcmp("ecryptfs", sb->s_type->name)) {
 		struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
 				&(ecryptfs_superblock_to_private(sb)->mount_crypt_stat);
 
-		if(mount_crypt_stat->userid == param->user_id) {
+		if(mount_crypt_stat->userid == ecryptfs_mm_userid) {
 			struct ecryptfs_crypt_stat *crypt_stat;
 
-			printk("%s() sb found userid:%d\n", __func__, param->user_id);
+			printk("%s() sb found userid:%d\n", __func__, ecryptfs_mm_userid);
 
 			spin_lock(&inode_sb_list_lock);
 			list_for_each_entry(inode, &sb->s_inodes, i_sb_list)
@@ -103,30 +99,19 @@ static void ecryptfs_mm_drop_pagecache(struct super_block *sb, void *arg)
 static int
 ecryptfs_mm_task(void *arg)
 {
-    struct ecryptfs_mm_drop_cache_param *param = arg;
-
 	mutex_lock(&ecryptfs_mm_mutex);
-	iterate_supers(ecryptfs_mm_drop_pagecache, param);
+	iterate_supers(ecryptfs_mm_drop_pagecache, arg);
 	mutex_unlock(&ecryptfs_mm_mutex);
 
-	kfree(param);
 	return 0;
 }
 
 void ecryptfs_mm_drop_cache(int userid) {
 #if 1
 	struct task_struct *task;
-	struct ecryptfs_mm_drop_cache_param *param =
-	        kzalloc(sizeof(*param), GFP_KERNEL);
 
-    if (!param) {
-        printk("%s :: skip. no memory to alloc param\n", __func__);
-        return;
-    }
-    param->user_id = userid;
-
-	printk("running cache cleanup thread - sdp-id : %d \n", userid);
-	task = kthread_run(ecryptfs_mm_task, param, "sdp_cached");
+	printk("running cache cleanup thread - sdp-id : %d\n", userid);
+	task = kthread_run(ecryptfs_mm_task, (void *)userid, "sdp_cached");
 
 	if (IS_ERR(task)) {
 		printk(KERN_ERR "SDP : unable to create kernel thread: %ld\n",

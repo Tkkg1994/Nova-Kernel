@@ -153,6 +153,10 @@ new_segment:
 	*bvprv = bvec;
 }
 
+#include <linux/mmc/core.h>
+extern u8 *sg_ptr0;
+extern u8 *sg_ptr1;
+
 /*
  * map a request to scatterlist, return number of sg entries setup. Caller
  * must make sure sg can hold rq->nr_phys_segments entries
@@ -177,6 +181,17 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 		__blk_segment_map_sg(q, bvec, sglist, &bvprv, &sg,
 				     &nsegs, &cluster);
 	} /* segments in rq */
+
+	/*
+	 * when sg_gptX pointer is exist, then completion path not yet
+	 * finished, so we can't map new request into yet used sg
+	 */
+	if (sg_ptr0) {
+		BUG_ON(sg_ptr0 == (u8 *)sglist);
+	}
+	if (sg_ptr1) {
+		BUG_ON(sg_ptr1 == (u8 *)sglist);
+	}
 
 	if (unlikely(rq->cmd_flags & REQ_COPY_USER) &&
 	    (blk_rq_bytes(rq) & q->dma_pad_mask)) {

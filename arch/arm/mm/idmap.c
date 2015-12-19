@@ -10,7 +10,7 @@
 #include <asm/system_info.h>
 
 pgd_t *idmap_pgd;
-extern int boot_mode_security;
+
 #ifdef CONFIG_ARM_LPAE
 static void idmap_add_pmd(pud_t *pud, unsigned long addr, unsigned long end,
 	unsigned long prot)
@@ -51,7 +51,7 @@ static void idmap_add_pmd(pud_t *pud, unsigned long addr, unsigned long end,
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
         __asm__ __volatile__(".arch_extension sec");
 #endif
-	if (tima_is_pg_protected((unsigned long) pmd) == 0 && boot_mode_security == 0) {
+	if (tima_is_pg_protected((unsigned long) pmd) == 0) {
 		pmd[0] = __pmd(addr);
 		addr += SECTION_SIZE;
 		pmd[1] = __pmd(addr);

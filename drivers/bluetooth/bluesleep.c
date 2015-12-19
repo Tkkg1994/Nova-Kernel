@@ -158,24 +158,9 @@ static int bluesleep_get_uart_state(void)
 {
 	int state = 0;
 
-	if (bsi->uport == NULL)
-		return -1;
-
 	state = msm_hs_get_clock_state(bsi->uport);
 	return state;
 }
-
-static int bluesleep_get_uart_clock_count(void)
-{
-	int state = 0;
-
-	if (bsi->uport == NULL)
-		return -1;
-
-	state = msm_hs_get_clock_count(bsi->uport);
-	return state;
-}
-
 
 static void bluesleep_uart_awake_work(struct work_struct *work)
 {
@@ -200,18 +185,13 @@ static void hsuart_power(int on)
 {
 	int clk_state;
 
-	if (test_bit(BT_SUSPEND, &flags)) {
-		BT_DBG("it's suspend state. waiting for resume.");
+	if (test_bit(BT_SUSPEND, &flags) && !on) {
+		BT_DBG("hsuart_power OFF- it's suspend state. so return.");
 		return;
 	}
 
 	if (!bsi->uport) {
 		BT_DBG("hsuart_power called. But uport is null");
-		return;
-	}
-
-	if (on && bluesleep_get_uart_clock_count() >= 1) {
-		BT_DBG("hsuart_power called. But HS Uart clock count is %d", bluesleep_get_uart_clock_count());
 		return;
 	}
 
@@ -959,13 +939,12 @@ static int bluesleep_resume(struct platform_device *pdev)
 						GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
 		}
 #endif
-
-		clear_bit(BT_SUSPEND, &flags);
 		if ((bsi->uport != NULL) &&
 			(gpio_get_value(bsi->host_wake) == bsi->irq_polarity)) {
 				BT_DBG("bluesleep resume form BT event...");
 				hsuart_power(1);
 		}
+		clear_bit(BT_SUSPEND, &flags);
 	}
 	return 0;
 }

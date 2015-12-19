@@ -130,7 +130,6 @@ typedef struct dhd_bus {
 	pciedev_shared_t	*pcie_sh;
 	bool bus_flowctrl;
 	ioctl_comp_resp_msg_t	ioct_resp;
-	ioctl_comp_resp_msg_t	ioct_resp_prev;
 	uint32		dma_rxoffset;
 	volatile char	*regs;		/* pci device memory va */
 	volatile char	*tcm;		/* pci device memory va */

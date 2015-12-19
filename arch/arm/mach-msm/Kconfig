@@ -1666,7 +1666,7 @@ config KNOX_KAP
 
 config TIMA_RKP
        bool "Enable RKP (Realtime Kernel Protection) TIMA feature"
-       default n
+       default y
 
 config TIMA_RKP_30
        bool "Enable RKP TIMA 3.0 features"

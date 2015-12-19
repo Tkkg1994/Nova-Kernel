@@ -568,12 +568,10 @@ int mdss_mdp_csc_setup(u32 block, u32 blk_idx, u32 tbl_idx, u32 csc_type)
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (csc_type == MDSS_MDP_CSC_YUV2RGB && !csc_update) {
 		data = &mdp_csc_convert_wideband;
-		if(csc_change)
-			pr_info("will do mdp_csc_convert (wide band)\n");
+		pr_info("will do mdp_csc_convert (wide band)\n");
 	} else {
 	data = &mdp_csc_convert[csc_type];
-		if(csc_change)
-			pr_info("will do mdp_csc_convert (narrow band)\n");
+		pr_info("will do mdp_csc_convert (narrow band)\n");
 	}
 #else
 	data = &mdp_csc_convert[csc_type];
@@ -905,6 +903,7 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, 1,
 					   MDSS_MDP_CSC_YUV2RGB);
 #else
+
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, 1,
 						   MDSS_MDP_CSC_YUV2RGB);
 #endif

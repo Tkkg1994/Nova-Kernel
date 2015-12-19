@@ -5669,8 +5669,6 @@ wl_cfg80211_cancel_remain_on_channel(struct wiphy *wiphy,
 	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
 	s32 err = 0;
 
-	RETURN_EIO_IF_NOT_UP(cfg);
-
 #if defined(WL_CFG80211_P2P_DEV_IF)
 	if (cfgdev->iftype == NL80211_IFTYPE_P2P_DEVICE) {
 		WL_DBG((" enter ) on P2P dedicated discover interface\n"));
@@ -11357,10 +11355,6 @@ static s32 wl_init_scan(struct bcm_cfg80211 *cfg)
 	init_timer(&cfg->scan_timeout);
 	cfg->scan_timeout.data = (unsigned long) cfg;
 	cfg->scan_timeout.function = wl_scan_timeout;
-
-#ifdef WL11U
-	cfg->iw_ie_len = 0; /* init interworking IE in probe request */
-#endif /* WL11U */
 
 	return err;
 }

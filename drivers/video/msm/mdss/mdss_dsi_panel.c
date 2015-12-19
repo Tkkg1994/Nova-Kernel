@@ -242,7 +242,7 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
+static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int rc = 0;
 
@@ -254,6 +254,9 @@ int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 				       rc);
 			goto disp_en_gpio_err;
 		}
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		else ctrl_pdata->disp_en_gpio_requested = 1;
+#endif
 	}
 	rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
 	if (rc) {
@@ -261,7 +264,9 @@ int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			rc);
 		goto rst_gpio_err;
 	}
-
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	else  ctrl_pdata->rst_gpio_requested = 1;
+#endif
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 		rc = gpio_request(ctrl_pdata->bklt_en_gpio,
 						"bklt_enable");
@@ -306,12 +311,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
-#if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+
 	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 		pr_info("%s:%d, disp_en line not configured\n",
 			   __func__, __LINE__);
 	}
-#endif
 
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
 		pr_info("%s:%d, reset line not configured\n",
@@ -328,25 +332,19 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		return 0;
 	}
 #endif
+	pr_info("%s: enable = %d\n", __func__, enable);
 	pinfo = &(ctrl_pdata->panel_data.panel_info);
+
 	if (enable) {
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-		if (ctrl_pdata->cmd_sync_wait_broadcast && !ctrl_pdata->cmd_sync_wait_trigger)
-			return 0;/*on reset: have to controlled on dsi 1 on broadcast*/
-#else
 		rc = mdss_dsi_request_gpios(ctrl_pdata);
 		if (rc) {
 			pr_err("gpio request failed\n");
 			return rc;
 		}
-#endif
-		pr_info("%s: enable = %d\n", __func__, enable);
-
 		if (!pinfo->cont_splash_enabled) {
-#if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 			if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
 				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
-#endif
+
 			for (i = 0; i < pdata->panel_info.rst_seq_len; ++i) {
 				gpio_set_value((ctrl_pdata->rst_gpio),
 					pdata->panel_info.rst_seq[i]);
@@ -370,28 +368,32 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
 			pr_err("%s: Reset panel done\n", __func__);
 		}
-	}else {
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-		if (ctrl_pdata->cmd_sync_wait_broadcast && ctrl_pdata->cmd_sync_wait_trigger)
-			return 0; /*off reset :have to controlled on dsi 0 on broadcast*/
-#endif
-		pr_info("%s: enable = %d\n", __func__, enable);
-
+	} else {
 		if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
 			gpio_free(ctrl_pdata->bklt_en_gpio);
 		}
-#if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if (ctrl_pdata->disp_en_gpio_requested){
+			ctrl_pdata->disp_en_gpio_requested = 0;
+#else
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)){
-			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
-		}
 #endif
+			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			gpio_free(ctrl_pdata->disp_en_gpio);
+		}
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+		if (ctrl_pdata->rst_gpio_requested) {
+			ctrl_pdata->rst_gpio_requested = 0;
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
+			gpio_free(ctrl_pdata->rst_gpio);
+		}
+#else
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
-
+		gpio_free(ctrl_pdata->rst_gpio);
+#endif
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
-
-		usleep_range(4000, 4000);
 	}
 	return rc;
 }

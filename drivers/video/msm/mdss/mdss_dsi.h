@@ -302,6 +302,10 @@ struct mdss_dsi_ctrl_pdata {
 	int disp_te_gpio;
 	int rst_gpio;
 	int disp_en_gpio;
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	int rst_gpio_requested;
+	int disp_en_gpio_requested;
+#endif
 	int bklt_en_gpio;
 	int mode_gpio;
 	int bklt_ctrl;	/* backlight ctrl */
@@ -532,7 +536,6 @@ int mdss_samsung_parse_dcs_cmds(struct device_node *np,
 u32 mdss_samsung_panel_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct dsi_panel_cmds *pcmds, int read_size);
 struct mdss_dsi_ctrl_pdata **mdss_dsi_get_ctrl(void);
-int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 #endif /* MDSS_DSI_H */
 

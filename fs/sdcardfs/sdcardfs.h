@@ -45,9 +45,6 @@
 #include <linux/ratelimit.h>
 #include "multiuser.h"
 
-/* the file system magic number */
-#define SDCARDFS_SUPER_MAGIC	0xb550ca10
-
 /* the file system name */
 #define SDCARDFS_NAME "sdcardfs"
 
@@ -121,8 +118,6 @@ typedef enum {
 	PERM_ANDROID_DATA,
 	/* This node is "/Android/obb" */
 	PERM_ANDROID_OBB,
-	/* This node is "/Android/media" */
-	PERM_ANDROID_MEDIA,
 	/* This node is "/Android/user" */
 	PERM_ANDROID_USER,
 	/* knox folder */
