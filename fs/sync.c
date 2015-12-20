@@ -24,6 +24,10 @@
 bool fsync_enabled = true;
 module_param(fsync_enabled, bool, 0755);
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+#include <linux/dyn_sync_cntrl.h>
+#endif
+
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
 
@@ -83,27 +87,51 @@ int sync_filesystem(struct super_block *sb)
 }
 EXPORT_SYMBOL_GPL(sync_filesystem);
 
-static void sync_inodes_one_sb(struct super_block *sb, void *arg)
+#ifndef CONFIG_DYNAMIC_FSYNC
+static
+#endif
+void sync_inodes_one_sb(struct super_block *sb, void *arg)
 {
 	if (!(sb->s_flags & MS_RDONLY))
 		sync_inodes_sb(sb);
 }
+#ifdef CONFIG_DYNAMIC_FSYNC
+EXPORT_SYMBOL_GPL(sync_inodes_one_sb);
+#endif
 
-static void sync_fs_one_sb(struct super_block *sb, void *arg)
+#ifndef CONFIG_DYNAMIC_FSYNC
+static
+#endif
+void sync_fs_one_sb(struct super_block *sb, void *arg)
 {
 	if (!(sb->s_flags & MS_RDONLY) && sb->s_op->sync_fs)
 		sb->s_op->sync_fs(sb, *(int *)arg);
 }
+#ifdef CONFIG_DYNAMIC_FSYNC
+EXPORT_SYMBOL_GPL(sync_fs_one_sb);
+#endif
 
-static void fdatawrite_one_bdev(struct block_device *bdev, void *arg)
+#ifndef CONFIG_DYNAMIC_FSYNC
+static
+#endif
+void fdatawrite_one_bdev(struct block_device *bdev, void *arg)
 {
 	filemap_fdatawrite(bdev->bd_inode->i_mapping);
 }
+#ifdef CONFIG_DYNAMIC_FSYNC
+EXPORT_SYMBOL_GPL(fdatawrite_one_bdev);
+#endif
 
-static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
+#ifndef CONFIG_DYNAMIC_FSYNC
+static
+#endif
+void fdatawait_one_bdev(struct block_device *bdev, void *arg)
 {
 	filemap_fdatawait(bdev->bd_inode->i_mapping);
 }
+#ifdef CONFIG_DYNAMIC_FSYNC
+EXPORT_SYMBOL_GPL(fdatawait_one_bdev);
+#endif
 
 /*
  * Sync everything. We start by waking flusher threads so that most of
@@ -253,9 +281,17 @@ int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 	if (!fsync_enabled)
 		return 0;
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+	else {
+#endif
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
 	return file->f_op->fsync(file, start, end, datasync);
+#ifdef CONFIG_DYNAMIC_FSYNC
+	}
+#endif
 }
 EXPORT_SYMBOL(vfs_fsync_range);
 
@@ -393,6 +429,11 @@ SYSCALL_DEFINE1(fsync, unsigned int, fd)
 	if (!fsync_enabled)
 		return 0;
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+	else
+#endif
 	return do_fsync(fd, 0);
 }
 
@@ -401,6 +442,11 @@ SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
 	if (!fsync_enabled)
 		return 0;
 
+#if 0
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+	else
+#endif
 	return do_fsync(fd, 1);
 }
 
@@ -474,6 +520,12 @@ EXPORT_SYMBOL(generic_write_sync);
 SYSCALL_DEFINE4(sync_file_range, int, fd, loff_t, offset, loff_t, nbytes,
 				unsigned int, flags)
 {
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+	else {
+#endif
+
 	int ret;
 	struct fd f;
 	struct address_space *mapping;
@@ -555,6 +607,9 @@ out_put:
 	fdput(f);
 out:
 	return ret;
+#ifdef CONFIG_DYNAMIC_FSYNC
+	}
+#endif
 }
 
 /* It would be nice if people remember that not all the world's an i386
@@ -562,6 +617,10 @@ out:
 SYSCALL_DEFINE4(sync_file_range2, int, fd, unsigned int, flags,
 				 loff_t, offset, loff_t, nbytes)
 {
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+	else
+#endif
 	return sys_sync_file_range(fd, offset, nbytes, flags);
 }
-
