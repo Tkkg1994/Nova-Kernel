@@ -82,6 +82,10 @@
 #include <linux/earlysuspend.h>
 #endif
 
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+#endif
+
 //#define DEBUG_LAZYPLUG
 #undef DEBUG_LAZYPLUG
 
@@ -102,6 +106,7 @@ static DEFINE_MUTEX(lazymode_mutex);
 
 static struct delayed_work lazyplug_work;
 static struct delayed_work lazyplug_boost;
+static struct notifier_block notif;
 
 static struct workqueue_struct *lazyplug_wq;
 static struct workqueue_struct *lazyplug_boost_wq;
@@ -404,11 +409,15 @@ static void wakeup_boost_lazy(void)
 	}
 }
 
-#if defined(CONFIG_POWERSUSPEND) || defined(CONFIG_HAS_EARLYSUSPEND)
+#if defined(CONFIG_POWERSUSPEND) || defined(CONFIG_HAS_EARLYSUSPEND) || defined(CONFIG_STATE_NOTIFIER)
 #ifdef CONFIG_POWERSUSPEND
 static void lazyplug_suspend(struct power_suspend *handler)
-#else
+#endif
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void lazyplug_suspend(struct early_suspend *handler)
+#endif
+#ifdef CONFIG_STATE_NOTIFIER
+static void lazyplug_suspend(void)
 #endif
 {
 	if (lazyplug_active) {
@@ -435,8 +444,12 @@ static void cpu_all_up(struct work_struct *work)
 
 #ifdef CONFIG_POWERSUSPEND
 static void lazyplug_resume(struct power_suspend *handler)
-#else
+#endif
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void lazyplug_resume(struct early_suspend *handler)
+#endif
+#ifdef CONFIG_STATE_NOTIFIER
+static void lazyplug_resume(void)
 #endif
 {
 	if (lazyplug_active) {
@@ -621,6 +634,9 @@ int __init lazyplug_init(void)
 #endif
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&lazyplug_early_suspend_driver);
+#endif
+#ifdef CONFIG_STATE_NOTIFIER
+	state_register_client(&notif);
 #endif
 
 	lazyplug_wq = alloc_workqueue("lazyplug",
