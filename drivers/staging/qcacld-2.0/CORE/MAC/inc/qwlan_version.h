@@ -38,13 +38,13 @@ BRIEF DESCRIPTION:
 
 ===========================================================================*/
 
-#define QWLAN_VERSION_MAJOR            4
+#define QWLAN_VERSION_MAJOR            1
 #define QWLAN_VERSION_MINOR            3
 #define QWLAN_VERSION_PATCH            6
 #define QWLAN_VERSION_EXTRA           ""
-#define QWLAN_VERSION_BUILD            108
+#define QWLAN_VERSION_BUILD            18
 
-#define QWLAN_VERSIONSTR               "4.3.6.108"
+#define QWLAN_VERSIONSTR               "1.3.6.18_L_OS"
 
 #ifdef QCA_WIFI_2_0
 

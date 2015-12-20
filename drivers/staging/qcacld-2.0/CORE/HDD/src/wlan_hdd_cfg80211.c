@@ -957,7 +957,7 @@ static int wlan_hdd_cfg80211_stats_ext_request(struct wiphy *wiphy,
     eHalStatus status;
 
     stats_ext_req.request_data_len = data_len;
-    stats_ext_req.request_data = (void*)data;
+    stats_ext_req.request_data = data;
 
     status = sme_StatsExtRequest(pAdapter->sessionId, &stats_ext_req);
 
