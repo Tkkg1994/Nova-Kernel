@@ -8,3 +8,4 @@ make -C $(pwd) O=output VARIANT_DEFCONFIG=apq8084_sec_kccat6_eur_defconfig apq80
 make -C $(pwd) O=output
 
 cp output/arch/arm/boot/Image $(pwd)/arch/arm/boot/zImage
+
