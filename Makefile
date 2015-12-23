@@ -251,6 +251,7 @@ export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?=arm
 CROSS_COMPILE	?=/Kernel_Folder/Toolchain_5.2_a15/bin/arm-cortex_a15-linux-gnueabihf-
 
+
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
 SRCARCH 	:= $(ARCH)

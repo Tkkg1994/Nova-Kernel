@@ -1281,6 +1281,10 @@ bool netlink_net_capable(const struct sk_buff *skb, int cap)
 }
 EXPORT_SYMBOL(netlink_net_capable);
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> fe9b34b... BOK2 source update!!
 static inline int netlink_allowed(const struct socket *sock, unsigned int flag)
 {
 	return (nl_table[sock->sk->sk_protocol].flags & flag) ||

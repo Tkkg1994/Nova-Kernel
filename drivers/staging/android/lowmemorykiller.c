@@ -323,6 +323,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	static DEFINE_RATELIMIT_STATE(lmk_rs, DEFAULT_RATELIMIT_INTERVAL, 1);
 #endif
 	unsigned long nr_cma_free;
+	struct reclaim_state *reclaim_state = current->reclaim_state;
 #if defined(CONFIG_CMA_PAGE_COUNTING)
 	unsigned long nr_cma_inactive_file;
 	unsigned long nr_cma_active_file;
@@ -621,10 +622,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 #endif
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
+		if(reclaim_state)
+			reclaim_state->reclaimed_slab = selected_tasksize;
 		trace_almk_shrink(selected_tasksize, ret,
 			other_free, other_file, selected_oom_score_adj);
 	} else {
 		trace_almk_shrink(1, ret, other_free, other_file, 0);
+	} else
 		rcu_read_unlock();
 	}
 
@@ -1056,4 +1060,3 @@ module_init(lowmem_init);
 module_exit(lowmem_exit);
 
 MODULE_LICENSE("GPL");
-
