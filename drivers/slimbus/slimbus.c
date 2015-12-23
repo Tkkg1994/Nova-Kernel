@@ -1345,7 +1345,7 @@ static int connect_port_ch(struct slim_controller *ctrl, u8 ch, u32 ph,
 	buf[1] = ctrl->chans[ch].chan;
 	if (la == SLIM_LA_MANAGER)
 		ctrl->ports[pn].flow = flow;
-	pr_err("CODEC connect MC:0x %x, port:%x", mc, pn); 
+	pr_err("CODEC connect MC:0x %x, port:%x", txn.mc, pn); 
 	ret = slim_processtxn(ctrl, &txn, false);
 	if (!ret && la == SLIM_LA_MANAGER)
 		ctrl->ports[pn].state = SLIM_P_CFG;

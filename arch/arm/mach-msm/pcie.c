@@ -2093,14 +2093,14 @@ static int __init pcie_init(void)
 
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-reg", i);
 		msm_pcie_dev[i].ipc_log_reg =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name);
+			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
 		if (msm_pcie_dev[i].ipc_log_reg == NULL)
 			pr_err("%s: unable to create IPC log context for %s\n",
 				__func__, rc_name);
 
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
 		msm_pcie_dev[i].ipc_log_long =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name);
+			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
 		if (msm_pcie_dev[i].ipc_log_long == NULL)
 			pr_err("%s: unable to create IPC log context for %s\n",
 				__func__, rc_name);

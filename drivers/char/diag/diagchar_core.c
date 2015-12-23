@@ -2611,7 +2611,7 @@ static int __init diagchar_init(void)
 	init_waitqueue_head(&driver->wait_q);
 	init_waitqueue_head(&driver->smd_wait_q);
 	INIT_WORK(&(driver->diag_drain_work), diag_drain_work_fn);
-	diag_ipc_log = ipc_log_context_create(DIAG_IPC_LOG_PAGES, "diag");
+	diag_ipc_log = ipc_log_context_create(DIAG_IPC_LOG_PAGES, "diag", 0);
 	if (!diag_ipc_log)
 		pr_err("diag: failed to create IPC logging context\n");
 	diag_ws_init();

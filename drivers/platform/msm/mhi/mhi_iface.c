@@ -273,7 +273,7 @@ static int __init mhi_init(void)
 				"Failed to register pcie drv ret %d\n", r);
 		goto error;
 	}
-	mhi_ipc_log = ipc_log_context_create(MHI_IPC_LOG_PAGES, "mhi");
+	mhi_ipc_log = ipc_log_context_create(MHI_IPC_LOG_PAGES, "mhi", 0);
 	if (!mhi_ipc_log) {
 		mhi_log(MHI_MSG_ERROR,
 				"Failed to create IPC logging context\n");
