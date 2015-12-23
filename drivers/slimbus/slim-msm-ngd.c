@@ -146,7 +146,6 @@ static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 
 		SLIM_WARN(dev, "NGD interrupt error:0x%x, err:%d\n", stat,
 								dev->err);
-
 		/* Guarantee that error interrupts are cleared */
 		mb();
 		msm_slim_manage_tx_msgq(dev, false, NULL, dev->err);
@@ -1326,7 +1325,6 @@ static int ngd_slim_enable(struct msm_slim_ctrl *dev, bool enable)
 		/* controller state should be in sync with framework state */
 		if (!ret) {
 			complete(&dev->qmi.qmi_comp);
-
 			if (!pm_runtime_enabled(dev->dev) ||
 					!pm_runtime_suspended(dev->dev))
 				ngd_slim_runtime_resume(dev->dev);
