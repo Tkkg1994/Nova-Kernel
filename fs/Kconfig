@@ -290,6 +290,7 @@ config ASYNC_FSYNC
 
 config DYNAMIC_FSYNC
 	bool "dynamic file sync control"
+	depends on STATE_NOTIFIER
 	default n
 	help
 	  An experimental file sync control using new state_notifier. 
