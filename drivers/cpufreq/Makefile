@@ -28,6 +28,7 @@ obj-$(CONFIG_CPU_FREQ_GOV_UMBRELLA_CORE)	+= cpufreq_umbrella_core.o
 obj-$(CONFIG_CPU_FREQ_GOV_BIOSHOCK)		+= cpufreq_bioshock.o
 obj-$(CONFIG_CPU_FREQ_GOV_RACCOON_CITY)		+= cpufreq_raccoon_city.o
 obj-$(CONFIG_CPU_FREQ_GOV_BLUACTIVE)		+= cpufreq_bluactive.o
+obj-$(CONFIG_CPU_FREQ_GOV_LIONHEART)		+= cpufreq_lionheart.o
 obj-$(CONFIG_CPU_BOOST)				+= cpu-boost.o
 
 obj-$(CONFIG_GENERIC_CPUFREQ_CPU0)		+= cpufreq-cpu0.o
