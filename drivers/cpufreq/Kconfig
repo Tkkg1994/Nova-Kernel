@@ -236,6 +236,12 @@ config CPU_FREQ_DEFAULT_GOV_RACCOON_CITY
 	  the CPU, while considering battery life to prevent unnecessary
 	  drain during suspend.
 
+config CPU_FREQ_DEFAULT_GOV_BLUACTIVE
+	bool "bluactive"
+	select CPU_FREQ_GOV_BLUACTIVE
+	help
+ 	  Use the CPUFreq governor 'bluactive' as default.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -458,6 +464,12 @@ config CPU_FREQ_GOV_RACCOON_CITY
 
 	  The governor is based on interactive to provide a resident controller
 	  which interprets unnecessary battery drain as evil.
+
+config CPU_FREQ_GOV_BLUACTIVE
+	tristate "'bluactive' cpufreq governor"
+	depends on CPU_FREQ
+	help
+	 'bluactive' - less aggressive version of conservative
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
