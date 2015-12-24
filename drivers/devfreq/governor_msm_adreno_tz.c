@@ -21,14 +21,10 @@
 #include <linux/msm_adreno_devfreq.h>
 #ifdef CONFIG_STATE_NOTIFIER
 #include <linux/state_notifier.h>
-#else
-#include <linux/fb.h>
+static struct notifier_block adreno_tz_state_notif;
 #endif
 #include <soc/qcom/scm.h>
 #include "governor.h"
-#ifdef CONFIG_ADRENO_IDLER
-#include "adreno_idler.h"
-#endif
 
 extern bool mdss_screen_on;
 
@@ -47,6 +43,7 @@ static DEFINE_SPINLOCK(tz_lock);
 #define HIST			5
 #define TARGET			80
 #define CAP			75
+
 /*
  * Use BUSY_BIN to check for fully busy rendering
  * intervals that may need early intervention when
@@ -91,7 +88,7 @@ static int __secure_tz_reset_entry2(unsigned int *scm_data, u32 size_scm_data,
 }
 
 /* Boolean to detect if pm has entered suspend mode */
-static bool suspended;
+static bool suspended = false;
 
 static int __secure_tz_update_entry3(unsigned int *scm_data, u32 size_scm_data,
 					int *val, u32 size_val, bool is_64)
@@ -155,6 +152,11 @@ extern int simple_gpu_algorithm(int level,
 				struct devfreq_msm_adreno_tz_data *priv);
 #endif
 
+#ifdef CONFIG_ADRENO_IDLER
+extern int adreno_idler(struct devfreq_dev_status stats, struct devfreq *devfreq,
+		 unsigned long *freq);
+#endif
+
 static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 				u32 *flag)
 {
@@ -173,6 +175,7 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		stats.private_data = &b;
 	else
 		stats.private_data = NULL;
+
 	result = devfreq->profile->get_dev_status(devfreq->dev.parent, &stats);
 	if (result) {
 		pr_err(TAG "get_status failed %d\n", result);
@@ -202,8 +205,7 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 	}
 
 #ifdef CONFIG_ADRENO_IDLER
-	if (adreno_idler_active &&
-			adreno_idler(stats, devfreq, freq)) {
+	if (adreno_idler(stats, devfreq, freq)) {
 		/* adreno_idler has asked to bail out now */
 		return 0;
 	}
@@ -240,6 +242,7 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 	}
 
 	level = devfreq_get_freq_level(devfreq, stats.current_frequency);
+
 	if (level < 0) {
 		pr_err(TAG "bad freq %ld\n", stats.current_frequency);
 		return level;
@@ -255,7 +258,6 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 		busy_bin = 0;
 		frame_flag = 0;
 	} else {
-
 #ifdef CONFIG_SIMPLE_GPU_ALGORITHM
 		if (simple_gpu_active != 0)
 			val = simple_gpu_algorithm(level, priv);
@@ -434,8 +436,6 @@ static int tz_resume(struct devfreq *devfreq)
 static int tz_suspend(struct devfreq *devfreq)
 {
 	struct devfreq_msm_adreno_tz_data *priv = devfreq->data;
-	struct devfreq_dev_profile *profile = devfreq->profile;
-	unsigned long freq;
         unsigned int scm_data[2] = {0, 0};
         __secure_tz_reset_entry2(scm_data, sizeof(scm_data), priv->is_64);
 
@@ -446,10 +446,8 @@ static int tz_suspend(struct devfreq *devfreq)
 	priv->bus.total_time = 0;
 	priv->bus.gpu_time = 0;
 	priv->bus.ram_time = 0;
-	
-	freq = profile->freq_table[profile->max_state - 1];
 
-	return profile->target(devfreq->dev.parent, &freq, 0);
+	return 0;
 }
 
 static int tz_handler(struct devfreq *devfreq, unsigned int event, void *data)
@@ -490,8 +488,33 @@ static struct devfreq_governor msm_adreno_tz = {
 	.event_handler = tz_handler,
 };
 
+#ifdef CONFIG_STATE_NOTIFIER
+static int state_notifier_callback(struct notifier_block *this,
+				unsigned long event, void *data)
+{
+	switch (event) {
+		case STATE_NOTIFIER_ACTIVE:
+			state_suspended = false;
+			break;
+		case STATE_NOTIFIER_SUSPEND:
+			state_suspended = true;
+			break;
+		default:
+			break;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
+
 static int __init msm_adreno_tz_init(void)
 {
+#ifdef CONFIG_STATE_NOTIFIER
+	adreno_tz_state_notif.notifier_call = state_notifier_callback;
+	if (state_register_client(&adreno_tz_state_notif))
+		pr_err("%s: Failed to register State notifier callback\n",
+			__func__);
+#endif
 	return devfreq_add_governor(&msm_adreno_tz);
 }
 subsys_initcall(msm_adreno_tz_init);
@@ -499,6 +522,11 @@ subsys_initcall(msm_adreno_tz_init);
 static void __exit msm_adreno_tz_exit(void)
 {
 	int ret;
+
+#ifdef CONFIG_STATE_NOTIFIER
+	state_unregister_client(&adreno_tz_state_notif);
+	adreno_tz_state_notif.notifier_call = NULL;
+#endif
 	ret = devfreq_remove_governor(&msm_adreno_tz);
 	if (ret)
 		pr_err(TAG "failed to remove governor %d\n", ret);
