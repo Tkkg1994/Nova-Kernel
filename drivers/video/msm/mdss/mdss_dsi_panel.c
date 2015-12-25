@@ -21,6 +21,9 @@
 #include <linux/leds.h>
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+#endif
 
 #include "mdss_dsi.h"
 
@@ -672,6 +675,10 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 
 	mdss_screen_on = true;
+#ifdef CONFIG_STATE_NOTIFIER
+	if (!use_fb_notifier)
+		state_resume();
+#endif
 	pinfo = &pdata->panel_info;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -759,6 +766,10 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 	pinfo->panel_state = false;
 #endif
 	mdss_screen_on = false;
+#ifdef CONFIG_STATE_NOTIFIER
+	if (!use_fb_notifier)
+		state_suspend();
+#endif
 
 end:
 	pinfo->blank_state = MDSS_PANEL_BLANK_BLANK;
