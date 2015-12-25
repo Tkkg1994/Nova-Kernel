@@ -1,9 +1,9 @@
 /*
- *  drivers/cpufreq/cpufreq_hardlimit.c
+ * drivers/cpufreq/cpufreq_hardlimit.c
  *
- *  Copyright (C)  2013 Jean-Pierre Rasquin <yank555.lu@gmail.com>
- *            (C)  2014 LoungeKatt <twistedumbrella@gmail.com>
- *            (C)  2015 Placiano <placiano80@gmail.com>
+ * Copyright (C)  2013 Jean-Pierre Rasquin <yank555.lu@gmail.com>
+ *           (C)  2014 LoungeKatt <twistedumbrella@gmail.com>
+ *           (C)  2015 Placiano <placiano80@gmail.com>
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -11,7 +11,7 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  */
@@ -23,12 +23,12 @@
 #include <linux/jiffies.h>
 #include <linux/workqueue.h>
 
-unsigned int hardlimit_max  = CPUFREQ_HARDLIMIT_MAX_STOCK;  		/* default to stock behaviour */
-unsigned int hardlimit_min  = CPUFREQ_HARDLIMIT_MIN_STOCK;  		/* default to stock behaviour */
-unsigned int current_limit_max        = CPUFREQ_HARDLIMIT_MAX_STOCK;
-unsigned int current_limit_min        = CPUFREQ_HARDLIMIT_MIN_STOCK;
-unsigned int userspace_dvfs_lock      = CPUFREQ_HARDLIMIT_USERSPACE_DVFS_ALLOW;	/* default allows userspace dvfs interaction */
-unsigned int hardlimit_user_enforced   = HARDLIMIT_USER_DISABLED;
+unsigned int hardlimit_max		= CPUFREQ_HARDLIMIT_MAX_STOCK;			/* default to stock behaviour */
+unsigned int hardlimit_min		= CPUFREQ_HARDLIMIT_MIN_STOCK;			/* default to stock behaviour */
+unsigned int current_limit_max		= CPUFREQ_HARDLIMIT_MAX_STOCK;
+unsigned int current_limit_min		= CPUFREQ_HARDLIMIT_MIN_STOCK;
+unsigned int userspace_dvfs_lock	= CPUFREQ_HARDLIMIT_USERSPACE_DVFS_ALLOW;	/* default allows userspace dvfs interaction */
+unsigned int hardlimit_user_enforced	= HARDLIMIT_USER_DISABLED;
 
 
 /* Externally reachable function */
@@ -51,30 +51,30 @@ unsigned int check_cpufreq_hardlimit(unsigned int freq)
 /* Update limits in cpufreq */
 void reapply_hard_limits(void)
 {
-	#ifdef CPUFREQ_HARDLIMIT_DEBUG
+#ifdef CPUFREQ_HARDLIMIT_DEBUG
 	pr_info("[HARDLIMIT] reapply_hard_limits - before : min = %u / max = %u \n",
 			current_limit_min,
 			current_limit_max
 		);
-	#endif
+#endif
 
 	/* Recalculate the currently applicable min/max */
-		current_limit_min  = hardlimit_min;
-		current_limit_max  = hardlimit_max;
+		current_limit_min = hardlimit_min;
+		current_limit_max = hardlimit_max;
 
-	#ifdef CPUFREQ_HARDLIMIT_DEBUG
+#ifdef CPUFREQ_HARDLIMIT_DEBUG
 	pr_info("[HARDLIMIT] reapply_hard_limits - after : min = %u / max = %u \n",
 			current_limit_min,
 			current_limit_max
 		);
-	#endif
+#endif
 	update_scaling_limits(current_limit_min, current_limit_max);
 }
 
 /* User enable/disable */
 unsigned int hardlimit_user_enforced_status(void)
 {
-    return hardlimit_user_enforced;
+	return hardlimit_user_enforced;
 }
 
 /* Scaling min/max lock */
@@ -154,29 +154,28 @@ static ssize_t hardlimit_min_store(struct kobject *kobj, struct kobj_attribute *
 /* sysfs interface for "hardlimit_user_enforced" */
 static ssize_t hardlimit_user_enforced_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
-    return sprintf(buf, "%d\n", hardlimit_user_enforced);
+	return sprintf(buf, "%d\n", hardlimit_user_enforced);
 }
 
 static ssize_t hardlimit_user_enforced_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
 {
-    
-    unsigned int new_hardlimit_user_enforced;
-    
-    if (!sscanf(buf, "%du", &new_hardlimit_user_enforced))
-        return -EINVAL;
-    
-    if (new_hardlimit_user_enforced == hardlimit_user_enforced)
-        return count;
-    
-    if (new_hardlimit_user_enforced == HARDLIMIT_USER_DISABLED
-        || new_hardlimit_user_enforced == HARDLIMIT_USER_ENFORCED) {
-        hardlimit_user_enforced = new_hardlimit_user_enforced;
-        return count;
-    }
-    
-    /* We should never get here */
-    return -EINVAL;
-    
+	unsigned int new_hardlimit_user_enforced;
+
+	if (!sscanf(buf, "%du", &new_hardlimit_user_enforced))
+		return -EINVAL;
+
+	if (new_hardlimit_user_enforced == hardlimit_user_enforced)
+		return count;
+
+	if (new_hardlimit_user_enforced == HARDLIMIT_USER_DISABLED
+	    || new_hardlimit_user_enforced == HARDLIMIT_USER_ENFORCED) {
+	    hardlimit_user_enforced = new_hardlimit_user_enforced;
+		return count;
+	}
+
+	/* We should never get here */
+	return -EINVAL;
+
 }
 
 /* sysfs interface for "userspace_dvfs_lock" */
@@ -196,14 +195,14 @@ static ssize_t userspace_dvfs_lock_store(struct kobject *kobj, struct kobj_attri
 	if (new_userspace_dvfs_lock == userspace_dvfs_lock)
 		return count;
 
-    if (new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_ALLOW
-        || new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_IGNORE
-        || new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_REFUSE) {
-        userspace_dvfs_lock = new_userspace_dvfs_lock;
-        return count;
-    } else {
-        return -EINVAL;
-    }
+	if (new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_ALLOW
+	    || new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_IGNORE
+	    || new_userspace_dvfs_lock == CPUFREQ_HARDLIMIT_USERSPACE_DVFS_REFUSE) {
+	    userspace_dvfs_lock = new_userspace_dvfs_lock;
+		return count;
+	} else {
+		return -EINVAL;
+	}
 
 	/* We should never get here */
 	return -EINVAL;
@@ -326,7 +325,7 @@ __ATTR(version, 0444, version_show, NULL);
 static struct attribute *hardlimit_attrs[] = {
 	&hardlimit_max_attribute.attr,
 	&hardlimit_min_attribute.attr,
-    &hardlimit_user_enforced_attribute.attr,
+	&hardlimit_user_enforced_attribute.attr,
 	&userspace_dvfs_lock_attribute.attr,
 	&available_frequencies_attribute.attr,
 	&current_limit_min_attribute.attr,
@@ -352,33 +351,33 @@ int hardlimit_init(void)
 
 	/* Enable the legacy sysfs interface */
 #ifdef CPUFREQ_HARDLIMIT_LEGACY_INTERFACE
-        legacy_hardlimit_kobj = kobject_create_and_add("cpufreq", kernel_kobj);
-        if (!legacy_hardlimit_kobj) {
-                return -ENOMEM;
-        }
-        legacy_hardlimit_retval = sysfs_create_group(legacy_hardlimit_kobj, &legacy_hardlimit_attr_group);
-        if (legacy_hardlimit_retval)
-                kobject_put(legacy_hardlimit_kobj);
+	legacy_hardlimit_kobj = kobject_create_and_add("cpufreq", kernel_kobj);
+	if (!legacy_hardlimit_kobj) {
+		return -ENOMEM;
+	}
+	legacy_hardlimit_retval = sysfs_create_group(legacy_hardlimit_kobj, &legacy_hardlimit_attr_group);
+	if (legacy_hardlimit_retval)
+		kobject_put(legacy_hardlimit_kobj);
 #endif
 
 	/* Enable the new sysfs interface */
 
-        hardlimit_kobj = kobject_create_and_add("cpufreq_hardlimit", kernel_kobj);
-        if (!hardlimit_kobj) {
-                return -ENOMEM;
-        }
-        hardlimit_retval = sysfs_create_group(hardlimit_kobj, &hardlimit_attr_group);
-        if (hardlimit_retval)
-                kobject_put(hardlimit_kobj);
+	hardlimit_kobj = kobject_create_and_add("cpufreq_hardlimit", kernel_kobj);
+	if (!hardlimit_kobj) {
+		return -ENOMEM;
+	}
+	hardlimit_retval = sysfs_create_group(hardlimit_kobj, &hardlimit_attr_group);
+	if (hardlimit_retval)
+		kobject_put(hardlimit_kobj);
 
 #ifdef CPUFREQ_HARDLIMIT_LEGACY_INTERFACE
-        if (!hardlimit_retval && !legacy_hardlimit_retval) {
+	if (!hardlimit_retval && !legacy_hardlimit_retval) {
 #else
-        if (!hardlimit_retval) {
+	if (!hardlimit_retval) {
 #endif
-        }
+	}
 
-        return (hardlimit_retval);
+	return (hardlimit_retval);
 }
 /* end sysfs interface */
 

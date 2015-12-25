@@ -18,13 +18,13 @@
 #ifndef _LINUX_CPUFREQ_HARDLIMIT_H
 #define _LINUX_CPUFREQ_HARDLIMIT_H
 
-#define CPUFREQ_HARDLIMIT_VERSION "v2.2 Emotion Edition for Note 4"
+#define CPUFREQ_HARDLIMIT_VERSION "v2.2 Edition for S5 LTE-A"
 
 //#define CPUFREQ_HARDLIMIT_DEBUG // Add debugging prints in dmesg
 
-/* Default frequencies for n910X */
-#define CPUFREQ_HARDLIMIT_MAX_STOCK	2649600
-#define CPUFREQ_HARDLIMIT_MIN_STOCK	300000
+/* Default frequencies for SM-G901F */
+#define CPUFREQ_HARDLIMIT_MAX_STOCK	2880000
+#define CPUFREQ_HARDLIMIT_MIN_STOCK	268800
 
 #define HARDLIMIT_USER_ENFORCED	1
 #define HARDLIMIT_USER_DISABLED 0		/* default, hardlimit is disabled on boot */
