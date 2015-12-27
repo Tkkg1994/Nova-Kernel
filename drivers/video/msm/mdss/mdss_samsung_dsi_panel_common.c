@@ -2361,8 +2361,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_resume();
+	state_resume();
 #endif
 	if (unlikely(!alpm_data))
 		alpm_data = &pdata->alpm_data;
@@ -2543,8 +2542,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_suspend();
+	state_suspend();
 #endif
 	if (unlikely(!alpm_data))
 		alpm_data = &pdata->alpm_data;

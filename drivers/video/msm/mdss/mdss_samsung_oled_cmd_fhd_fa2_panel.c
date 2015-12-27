@@ -2124,8 +2124,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_resume();
+	state_resume();
 #endif
 	pr_info("%s : ++\n", __func__);
 
@@ -2260,8 +2259,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_suspend();
+	state_suspend();
 #endif
 	pr_info("%s : ++\n",__func__);
 

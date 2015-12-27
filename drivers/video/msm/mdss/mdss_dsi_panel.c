@@ -676,8 +676,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 
 	mdss_screen_on = true;
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_resume();
+	state_resume();
 #endif
 	pinfo = &pdata->panel_info;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
@@ -767,8 +766,7 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 #endif
 	mdss_screen_on = false;
 #ifdef CONFIG_STATE_NOTIFIER
-	if (!use_fb_notifier)
-		state_suspend();
+	state_suspend();
 #endif
 
 end:
