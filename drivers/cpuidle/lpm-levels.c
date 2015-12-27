@@ -460,9 +460,6 @@ static int cluster_select(struct lpm_cluster *cluster, bool from_idle)
 		if (level->notify_rpm && msm_rpm_waiting_for_ack())
 			continue;
 
-		if (system_level->notify_rpm && msm_rpm_waiting_for_ack())
-			continue;
-
 		if ((sleep_us >> 10) > pwr_params->time_overhead_us) {
 			pwr = pwr_params->ss_power;
 		} else {
