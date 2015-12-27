@@ -356,7 +356,7 @@ static void compr_event_handler(uint32_t opcode,
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		break;
 	case ASM_DATA_EVENT_RENDERED_EOS:
-		spin_lock_irqsave(&prtd->lock);
+		spin_lock_irqsave(&prtd->lock, flags);
 		pr_info("%s: ASM_DATA_CMDRSP_EOS token 0x%x,stream id %d\n",
 			  __func__, token, STREAM_ID_FROM_TOKEN(token));
 		stream_id = STREAM_ID_FROM_TOKEN(token);
@@ -437,7 +437,7 @@ static void compr_event_handler(uint32_t opcode,
 				atomic_set(&prtd->drain, 0);
 			}
 
-			spin_unlock_irqrestor(&prtd->lock);
+			spin_unlock_irqrestore(&prtd->lock, flags);
 			break;
 		case ASM_STREAM_CMD_FLUSH:
 			pr_info("%s: ASM_STREAM_CMD_FLUSH:", __func__);
