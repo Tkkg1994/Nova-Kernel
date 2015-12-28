@@ -478,14 +478,6 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 	if (!ftbl)
 		return ERR_PTR(-ENOMEM);
 
-#ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
-	/* Create frequence table with unrounded values */
-	krait_freq_table = devm_kzalloc(dev, (nf + 1) * sizeof(*krait_freq_table),
-					GFP_KERNEL);
-	if (!krait_freq_table)
-		return ERR_PTR(-ENOMEM);
-#endif
-
 	if (num_paths) {
 		int sz_u = nf * sizeof(*bus_bw.usecase);
 		int sz_v = nf * num_paths * sizeof(*bus_vec_lst);
@@ -535,9 +527,6 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 
 		ftbl[i].driver_data = i;
 		ftbl[i].frequency = f;
-#ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
-		krait_freq_table[i].frequency = data[i];
-#endif
 
 		if (num_paths) {
 			unsigned int bw_mbps = data[i];
@@ -559,6 +548,16 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 	ftbl[i].driver_data = i;
 	ftbl[i].frequency = CPUFREQ_TABLE_END;
 #ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
+	/* Create frequence table with unrounded values */
+	krait_freq_table = devm_kzalloc(dev, (nf + 1) * sizeof(*krait_freq_table),
+					GFP_KERNEL);
+	if (!krait_freq_table)
+		return -ENOMEM;
+
+	*krait_freq_table = *freq_table;
+
+	for (i = 0, j = 0; i < nf; i++, j += 3)
+		krait_freq_table[i].frequency = data[j];
 	krait_freq_table[i].frequency = CPUFREQ_TABLE_END;
 #endif
 
@@ -573,14 +572,18 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 #ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
 int use_for_scaling(unsigned int freq)
 {
-	unsigned int i;
+	unsigned int i, cpu_freq;
 
 	if (!krait_freq_table)
 		return -EINVAL;
 
-	for (i = 0; krait_freq_table[i].frequency < CPUFREQ_TABLE_END; i++)
-		if (freq == krait_freq_table[i].frequency)
+	for (i = 0; krait_freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
+		cpu_freq = krait_freq_table[i].frequency;
+		if (cpu_freq == CPUFREQ_ENTRY_INVALID)
+			continue;
+		if (freq == cpu_freq)
 			return freq;
+	}
 
 	return -EINVAL;
 }
