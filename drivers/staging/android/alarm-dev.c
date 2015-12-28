@@ -23,6 +23,7 @@
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/alarmtimer.h>
+#include <linux/workqueue.h>
 #include "android_alarm.h"
 
 #define ANDROID_ALARM_PRINT_INFO (1U << 0)
@@ -51,6 +52,8 @@ static DECLARE_WAIT_QUEUE_HEAD(alarm_wait_queue);
 static uint32_t alarm_pending;
 static uint32_t alarm_enabled;
 static uint32_t wait_pending;
+static struct delayed_work work;
+static struct workqueue_struct *power_off_alarm_workqueue;
 
 struct devalarm {
 	union {
@@ -113,7 +116,7 @@ static void alarm_clear(enum android_alarm_type alarm_type, struct timespec *ts)
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
 	if (alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
-		set_power_on_alarm(ts->tv_sec, 0);
+		queue_delayed_work(power_off_alarm_workqueue, &work, 0);
 	mutex_unlock(&alarm_mutex);
 }
 
@@ -132,7 +135,7 @@ static void alarm_set(enum android_alarm_type alarm_type,
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
 	if (alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
-		set_power_on_alarm(ts->tv_sec, 1);
+		queue_delayed_work(power_off_alarm_workqueue, &work, 1);
 	mutex_unlock(&alarm_mutex);
 }
 
