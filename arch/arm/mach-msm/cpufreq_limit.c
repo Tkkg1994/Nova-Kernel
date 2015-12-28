@@ -22,8 +22,6 @@
 #include <linux/cpufreq.h>
 #include <linux/cpufreq_limit.h>
 
-#include <soc/qcom/cpufreq.h>
-
 #define MSM_CPUFREQ_LIMIT_MAJOR		1
 #define MSM_CPUFREQ_LIMIT_MINOR		2
 

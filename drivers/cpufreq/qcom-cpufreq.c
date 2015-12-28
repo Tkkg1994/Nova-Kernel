@@ -41,7 +41,6 @@ static DEFINE_PER_CPU(struct cpufreq_frequency_table *, freq_table);
 static struct cpufreq_frequency_table *krait_freq_table;
 #endif
 static bool hotplug_ready;
-static unsigned long *mem_bw;
 
 static struct msm_bus_vectors *bus_vec_lst;
 static struct msm_bus_scale_pdata bus_bw = {
@@ -505,7 +504,7 @@ static struct cpufreq_frequency_table *cpufreq_parse_dt(struct device *dev,
 		f /= 1000;
 
 		// override clk_round_rate calculated value for min freq
-		if (f < 300000 && f > data[j]) f = data[j];
+		if (f < 300000 && f > data[i]) f = data[i];
 
 		/*
 		 * Check if this is the last feasible frequency in the table.
