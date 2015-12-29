@@ -14,6 +14,10 @@ struct cpufreq_limit_handle;
 
 #ifdef CONFIG_CPU_FREQ_LIMIT
 
+#ifdef CONFIG_SEC_PM
+#define SUSPEND_BOOST	1497600
+#endif
+
 struct cpufreq_limit_handle *cpufreq_limit_get(unsigned long min_freq,
 		unsigned long max_freq, char *label);
 int cpufreq_limit_put(struct cpufreq_limit_handle *handle);
