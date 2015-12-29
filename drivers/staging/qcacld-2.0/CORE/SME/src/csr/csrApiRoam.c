@@ -3480,7 +3480,6 @@ static eHalStatus csrGetRateSet( tpAniSirGlobal pMac,  tCsrRoamProfile *pProfile
     int i;
     eCsrCfgDot11Mode cfgDot11Mode;
     tANI_U8 *pDstRate;
-    tANI_U16 rateBitmap = 0;
     vos_mem_set(pOpRateSet, sizeof(tSirMacRateSet), 0);
     vos_mem_set(pExRateSet, sizeof(tSirMacRateSet), 0);
     VOS_ASSERT( pIes != NULL );
@@ -3504,7 +3503,6 @@ static eHalStatus csrGetRateSet( tpAniSirGlobal pMac,  tCsrRoamProfile *pProfile
             {
                 if ( csrRatesIsDot11RateSupported( pMac, pIes->SuppRates.rates[ i ] ) )
                 {
-                    csrAddRateBitmap(pIes->SuppRates.rates[ i ], &rateBitmap);
                     *pDstRate++ = pIes->SuppRates.rates[ i ];
                     pOpRateSet->numRates++;
                 }
@@ -3525,11 +3523,8 @@ static eHalStatus csrGetRateSet( tpAniSirGlobal pMac,  tCsrRoamProfile *pProfile
                 {
                     if ( csrRatesIsDot11RateSupported( pMac, pIes->ExtSuppRates.rates[ i ] ) )
                     {
-                        if (!csrCheckRateBitmap(pIes->ExtSuppRates.rates[ i ], rateBitmap))
-                        {
-                            *pDstRate++ = pIes->ExtSuppRates.rates[ i ];
-                            pExRateSet->numRates++;
-                        }
+                        *pDstRate++ = pIes->ExtSuppRates.rates[ i ];
+                        pExRateSet->numRates++;
                     }
                 }
             }
@@ -7191,13 +7186,6 @@ eHalStatus csrRoamDisconnectInternal(tpAniSirGlobal pMac, tANI_U32 sessionId, eC
         smsLog(pMac, LOG2, FL("called"));
         status = csrRoamIssueDisassociateCmd(pMac, sessionId, reason);
     }
-    else
-     {
-        csrScanAbortScanForSSID(pMac, sessionId);
-        status = eHAL_STATUS_CMD_NOT_QUEUED;
-        smsLog( pMac, LOG1, FL(" Disconnect cmd not queued, Roam command is not present"
-                               " return with status %d"), status);
-     }
     return (status);
 }
 
@@ -7936,8 +7924,7 @@ static void csrRoamRoamingStateReassocRspProcessor( tpAniSirGlobal pMac, tpSirSm
 #if defined(WLAN_FEATURE_VOWIFI_11R) || defined(FEATURE_WLAN_ESE) || \
     defined(FEATURE_WLAN_LFR)
         if ((eSIR_SME_FT_REASSOC_TIMEOUT_FAILURE == pSmeJoinRsp->statusCode) ||
-            (eSIR_SME_FT_REASSOC_FAILURE == pSmeJoinRsp->statusCode) ||
-            (eSIR_SME_INVALID_PARAMETERS == pSmeJoinRsp->statusCode)) {
+            (eSIR_SME_FT_REASSOC_FAILURE == pSmeJoinRsp->statusCode)) {
                 /* Inform HDD to turn off FT flag in HDD */
                 if (pNeighborRoamInfo) {
                     vos_mem_zero(&roamInfo, sizeof(tCsrRoamInfo));
