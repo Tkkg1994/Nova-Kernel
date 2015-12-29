@@ -1537,11 +1537,6 @@ config MSM_SLEEPER
 	help
 	  CPU hotplug driver
 
-config MSM_CPUFREQ_LIMIT
- 	tristate "MSM CPU frequency limiter"
- 	default n
- 	help
-
 config FORCE_FAST_CHARGE
 	bool "Force fast charging (AC/USB) by Yank555.lu"
 	default n
