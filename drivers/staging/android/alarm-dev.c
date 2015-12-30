@@ -116,7 +116,7 @@ static void alarm_clear(enum android_alarm_type alarm_type, struct timespec *ts)
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
 	if (alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
-		queue_delayed_work(power_off_alarm_workqueue, &work, 1);
+		queue_delayed_work(power_off_alarm_workqueue, &work, 0);
 	mutex_unlock(&alarm_mutex);
 }
 
@@ -135,7 +135,7 @@ static void alarm_set(enum android_alarm_type alarm_type,
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
 	if (alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
-		queue_delayed_work(power_off_alarm_workqueue, &work, 0);
+		queue_delayed_work(power_off_alarm_workqueue, &work, 1);
 	mutex_unlock(&alarm_mutex);
 }
 
