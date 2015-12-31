@@ -90,9 +90,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
-#ifdef CONFIG_SEC_DEBUG
 #include <mach/sec_debug.h>
-#endif
 
 #include "../../arch/arm/mach-msm/msm_watchdog.h"
 

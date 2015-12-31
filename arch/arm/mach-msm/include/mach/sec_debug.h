@@ -31,6 +31,7 @@
 #ifdef CONFIG_SEC_DEBUG
 extern int sec_debug_init(void);
 extern int sec_debug_dump_stack(void);
+extern int kernel_sec_get_debug_level(void);
 extern void sec_debug_hw_reset(void);
 #ifdef CONFIG_SEC_PERIPHERAL_SECURE_CHK
 extern void sec_peripheral_secure_check_fail(void);
@@ -50,6 +51,7 @@ extern int sec_debug_is_enabled(void);
 extern int sec_debug_is_enabled_for_ssr(void);
 extern int silent_log_panic_handler(void);
 extern void sec_debug_secure_app_addr_size(uint32_t addr, uint32_t size);
+extern bool kernel_sec_set_debug_level(int level);
 #else
 static inline int sec_debug_init(void)
 {
@@ -57,6 +59,10 @@ static inline int sec_debug_init(void)
 }
 
 static inline int sec_debug_dump_stack(void)  
+{
+	return 0;
+}
+static inline int kernel_sec_get_debug_level(void)
 {
 	return 0;
 }
@@ -87,7 +93,15 @@ static inline void sec_gaf_supply_rqinfo(unsigned short curr_offset,
 {
 }
 
-static inline int sec_debug_is_enabled(void) {return 0; }
+static inline int sec_debug_is_enabled(void)
+{
+	return 0;
+}
+
+static inline bool kernel_sec_set_debug_level(int level)
+{
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_SEC_DEBUG_SCHED_LOG
@@ -323,8 +337,6 @@ static inline void sec_debug_fuelgauge_log(unsigned int voltage,
 extern bool kernel_sec_set_normal_pwroff(int value);
 extern int kernel_sec_get_normal_pwroff(void);
 #endif
-extern bool kernel_sec_set_debug_level(int level);
-extern int kernel_sec_get_debug_level(void);
 extern int ssr_panic_handler_for_sec_dbg(void);
 __weak void dump_all_task_info(void);
 __weak void dump_cpu_stat(void);
