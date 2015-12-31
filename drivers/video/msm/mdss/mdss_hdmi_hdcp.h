@@ -45,6 +45,7 @@ struct hdmi_hdcp_ctrl {
 	u32 auth_retries;
 	u32 tp_msgid;
 	u32 tz_hdcp;
+	bool cancel_requested;
 	enum hdmi_hdcp_state hdcp_state;
 	struct HDCP_V2V1_MSG_TOPOLOGY cached_tp;
 	struct HDCP_V2V1_MSG_TOPOLOGY current_tp;

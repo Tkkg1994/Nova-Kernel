@@ -649,7 +649,7 @@ static void hdmi_edid_extract_audio_data_blocks(
 			}
 		}
 #endif
-	}
+
 #if defined(CONFIG_SEC_MHL_SUPPORT)
 	edid_ctrl_ext->audio_channel_info |= (bit_rate << 16);
 	edid_ctrl_ext->audio_channel_info |= audio_ch;

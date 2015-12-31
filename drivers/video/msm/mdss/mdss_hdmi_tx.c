@@ -528,20 +528,30 @@ static inline void hdmi_tx_set_audio_switch_node(
 	struct hdmi_tx_ctrl *hdmi_ctrl, int val)
 {
 	int state = hdmi_ctrl->audio_sdev.state;
+#if defined(CONFIG_SEC_MHL_SUPPORT)
+	int value = val > 0 ? hdmi_get_audio_ch() : -1;
+#endif
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return;
 	}
-
+#if defined(CONFIG_SEC_MHL_SUPPORT)
+	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl)){
+		switch_set_state(&hdmi_ctrl->audio_sdev, value);
+		DEV_INFO("%s: hdmi_audio state switched to %d\n",
+		__func__, value);
+	} else
+		DEV_INFO("%s: hdmi_audio state is DVI", __func__);
+#else
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl)) {
 		switch_set_state(&hdmi_ctrl->audio_sdev, val);
-
 		DEV_INFO("%s: audio state %s %d\n", __func__,
 			hdmi_ctrl->audio_sdev.state == state ?
 				"is same" : "switched to",
 			hdmi_ctrl->audio_sdev.state);
 	}
+#endif
 } /* hdmi_tx_set_audio_switch_node */
 
 static void hdmi_tx_wait_for_audio_engine(struct hdmi_tx_ctrl *hdmi_ctrl)
@@ -1065,30 +1075,18 @@ static int hdmi_tx_config_avmute(struct hdmi_tx_ctrl *hdmi_ctrl, bool set)
 	struct dss_io_data *io;
 	u32 av_mute_status;
 	bool av_pkt_en = false;
-#if defined(CONFIG_SEC_MHL_SUPPORT)
-	int value = val > 0 ? hdmi_get_audio_ch() : -1;
-#endif
 
 	if (!hdmi_ctrl) {
 		DEV_ERR("%s: invalid input\n", __func__);
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_SEC_MHL_SUPPORT)
-	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl)){
-		switch_set_state(&hdmi_ctrl->audio_sdev, value);
-		DEV_INFO("%s: hdmi_audio state switched to %d\n",
-		__func__, value);
-	} else
-		DEV_INFO("%s: hdmi_audio state is DVI", __func__);
-#else
 	io = &hdmi_ctrl->pdata.io[HDMI_TX_CORE_IO];
 	if (!io->base) {
 		DEV_ERR("%s: Core io is not initialized\n", __func__);
 		return -EINVAL;
 	}
-#endif
-}
+
 
 	av_mute_status = DSS_REG_R(io, HDMI_GC);
 
@@ -2766,7 +2764,7 @@ static void hdmi_tx_power_off_work(struct work_struct *work)
 	if (!hdmi_tx_is_dvi_mode(hdmi_ctrl)) {
 #if defined(CONFIG_SEC_MHL_SUPPORT)
 		if (hdmi_ctrl->hpd_state)
-			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0, false);
+			hdmi_tx_set_audio_switch_node(hdmi_ctrl, 0);
 		hdmi_tx_wait_for_audio_engine(hdmi_ctrl);
 #endif
 		hdmi_tx_audio_off(hdmi_ctrl);
