@@ -37,12 +37,9 @@
 #include "msm_watchdog.h"
 #include "timer.h"
 #include "wdog_debug.h"
-
-#ifdef CONFIG_SEC_DEBUG
 #include <mach/sec_debug.h>
 #include <linux/notifier.h>
 #include <linux/ftrace.h>
-#endif
 
 
 #define WDT0_RST	0x38

@@ -29,8 +29,9 @@
 #include <linux/dma-contiguous.h>
 #include <linux/dma-mapping.h>
 #include <linux/pstore_ram.h>
-#include <soc/qcom/memory_dump.h>
 #include <soc/qcom/bootinfo.h>
+#include <soc/qcom/socinfo.h>
+#include <soc/qcom/memory_dump.h>
 #endif /* CONFIG_MSM_TZ_LOG_WDOG_DUMP */
 #include <soc/qcom/scm.h>
 #include <soc/qcom/qseecomi.h>
