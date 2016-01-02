@@ -1791,6 +1791,9 @@ static void mem_cgroup_out_of_memory(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	unsigned long totalpages;
 	unsigned int points = 0;
 	struct task_struct *chosen = NULL;
+#ifdef CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH
+	bool skip_search_thread = false;
+#endif
 
 	/*
 	 * If current has a pending SIGKILL or is exiting, then automatically
@@ -1808,6 +1811,9 @@ static void mem_cgroup_out_of_memory(struct mem_cgroup *memcg, gfp_t gfp_mask,
 		struct cgroup *cgroup = iter->css.cgroup;
 		struct cgroup_iter it;
 		struct task_struct *task;
+#ifdef CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH
+		skip_search_thread = false;
+#endif
 
 		cgroup_iter_start(cgroup, &it);
 		while ((task = cgroup_iter_next(cgroup, &it))) {
@@ -1828,9 +1834,18 @@ static void mem_cgroup_out_of_memory(struct mem_cgroup *memcg, gfp_t gfp_mask,
 				if (chosen)
 					put_task_struct(chosen);
 				return;
+#ifdef CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH
+			case OOM_SCAN_SKIP_SEARCH_THREAD:
+				skip_search_thread = true;
+				/* fall through */
+#endif
 			case OOM_SCAN_OK:
 				break;
 			};
+#ifdef CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH
+		if(skip_search_thread)
+			break;
+#endif
 			points = oom_badness(task, memcg, NULL, totalpages);
 			if (points > chosen_points) {
 				if (chosen)
