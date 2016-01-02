@@ -3587,7 +3587,7 @@ EXPORT_SYMBOL(ksize);
 
 #ifdef CONFIG_SEC_DEBUG_DOUBLE_FREE
 void kfree(const void *y)
-#else)
+#else
 void kfree(const void *x)
 #endif
 {
