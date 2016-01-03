@@ -22,11 +22,7 @@
 extern unsigned long msm_pm_boot_vector[MAX_NUM_CLUSTER * MAX_CPUS_PER_CLUSTER];
 void msm_pm_boot_entry(void);
 #else
-static inline void msm_pm_boot_entry(void)
-{
-	/* empty */
-}
-#endif
+static inline void msm_pm_boot_entry(void) {}
 #endif
 #endif
 #endif
