@@ -289,10 +289,8 @@ static bool __ref msm_pm_spm_power_collapse(
 
 	msm_jtag_restore_state();
 
-	if (collapsed) {
-		cpu_init();
+	if (collapsed)
 		local_fiq_enable();
-	}
 
 	msm_pm_boot_config_after_pc(cpu);
 
@@ -901,9 +899,7 @@ static int msm_cpu_pm_probe(struct platform_device *pdev)
 		msm_pc_debug_counters = 0;
 		msm_pc_debug_counters_phys = 0;
 	}
-
 skip_save_imem:
-
 	if (pdev->dev.of_node) {
 		key = "qcom,tz-flushes-cache";
 		msm_pm_tz_flushes_cache =
