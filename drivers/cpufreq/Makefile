@@ -31,6 +31,7 @@ obj-$(CONFIG_CPU_FREQ_GOV_BLUACTIVE)		+= cpufreq_bluactive.o
 obj-$(CONFIG_CPU_FREQ_GOV_LIONHEART)		+= cpufreq_lionheart.o
 obj-$(CONFIG_CPU_FREQ_GOV_SMARTMAX)		+= cpufreq_smartmax.o
 obj-$(CONFIG_CPU_FREQ_GOV_SMARTASS2)		+= cpufreq_smartass2.o
+obj-$(CONFIG_CPU_FREQ_GOV_IRONACTIVE)		+= cpufreq_ironactive.o
 obj-$(CONFIG_CPU_BOOST)				+= cpu-boost.o
 
 obj-$(CONFIG_GENERIC_CPUFREQ_CPU0)		+= cpufreq-cpu0.o
