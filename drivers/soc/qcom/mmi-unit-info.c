@@ -23,6 +23,10 @@
 #include <linux/of_platform.h>
 #include <linux/slab.h>
 
+#ifndef CONFIG_ARM64
+#include <asm/mach/arch.h>
+#endif
+
 static u32 prod_id;
 
 #define SERIALNO_MAX_LEN 64
@@ -197,6 +201,6 @@ err:
 	return ret;
 }
 
-early_initcall(mmi_unit_info_init);
+module_init(mmi_unit_info_init);
 MODULE_DESCRIPTION("Motorola Mobility LLC. Unit Info");
 MODULE_LICENSE("GPL v2");
