@@ -26,8 +26,8 @@
 #include <linux/of_platform.h>
 #include <linux/cpu_pm.h>
 #include <linux/msm-bus.h>
-#include <linux/dma-mapping.h>
 #include <linux/uaccess.h>
+#include <linux/dma-mapping.h>
 #include <soc/qcom/avs.h>
 #include <soc/qcom/spm.h>
 #include <soc/qcom/pm.h>
