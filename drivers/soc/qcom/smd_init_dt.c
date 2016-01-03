@@ -126,7 +126,7 @@ static int msm_smsm_probe(struct platform_device *pdev)
 
 	ret = request_irq(irq_line,
 				private_irq->irq_handler,
-				IRQF_TRIGGER_RISING,
+				IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
 				node->name,
 				NULL);
 	if (ret < 0) {
@@ -160,7 +160,6 @@ static int msm_smd_probe(struct platform_device *pdev)
 	uint32_t irq_offset;
 	uint32_t irq_bitmask;
 	uint32_t irq_line;
-	unsigned long irq_flags = IRQF_TRIGGER_RISING;
 	const char *subsys_name;
 	struct interrupt_config_item *private_irq;
 	struct device_node *node;
@@ -233,7 +232,7 @@ static int msm_smd_probe(struct platform_device *pdev)
 	 * still list the legacy pil-string.  Sanely handle pil-string.
 	 */
 	if (!subsys_name) {
-		pr_warn("Missing required property - label.  Using legacy parsing\n");
+		pr_warn("msm_smd: Missing required property - label. Using legacy parsing\n");
 		key = "qcom,pil-string";
 		subsys_name = of_get_property(node, key, NULL);
 		SMD_DBG("%s: %s = %s", __func__, key, subsys_name);
@@ -246,11 +245,6 @@ static int msm_smd_probe(struct platform_device *pdev)
 		skip_pil = of_property_read_bool(node, key);
 		SMD_DBG("%s: %s = %d\n", __func__, key, skip_pil);
 	}
-
-	key = "qcom,irq-no-suspend";
-	ret = of_property_read_bool(node, key);
-	if (ret)
-		irq_flags |= IRQF_NO_SUSPEND;
 
 	private_intr_config = smd_get_intr_config(edge);
 	if (!private_intr_config) {
@@ -267,7 +261,7 @@ static int msm_smd_probe(struct platform_device *pdev)
 
 	ret = request_irq(irq_line,
 				private_irq->irq_handler,
-				irq_flags,
+				IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
 				node->name,
 				NULL);
 	if (ret < 0) {
