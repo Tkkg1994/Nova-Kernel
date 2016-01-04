@@ -884,6 +884,7 @@ err_out_kobj_put:
 static void cpufreq_init_policy(struct cpufreq_policy *policy)
 {
 	struct cpufreq_policy new_policy;
+	struct cpufreq_cpu_save_data *saved_policy;
 	int ret = 0;
 
 	memcpy(&new_policy, policy, sizeof(*policy));
