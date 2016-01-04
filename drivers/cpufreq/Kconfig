@@ -268,6 +268,12 @@ config CPU_FREQ_DEFAULT_GOV_IRONACTIVE
 	  is based on the 'interactive' governor with many changes made by
 	  CAF.
 
+config CPU_FREQ_DEFAULT_GOV_SMARTMAX_EPS
+	bool "smartmax_eps"
+	select CPU_FREQ_GOV_SMARTMAX_EPS
+	help
+	  Use the CPUFreq governor 'smartmax eps' as default
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -533,6 +539,12 @@ config CPU_FREQ_GOV_IRONACTIVE
 	  module will be called cpufreq_ironactive.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_SMARTMAX_EPS
+	tristate "'smartmax EPS' cpufreq policy governor"
+	select CPU_FREQ_TABLE
+	help
+	  'smartmax EPS' is the extreme powersaving version of smartmax
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
