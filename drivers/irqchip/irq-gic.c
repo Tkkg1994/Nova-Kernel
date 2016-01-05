@@ -265,7 +265,7 @@ void gic_show_pending_irq(void)
 			enabled = readl_relaxed(base +
 						GIC_DIST_ENABLE_SET + j * 4);
 			pending[j] = readl_relaxed(base +
-						   GIC_DIST_PENDING_SET + j * 4);
+						GIC_DIST_PENDING_SET + j * 4);
 			pending[j] &= enabled;
 			pr_err("Pending irqs[%d] %lx\n", j, pending[j]);
 		}
