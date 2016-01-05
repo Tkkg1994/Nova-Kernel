@@ -25,7 +25,6 @@
 #include <linux/jiffies.h>
 #include <linux/wakelock.h>
 #include <linux/err.h>
-#include <linux/msm_ion.h>
 #include <linux/list.h>
 #include <linux/list_sort.h>
 #include <linux/idr.h>
@@ -33,6 +32,7 @@
 #include <linux/of_gpio.h>
 #include <linux/of_address.h>
 #include <linux/io.h>
+#include <linux/dma-mapping.h>
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_restart.h>
 
@@ -49,6 +49,12 @@
 	dev_err(desc->dev, "%s: " fmt, desc->name, ##__VA_ARGS__)
 #define pil_info(desc, fmt, ...)					\
 	dev_info(desc->dev, "%s: " fmt, desc->name, ##__VA_ARGS__)
+
+#if defined(CONFIG_ARM)
+#define pil_memset_io(d, c, count) memset(d, c, count)
+#else
+#define pil_memset_io(d, c, count) memset_io(d, c, count)
+#endif
 
 #define PIL_NUM_DESC		10
 static void __iomem *pil_info_base;
@@ -94,18 +100,6 @@ struct pil_seg {
 };
 
 /**
- * struct pil_image_info - information in IMEM about image and where it is loaded
- * @name: name of image (may or may not be NULL terminated)
- * @start: indicates physical address where image starts (little endian)
- * @size: size of image (little endian)
- */
-struct pil_image_info {
-	char name[8];
-	__le64 start;
-	__le32 size;
-} __attribute__((__packed__));
-
-/**
  * struct pil_priv - Private state for a pil_desc
  * @proxy: work item used to run the proxy unvoting routine
  * @wlock: wakelock to prevent suspend during pil_boot
@@ -136,10 +130,11 @@ struct pil_priv {
 	phys_addr_t base_addr;
 	phys_addr_t region_start;
 	phys_addr_t region_end;
-	struct ion_handle *region;
+	void *region;
 	struct pil_image_info __iomem *info;
 	int id;
 	int unvoted_flag;
+	size_t region_size;
 };
 
 /**
@@ -177,8 +172,6 @@ int pil_do_ramdump(struct pil_desc *desc, void *ramdump_dev)
 	return ret;
 }
 EXPORT_SYMBOL(pil_do_ramdump);
-
-static struct ion_client *ion;
 
 /**
  * pil_get_entry_addr() - Retrieve the entry address of a peripheral image
@@ -364,10 +357,9 @@ static int pil_init_entry_addr(struct pil_priv *priv, const struct pil_mdt *mdt)
 static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 				phys_addr_t max_addr, size_t align)
 {
-	struct ion_handle *region;
-	int ret;
-	unsigned int mask;
+	void *region;
 	size_t size = max_addr - min_addr;
+	size_t aligned_size;
 
 	/* Don't reallocate due to fragmentation concerns, just sanity check */
 	if (priv->region) {
@@ -377,36 +369,28 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 		return 0;
 	}
 
-	if (!ion) {
-		WARN_ON_ONCE("No ION client, can't support relocation\n");
+	if (align > SZ_4M)
+		aligned_size = ALIGN(size, SZ_4M);
+	else
+		aligned_size = ALIGN(size, SZ_1M);
+
+	dma_set_attr(DMA_ATTR_SKIP_ZEROING, &priv->desc->attrs);
+	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &priv->desc->attrs);
+
+	region = dma_alloc_attrs(priv->desc->dev, aligned_size,
+				&priv->region_start, GFP_KERNEL,
+				&priv->desc->attrs);
+
+	if (region == NULL) {
+		pil_err(priv->desc, "Failed to allocate relocatable region of size %zx\n",
+					size);
 		return -ENOMEM;
-	}
-
-	/* Force alignment due to linker scripts not getting it right */
-	if (align > SZ_1M) {
-		mask = ION_HEAP(ION_PIL2_HEAP_ID);
-		align = SZ_4M;
-	} else {
-		mask = ION_HEAP(ION_PIL1_HEAP_ID);
-		align = SZ_1M;
-	}
-
-	region = ion_alloc(ion, size, align, mask, 0);
-	if (IS_ERR(region)) {
-		pil_err(priv->desc, "Failed to allocate relocatable region\n");
-		return PTR_ERR(region);
-	}
-
-	ret = ion_phys(ion, region, (ion_phys_addr_t *)&priv->region_start,
-			&size);
-	if (ret) {
-		ion_free(ion, region);
-		return ret;
 	}
 
 	priv->region = region;
 	priv->region_end = priv->region_start + size;
 	priv->base_addr = min_addr;
+	priv->region_size = aligned_size;
 
 	return 0;
 }
@@ -537,14 +521,26 @@ static void pil_release_mmap(struct pil_desc *desc)
 
 #define IOMAP_SIZE SZ_1M
 
+struct pil_map_fw_info {
+	void *region;
+	struct dma_attrs attrs;
+	phys_addr_t base_addr;
+	struct device *dev;
+};
+
 static void *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
-	return ioremap(paddr, size);
+	struct pil_map_fw_info *info = data;
+
+	return dma_remap(info->dev, info->region, paddr, size,
+					&info->attrs);
 }
 
-static void unmap_fw_mem(void *vaddr, void *data)
+static void unmap_fw_mem(void *vaddr, size_t size, void *data)
 {
-	iounmap(vaddr);
+	struct pil_map_fw_info *info = data;
+
+	dma_unremap(info->dev, vaddr, size);
 }
 
 static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
@@ -553,13 +549,20 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	phys_addr_t paddr;
 	char fw_name[30];
 	int num = seg->num;
+	struct pil_map_fw_info map_fw_info = {
+		.attrs = desc->attrs,
+		.region = desc->priv->region,
+		.base_addr = desc->priv->region_start,
+		.dev = desc->dev,
+	};
+	void *map_data = desc->map_data ? desc->map_data : &map_fw_info;
 
 	if (seg->filesz) {
 		snprintf(fw_name, ARRAY_SIZE(fw_name), "%s.b%02d",
 				desc->name, num);
 		ret = request_firmware_direct(fw_name, desc->dev, seg->paddr,
 					      seg->filesz, desc->map_fw_mem,
-					      desc->unmap_fw_mem, NULL);
+					      desc->unmap_fw_mem, map_data);
 		if (ret < 0) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big.\n",
 				fw_name);
@@ -578,36 +581,21 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	paddr = seg->paddr + seg->filesz;
 	count = seg->sz - seg->filesz;
 	while (count > 0) {
-		int size, orig_size;
+		int size;
 		u8 __iomem *buf;
-		u8 bytes_before;
-		u8 bytes_after;
 
-		orig_size = size = min_t(size_t, IOMAP_SIZE, count);
-		buf = ioremap(paddr, size);
+		size = min_t(size_t, IOMAP_SIZE, count);
+		buf = desc->map_fw_mem(paddr, size, map_data);
 		if (!buf) {
 			pil_err(desc, "Failed to map memory\n");
 			return -ENOMEM;
 		}
+		pil_memset_io(buf, 0, size);
 
-		if ((unsigned long)buf & 0x7) {
-			bytes_before = 8 - ((unsigned long)buf & 0x7);
-			memset_io(buf, 0, bytes_before);
-			size -= bytes_before;
-			buf += bytes_before;
-		}
+		desc->unmap_fw_mem(buf, size, map_data);
 
-		if (size & 0x7) {
-			bytes_after = size & 0x7;
-			memset_io(buf + size - bytes_after, 0, bytes_after);
-			size -= bytes_after;
-		}
-
-		memset(buf, 0, size);
-		iounmap(buf);
-
-		count -= orig_size;
-		paddr += orig_size;
+		count -= size;
+		paddr += size;
 	}
 
 	if (desc->ops->verify_blob) {
@@ -709,6 +697,8 @@ int pil_boot(struct pil_desc *desc)
 		goto release_fw;
 	}
 
+	init_dma_attrs(&desc->attrs);
+
 	ret = pil_init_mmap(desc, mdt);
 	if (ret)
 		goto release_fw;
@@ -790,7 +780,9 @@ out:
 	up_read(&pil_pm_rwsem);
 	if (ret) {
 		if (priv->region) {
-			ion_free(ion, priv->region);
+			dma_free_attrs(desc->dev, priv->region_size,
+					priv->region, priv->region_start,
+					&desc->attrs);
 			priv->region = NULL;
 		}
 		pil_release_mmap(desc);
@@ -814,13 +806,16 @@ void pil_shutdown(struct pil_desc *desc)
 		disable_irq(desc->proxy_unvote_irq);
 		if (!desc->priv->unvoted_flag)
 			pil_proxy_unvote(desc, 1);
-		return;
-	}
-
-	if (!proxy_timeout_ms)
+	} else if (!proxy_timeout_ms)
 		pil_proxy_unvote(desc, 1);
 	else
 		flush_delayed_work(&priv->proxy);
+
+	if (priv->region) {
+		dma_free_attrs(desc->dev, priv->region_size,
+				priv->region, priv->region_start, &desc->attrs);
+		priv->region = NULL;
+	}
 }
 EXPORT_SYMBOL(pil_shutdown);
 
@@ -948,19 +943,27 @@ static struct notifier_block pil_pm_notifier = {
 static int __init msm_pil_init(void)
 {
 	struct device_node *np;
+	struct resource res;
+	int i;
 
 	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-pil");
-	if (np) {
-		pil_info_base = of_iomap(np, 0);
-		if (!pil_info_base)
-			pr_warn("pil: could not map imem region\n");
-	} else {
+	if (!np) {
 		pr_warn("pil: failed to find qcom,msm-imem-pil node\n");
+		goto out;
 	}
+	if (of_address_to_resource(np, 0, &res)) {
+		pr_warn("pil: address to resource on imem region failed\n");
+		goto out;
+	}
+	pil_info_base = ioremap(res.start, resource_size(&res));
+	if (!pil_info_base) {
+		pr_warn("pil: could not map imem region\n");
+		goto out;
+	}
+	for (i = 0; i < resource_size(&res)/sizeof(u32); i++)
+		writel_relaxed(0, pil_info_base + (i * sizeof(u32)));
 
-	ion = msm_ion_client_create("pil");
-	if (IS_ERR(ion)) /* Can't support relocatable images */
-		ion = NULL;
+out:
 	return register_pm_notifier(&pil_pm_notifier);
 }
 device_initcall(msm_pil_init);
@@ -968,8 +971,6 @@ device_initcall(msm_pil_init);
 static void __exit msm_pil_exit(void)
 {
 	unregister_pm_notifier(&pil_pm_notifier);
-	if (ion)
-		ion_client_destroy(ion);
 	if (pil_info_base)
 		iounmap(pil_info_base);
 }
