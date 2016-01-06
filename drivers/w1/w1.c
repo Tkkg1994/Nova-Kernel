@@ -113,7 +113,7 @@ static void w1_slave_release(struct device *dev)
 
 	dev_dbg(dev, "%s: Releasing %s.\n", __func__, sl->name);
 	printk(KERN_ERR "%s: Releasing %s.\n", __func__, sl->name);
-#if !defined(CONFIG_W1_WORKQUEUE)
+#if defined(CONFIG_W1_SLAVE_DS28EL35)
 	/* add for sending uevent*/
 	pr_info("%s: uevent send 0\n", __func__);
 	input_report_switch(sl->master->bus_master->input, SW_W1, 0);

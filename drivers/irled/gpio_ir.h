@@ -29,29 +29,35 @@
 
 #ifdef CONFIG_ARM_ARCH_TIMER
 #define GPIO_IR_MULTI_TIMER
+#ifdef GPIO_IR_MULTI_TIMER
 #define GPIO_IR_MULTI_TIMER_PRECALL
+#define HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
 #endif
+#endif
+
+//#define GPIO_IR_POLICY_RELEASE_POST_RUN
 
 /***********************************************/
 /* These values may be changed in each models */
 /***********************************************/
-#define IR_TIMER_CALL_DELAY	29670
+//#define IR_TIMER_CALL_DELAY	100000	//real measurement time : 29670
+#define IR_TIMER_CALL_DELAY	50000	//real measurement time : 29670
 #define TIMER_TYPE2_COND_TIME	1000000
 
 #define GIR_DATA_START_DELAY	60000000
 #define GIR_DATA_END_DELAY		13000000
 
 /* If device did not use dts, This value is used. */
-#ifndef CONFIG_OF
 #define GPIO_IR_LED_EN	301
 #define GPIO_IRLED_PIN	85
-#endif
 
 #define IR_GPIO_HIGH_DELAY	400
 #define IR_GPIO_LOW_DELAY	100
-/***********************************************/
 
-#define	NO_PIN_DETECTED		-1
+#ifdef GPIO_IR_MULTI_TIMER
+#define HRTIMER_MULTI_CPU_COUNT	3
+#endif
+/***********************************************/
 
 #define GPIO_LEVEL_LOW	0
 #define GPIO_LEVEL_HIGH	1
@@ -88,6 +94,7 @@
 struct gpio_ir_timer_info_t
 {
 	int pos;
+	bool bwait;
 	bool bstart;
 	bool bend;
 	struct hrtimer timer;
@@ -105,9 +112,13 @@ struct gpio_ir_info_t
 	unsigned long gpio_low_delay;
 #ifdef GPIO_IR_MULTI_TIMER
 	struct hrtimer timer_end;
+	bool blow_data_correction;		// low data length correction
+	bool bhrtimer_multi_post_correct;
 #endif
- 	struct hrtimer memfree_timer;
+	struct hrtimer memfree_timer;
+#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	struct work_struct post_run_work;
+#endif
 	struct completion ir_send_comp;
 	unsigned long start_delay;
 	unsigned long end_delay;
@@ -116,7 +127,9 @@ struct gpio_ir_info_t
 	long qos_delay;
 
 	unsigned long partial_timer_type;
-	bool blow_data_correction;		// low data length correction
+
+	spinlock_t lock_trun;
+	spinlock_t lock_tcount;
 
 	/******************************************/
 	/* to be initialized data when IR starts */
@@ -127,9 +140,15 @@ struct gpio_ir_info_t
 	struct gpio_ir_timer_info_t tinfo[NR_CPUS];
 	int *cur_sound_cpu;
 	int *cur_tsp_cpu;
-	atomic_t timer_count;
+	unsigned int timer_count;
 	cycles_t start_cycle;
+	ktime_t start_ktime;
+#ifndef GPIO_IR_MULTI_TIMER_PRECALL
 	unsigned long start_delay_cycles;
+#endif
+	bool btimer_started;
+	bool btimer_total_run;
+	bool bhrtimer_multi_run_check;
 	cycles_t hm_start_cycle;
 	ktime_t hm_start_time;
 	unsigned long *delay_cycles;
@@ -137,6 +156,7 @@ struct gpio_ir_info_t
 	bool bvalid_timer_run;
 	bool hm_start_time_save;
 	bool bir_init_comp;
+	unsigned int timer_mask;
 #else
 	struct hrtimer ir_timer;
 #endif
@@ -153,9 +173,10 @@ struct gpio_ir_info_t
 	/* Only Once and specific time modified data */
 	/******************************************/
 	bool brun;
+#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	bool bir_policy_set;
+#endif
 	unsigned long ir_data_type;
-
 	/******************************************/
 	/* Always calculated temp data */
 	/******************************************/
@@ -183,6 +204,6 @@ extern void hrtimer_init_gpio_ir(struct hrtimer *timer, clockid_t clock_id,
 		  enum hrtimer_mode mode, int cpu);
 
 #ifdef CONFIG_SMP
-extern int gpio_ir_cpu_up(void);		// all possible cpus up
+extern int __cpuinit gpio_ir_cpu_up(int count);	// all possible cpus up
 #endif
 #endif

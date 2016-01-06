@@ -818,7 +818,7 @@ static int32_t adm_callback(struct apr_client_data *data, void *priv)
 				(ARRAY_SIZE(adm_get_parameters)-1 >=
 				payload[3])) {
 				adm_get_parameters[0] = payload[3] /
-					sizeof(uint32_t);
+							sizeof(uint32_t);
 				/*
 				 * payload[3] is param_size which is
 				 * expressed in number of bytes

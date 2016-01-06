@@ -479,7 +479,9 @@ static irqreturn_t w1_detect_irq(int irq, void *dev_id)
 	struct w1_bus_master *dev = dev_id;
 
 	pr_info("%s : Inside W1 IRQ Handler\n", __func__);
+	cancel_delayed_work_sync(&w1_gdev->w1_dwork);
 	schedule_delayed_work(&dev->w1_irqwork, 100);
+	schedule_delayed_work(&dev->w1_irqwork, 1000);
 #else
 	pr_info("%s : Inside W1 IRQ Handler but Factory binary, do nothing here.\n", __func__);
 #endif
@@ -570,11 +572,6 @@ static int w1_gpio_msm_probe(struct platform_device *pdev)
 
 	spin_lock_init(&w1_gpio_msm_lock);
 
-	if (master->irq_mode) {
-		REQUEST_IRQ(irq, "w1-detect");
-		enable_irq_wake(irq);
-	}
-
 	err = gpio_request(pdata->pin, "w1");
 	if (err) {
 		dev_err(&pdev->dev, "gpio_request (pin) failed\n");
@@ -614,6 +611,11 @@ static int w1_gpio_msm_probe(struct platform_device *pdev)
 	if (err) {
 		dev_err(&pdev->dev, "w1_add_master device failed\n");
 		goto free_gpio_ext_pu;
+	}
+
+	if (master->irq_mode) {
+		REQUEST_IRQ(irq, "w1-detect");
+		enable_irq_wake(irq);
 	}
 
 	if (pdata->enable_external_pullup)
@@ -662,17 +664,16 @@ static int w1_gpio_msm_remove(struct platform_device *pdev)
 static int w1_gpio_msm_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct w1_gpio_msm_platform_data *pdata = pdev->dev.platform_data;
-	/* cancelling workqueue before gpio down */
-#ifdef CONFIG_W1_WORKQUEUE
-	if (pdata->irq_gpio == -1)
-		cancel_delayed_work_sync(&w1_gdev->w1_dwork);
-#endif
+
 	if (pdata->enable_external_pullup)
 		pdata->enable_external_pullup(0);
 
 	gpio_tlmm_config(GPIO_CFG(pdata->pin, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 1);
 	gpio_direction_input(pdata->pin);
-
+#ifdef CONFIG_W1_WORKQUEUE
+	if (pdata->irq_gpio == -1)
+		cancel_delayed_work_sync(&w1_gdev->w1_dwork);
+#endif
 	return 0;
 }
 

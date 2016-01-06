@@ -2422,9 +2422,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		msm_pcie_write_mask(msm_pcie_dev[rc_idx].parf
 					+ PCIE20_PARF_PM_CTRL,
 					0, BIT(1));
-#if !defined(CONFIG_MACH_LENTISLTE_SKT) && !defined(CONFIG_MACH_LENTISLTE_LGT) && !defined(CONFIG_MACH_LENTISLTE_KTT)
 		udelay(REQ_EXIT_L1_DELAY_US);
-#endif
 		msm_pcie_write_mask(msm_pcie_dev[rc_idx].parf
 					+ PCIE20_PARF_PM_CTRL,
 					BIT(1), 0);

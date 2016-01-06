@@ -1,7 +1,7 @@
 /*
  * Linux OS Independent Layer
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.c 516842 2014-11-21 03:03:24Z $
+ * $Id: linux_osl.c 551293 2015-04-22 22:58:36Z $
  */
 
 #define LINUX_PORT
@@ -54,16 +54,19 @@
 #define DUMPBUFSZ 1024
 
 #ifdef CONFIG_DHD_USE_STATIC_BUF
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 #define DHD_SKB_1PAGE_BUFSIZE	(PAGE_SIZE*1)
 #define DHD_SKB_2PAGE_BUFSIZE	(PAGE_SIZE*2)
 #define DHD_SKB_4PAGE_BUFSIZE	(PAGE_SIZE*4)
+
+#define PREALLOC_FREE_MAGIC	0xFEDC
+#define PREALLOC_USED_MAGIC	0xFCDE
 #else
 #define DHD_SKB_HDRSIZE		336
 #define DHD_SKB_1PAGE_BUFSIZE	((PAGE_SIZE*1)-DHD_SKB_HDRSIZE)
 #define DHD_SKB_2PAGE_BUFSIZE	((PAGE_SIZE*2)-DHD_SKB_HDRSIZE)
 #define DHD_SKB_4PAGE_BUFSIZE	((PAGE_SIZE*4)-DHD_SKB_HDRSIZE)
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
 #define STATIC_BUF_MAX_NUM	16
 #define STATIC_BUF_SIZE	(PAGE_SIZE*2)
@@ -77,7 +80,7 @@ typedef struct bcm_static_buf {
 
 static bcm_static_buf_t *bcm_static_buf = 0;
 
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 #define STATIC_PKT_4PAGE_NUM	0
 #define DHD_SKB_MAX_BUFSIZE	DHD_SKB_2PAGE_BUFSIZE
 #elif defined(ENHANCED_STATIC_BUF)
@@ -86,15 +89,15 @@ static bcm_static_buf_t *bcm_static_buf = 0;
 #else
 #define STATIC_PKT_4PAGE_NUM	0
 #define DHD_SKB_MAX_BUFSIZE DHD_SKB_2PAGE_BUFSIZE
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 #define STATIC_PKT_1PAGE_NUM	0
 #define STATIC_PKT_2PAGE_NUM	64
 #else
 #define STATIC_PKT_1PAGE_NUM	8
 #define STATIC_PKT_2PAGE_NUM	8
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
 #define STATIC_PKT_1_2PAGE_NUM	\
 	((STATIC_PKT_1PAGE_NUM) + (STATIC_PKT_2PAGE_NUM))
@@ -102,8 +105,9 @@ static bcm_static_buf_t *bcm_static_buf = 0;
 	((STATIC_PKT_1_2PAGE_NUM) + (STATIC_PKT_4PAGE_NUM))
 
 typedef struct bcm_static_pkt {
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 	struct sk_buff *skb_8k[STATIC_PKT_2PAGE_NUM];
+	unsigned char pkt_invalid[STATIC_PKT_2PAGE_NUM];
 	spinlock_t osl_pkt_lock;
 	uint32 last_allocated_index;
 #else
@@ -113,7 +117,7 @@ typedef struct bcm_static_pkt {
 	struct sk_buff *skb_16k;
 #endif /* ENHANCED_STATIC_BUF */
 	struct semaphore osl_pkt_sem;
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 	unsigned char pkt_use[STATIC_PKT_MAX_NUM];
 } bcm_static_pkt_t;
 
@@ -325,17 +329,16 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 			bcm_static_skb = NULL;
 			ASSERT(osh->magic == OS_HANDLE_MAGIC);
 			return -ENOMEM;
+		} else {
+			printk("alloc static buf at %p!\n", bcm_static_buf);
 		}
-		else
-			printk("alloc static buf at %x!\n", (unsigned int)bcm_static_buf);
-
 
 		sema_init(&bcm_static_buf->static_sem, 1);
 
 		bcm_static_buf->buf_ptr = (unsigned char *)bcm_static_buf + STATIC_BUF_SIZE;
 	}
 
-#if defined(BCMPCIE) && !defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && !defined(DHD_USE_STATIC_CTRLBUF)
 	return 0;
 #else
 	if (!bcm_static_skb && adapter) {
@@ -353,8 +356,12 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 
 		bcopy(skb_buff_ptr, bcm_static_skb, sizeof(struct sk_buff *) *
 			(STATIC_PKT_MAX_NUM));
-		for (i = 0; i < STATIC_PKT_MAX_NUM; i++)
+		for (i = 0; i < STATIC_PKT_MAX_NUM; i++) {
 			bcm_static_skb->pkt_use[i] = 0;
+#ifdef BCMPCIE
+			bcm_static_skb->pkt_invalid[i] = 0;
+#endif /* BCMPCIE */
+		}
 
 #ifdef BCMPCIE
 		spin_lock_init(&bcm_static_skb->osl_pkt_lock);
@@ -363,7 +370,7 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 		sema_init(&bcm_static_skb->osl_pkt_sem, 1);
 #endif /* BCMPCIE */
 	}
-#endif /* BCMPCIE && !DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && !DHD_USE_STATIC_CTRLBUF */
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
 
 	return 0;
@@ -763,6 +770,22 @@ osl_pktfree(osl_t *osh, void *p, bool send)
 
 	PKTDBG_TRACE(osh, (void *) skb, PKTLIST_PKTFREE);
 
+#if defined(BCMPCIE) && defined(CONFIG_DHD_USE_STATIC_BUF)
+	if (skb && (skb->mac_len == PREALLOC_USED_MAGIC)) {
+		printk("%s: pkt %p is from static pool\n",
+			__FUNCTION__, p);
+		dump_stack();
+		return;
+	}
+
+	if (skb && (skb->mac_len == PREALLOC_FREE_MAGIC)) {
+		printk("%s: pkt %p is from static pool and not in used\n",
+			__FUNCTION__, p);
+		dump_stack();
+		return;
+	}
+#endif /* BCMPCIE && CONFIG_DHD_USE_STATIC_BUF */
+
 	/* perversion: we use skb->next to chain multi-skb packets */
 	while (skb) {
 		nskb = skb->next;
@@ -796,9 +819,9 @@ osl_pktget_static(osl_t *osh, uint len)
 {
 	int i = 0;
 	struct sk_buff *skb;
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 	unsigned long flags;
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
 	if (!bcm_static_skb)
 		return osl_pktget(osh, len);
@@ -808,7 +831,7 @@ osl_pktget_static(osl_t *osh, uint len)
 		return osl_pktget(osh, len);
 	}
 
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 	spin_lock_irqsave(&bcm_static_skb->osl_pkt_lock, flags);
 
 	if (len <= DHD_SKB_2PAGE_BUFSIZE) {
@@ -817,7 +840,8 @@ osl_pktget_static(osl_t *osh, uint len)
 			index = bcm_static_skb->last_allocated_index % STATIC_PKT_2PAGE_NUM;
 			bcm_static_skb->last_allocated_index++;
 			if (bcm_static_skb->skb_8k[index] &&
-				bcm_static_skb->pkt_use[index] == 0) {
+				bcm_static_skb->pkt_use[index] == 0 &&
+				bcm_static_skb->pkt_invalid[index] == 0) {
 				break;
 			}
 		}
@@ -826,12 +850,14 @@ osl_pktget_static(osl_t *osh, uint len)
 			(index >= 0) && (index < STATIC_PKT_2PAGE_NUM)) {
 			bcm_static_skb->pkt_use[index] = 1;
 			skb = bcm_static_skb->skb_8k[index];
-			skb->data = skb->head + NET_SKB_PAD;
-			skb->tail = skb->head + NET_SKB_PAD;
+			skb->data = skb->head;
+			skb_set_tail_pointer(skb, NET_SKB_PAD);
+			skb->data += NET_SKB_PAD;
 			skb->cloned = 0;
 			skb->priority = 0;
-			skb->tail = skb->data + len;
+			skb_set_tail_pointer(skb, len);
 			skb->len = len;
+			skb->mac_len = PREALLOC_USED_MAGIC;
 			spin_unlock_irqrestore(&bcm_static_skb->osl_pkt_lock, flags);
 			return skb;
 		}
@@ -855,7 +881,7 @@ osl_pktget_static(osl_t *osh, uint len)
 			bcm_static_skb->pkt_use[i] = 1;
 
 			skb = bcm_static_skb->skb_4k[i];
-			skb->tail = skb->data + len;
+			skb_set_tail_pointer(skb, len);
 			skb->len = len;
 
 			up(&bcm_static_skb->osl_pkt_sem);
@@ -874,7 +900,7 @@ osl_pktget_static(osl_t *osh, uint len)
 		if ((i >= STATIC_PKT_1PAGE_NUM) && (i < STATIC_PKT_1_2PAGE_NUM)) {
 			bcm_static_skb->pkt_use[i] = 1;
 			skb = bcm_static_skb->skb_8k[i - STATIC_PKT_1PAGE_NUM];
-			skb->tail = skb->data + len;
+			skb_set_tail_pointer(skb, len);
 			skb->len = len;
 
 			up(&bcm_static_skb->osl_pkt_sem);
@@ -888,7 +914,7 @@ osl_pktget_static(osl_t *osh, uint len)
 		bcm_static_skb->pkt_use[STATIC_PKT_MAX_NUM - 1] = 1;
 
 		skb = bcm_static_skb->skb_16k;
-		skb->tail = skb->data + len;
+		skb_set_tail_pointer(skb, len);
 		skb->len = len;
 
 		up(&bcm_static_skb->osl_pkt_sem);
@@ -896,7 +922,7 @@ osl_pktget_static(osl_t *osh, uint len)
 	}
 #endif /* ENHANCED_STATIC_BUF */
 	up(&bcm_static_skb->osl_pkt_sem);
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
 	printk("%s: all static pkt in use!\n", __FUNCTION__);
 	return osl_pktget(osh, len);
@@ -906,9 +932,10 @@ void
 osl_pktfree_static(osl_t *osh, void *p, bool send)
 {
 	int i;
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
+	struct sk_buff *skb = (struct sk_buff *)p;
 	unsigned long flags;
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 
 	if (!p) {
 		return;
@@ -919,12 +946,27 @@ osl_pktfree_static(osl_t *osh, void *p, bool send)
 		return;
 	}
 
-#if defined(BCMPCIE) && defined(DHD_USE_STATIC_IOCTLBUF)
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
 	spin_lock_irqsave(&bcm_static_skb->osl_pkt_lock, flags);
 
 	for (i = 0; i < STATIC_PKT_2PAGE_NUM; i++) {
 		if (p == bcm_static_skb->skb_8k[i]) {
-			bcm_static_skb->pkt_use[i] = 0;
+			if (bcm_static_skb->pkt_invalid[i] != 0) {
+				printk("%s: static pkt idx %d(%p) is invalid\n",
+					__FUNCTION__, i, p);
+			} else if (bcm_static_skb->pkt_use[i] == 0) {
+				printk("%s: static pkt idx %d(%p) is double free\n",
+					__FUNCTION__, i, p);
+			} else {
+				bcm_static_skb->pkt_use[i] = 0;
+			}
+
+			if (skb->mac_len != PREALLOC_USED_MAGIC) {
+				printk("%s: static pkt idx %d(%p) is not in used\n",
+					__FUNCTION__, i, p);
+			}
+
+			skb->mac_len = PREALLOC_FREE_MAGIC;
 			spin_unlock_irqrestore(&bcm_static_skb->osl_pkt_lock, flags);
 			return;
 		}
@@ -959,8 +1001,35 @@ osl_pktfree_static(osl_t *osh, void *p, bool send)
 #endif /* ENHANCED_STATIC_BUF */
 	up(&bcm_static_skb->osl_pkt_sem);
 	osl_pktfree(osh, p, send);
-#endif /* BCMPCIE && DHD_USE_STATIC_IOCTLBUF */
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 }
+
+#if defined(BCMPCIE) && defined(DHD_USE_STATIC_CTRLBUF)
+void
+osl_pktinvalidate_static(osl_t *osh, void *p)
+{
+	int i;
+	unsigned long flags;
+
+	if (!bcm_static_skb) {
+		return;
+	}
+
+	spin_lock_irqsave(&bcm_static_skb->osl_pkt_lock, flags);
+	for (i = 0; i < STATIC_PKT_2PAGE_NUM; i++) {
+		if (p == bcm_static_skb->skb_8k[i]) {
+			bcm_static_skb->pkt_invalid[i] = 1;
+			bcm_static_skb->pkt_use[i] = 1;
+			break;
+		}
+	}
+
+	if (i == STATIC_PKT_2PAGE_NUM) {
+		printk("%s: pkt=%p isn't static pkt pool\n", __FUNCTION__, p);
+	}
+	spin_unlock_irqrestore(&bcm_static_skb->osl_pkt_lock, flags);
+}
+#endif /* BCMPCIE && DHD_USE_STATIC_CTRLBUF */
 #endif /* CONFIG_DHD_USE_STATIC_BUF */
 
 uint32
@@ -1317,6 +1386,7 @@ osl_cpu_relax(void)
 	cpu_relax();
 }
 
+
 #if defined(USE_KMALLOC_FOR_FLOW_RING) && defined(__ARM_ARCH_7A__)
 
 inline void BCMFASTPATH
@@ -1554,3 +1624,38 @@ osl_is_flag_set(osl_t *osh, uint32 mask)
 {
 	return (osh->flags & mask);
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0) && defined(TSQ_MULTIPLIER)
+#include <linux/kallsyms.h>
+#include <net/sock.h>
+void
+osl_pkt_orphan_partial(struct sk_buff *skb)
+{
+	uint32 fraction;
+	static void *p_tcp_wfree = NULL;
+
+	if (!skb->destructor || skb->destructor == sock_wfree)
+		return;
+
+	if (unlikely(!p_tcp_wfree)) {
+		char sym[KSYM_SYMBOL_LEN];
+		sprint_symbol(sym, (unsigned long)skb->destructor);
+		sym[9] = 0;
+		if (!strcmp(sym, "tcp_wfree"))
+			p_tcp_wfree = skb->destructor;
+		else
+			return;
+	}
+
+	if (unlikely(skb->destructor != p_tcp_wfree || !skb->sk))
+		return;
+
+	/* abstract a certain portion of skb truesize from the socket
+	 * sk_wmem_alloc to allow more skb can be allocated for this
+	 * socket for better cusion meeting WiFi device requirement
+	 */
+	fraction = skb->truesize * (TSQ_MULTIPLIER - 1) / TSQ_MULTIPLIER;
+	skb->truesize -= fraction;
+	atomic_sub(fraction, &skb->sk->sk_wmem_alloc);
+}
+#endif /* LINUX_VERSION >= 3.6.0 && TSQ_MULTIPLIER */

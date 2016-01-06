@@ -497,10 +497,11 @@ out:
 EXPORT_SYMBOL_GPL(cpu_up);
 
 #ifdef CONFIG_IRLED_GPIO
-int __cpuinit gpio_ir_cpu_up(void)
+int __cpuinit gpio_ir_cpu_up(int count)
 {
 	int err = 0;
 	int cpu = 0;
+	int online_count;
 
 #ifdef	CONFIG_MEMORY_HOTPLUG
 	int nid;
@@ -536,17 +537,19 @@ int __cpuinit gpio_ir_cpu_up(void)
 		}
 	}
 #endif
-
 	cpu_maps_update_begin();
-	for (cpu = 0; cpu < NR_CPUS; cpu++) {
+
+	online_count = num_online_cpus();
+	for (cpu = 0; cpu < NR_CPUS && online_count < count; cpu++) {
 		if (cpu_possible(cpu)) {
 			if (!cpu_online(cpu)) {
 				err = _cpu_up(cpu, 0);
 				if (err) {
-					pr_err("[GPIO_IR][%s] Error (%d) online core %d\n", 
+					pr_err("[GPIO_IR][%s] Error (%d) online core %d\n",
 						__func__, err, cpu);
 					goto out;
 				}
+				online_count++;
 			}
 		} else {
 			pr_err("[GPIO_IR][%s] cpu %d is not possible\n", __func__, cpu);

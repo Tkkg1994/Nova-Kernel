@@ -1758,7 +1758,6 @@ static int adreno_init(struct kgsl_device *device)
 	/* Power up the device */
 	kgsl_pwrctrl_enable(device);
 
-
 	/* Identify the specific GPU */
 	adreno_identify_gpu(adreno_dev);
 
@@ -1970,7 +1969,6 @@ static int adreno_start(struct kgsl_device *device, int priority)
 		set_user_nice(current, _wake_nice);
 
 	ret = _adreno_start(adreno_dev);
-
 	if (priority)
 		set_user_nice(current, nice);
 
@@ -2674,9 +2672,11 @@ static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 				device->pwrctrl.ctrl_flags = 0;
 				adreno_dev->fast_hang_detect = 1;
 
-				if (adreno_dev->gpudev->fault_detect_start)
-					adreno_dev->gpudev->fault_detect_start(
-						adreno_dev);
+				if (adreno_dev->gpudev->fault_detect_start &&
+				!kgsl_active_count_get(&adreno_dev->dev)) {
+					adreno_dev->gpudev->fault_detect_start(adreno_dev);
+					kgsl_active_count_put(&adreno_dev->dev);
+				}
 
 				kgsl_pwrscale_enable(device);
 			} else {
@@ -3264,6 +3264,7 @@ static const struct kgsl_functable adreno_functable = {
 	.drawctxt_create = adreno_drawctxt_create,
 	.drawctxt_detach = adreno_drawctxt_detach,
 	.drawctxt_destroy = adreno_drawctxt_destroy,
+	.drawctxt_dump = adreno_drawctxt_dump,
 	.setproperty = adreno_setproperty,
 	.drawctxt_sched = adreno_drawctxt_sched,
 	.resume = adreno_dispatcher_start,

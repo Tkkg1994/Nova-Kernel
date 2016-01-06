@@ -302,7 +302,7 @@ static struct gpiomux_setting gpio_uart_rx_config = {
 static struct gpiomux_setting es705_gpio_uart_rx_config = {
 	.func = GPIOMUX_FUNC_2,
 	.drv  = GPIOMUX_DRV_16MA,
-	.pull = GPIOMUX_PULL_NONE,
+	.pull = GPIOMUX_PULL_UP,
 };
 #endif
 static struct msm_gpiomux_config msm_synaptics_configs[] __initdata = {
@@ -3268,6 +3268,10 @@ void __init apq8084_init_gpiomux(void)
 	} else {
 		msm_gpiomux_install(apq8084_hsic_configs,
 			ARRAY_SIZE(apq8084_hsic_configs));
+#if 0
+		msm_gpiomux_install_nowrite(msm_hdmi_configs,
+			ARRAY_SIZE(msm_hdmi_configs));
+#endif
 		msm_gpiomux_install(msm_hdmi_configs,
 			ARRAY_SIZE(msm_hdmi_configs));
 	}

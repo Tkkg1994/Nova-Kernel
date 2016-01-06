@@ -2469,6 +2469,25 @@ static ssize_t lifetime_write_kbytes_show(struct ext4_attr *a,
 			  EXT4_SB(sb)->s_sectors_written_start) >> 1)));
 }
 
+static ssize_t r_blocks_count_show(struct ext4_attr *a,
+		struct ext4_sb_info *sbi, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%llu\n",
+			(unsigned long long) atomic64_read(&sbi->s_r_blocks_count));
+}
+
+static ssize_t r_blocks_count_store(struct ext4_attr *a,
+		struct ext4_sb_info *sbi, const char *buf, size_t count)
+{
+	unsigned long long val;
+
+	if (parse_strtoull(buf, -1ULL, &val))
+		return -EINVAL;
+	atomic64_set(&sbi->s_r_blocks_count, val);
+
+	return count;
+}
+
 static ssize_t inode_readahead_blks_store(struct ext4_attr *a,
 					  struct ext4_sb_info *sbi,
 					  const char *buf, size_t count)
@@ -2568,6 +2587,7 @@ static struct ext4_attr ext4_attr_##name = __ATTR(name, mode, show, store)
 EXT4_RO_ATTR(delayed_allocation_blocks);
 EXT4_RO_ATTR(session_write_kbytes);
 EXT4_RO_ATTR(lifetime_write_kbytes);
+EXT4_RW_ATTR(r_blocks_count);
 EXT4_RW_ATTR(reserved_clusters);
 EXT4_ATTR_OFFSET(inode_readahead_blks, 0644, sbi_ui_show,
 		 inode_readahead_blks_store, s_inode_readahead_blks);
@@ -2586,6 +2606,7 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(delayed_allocation_blocks),
 	ATTR_LIST(session_write_kbytes),
 	ATTR_LIST(lifetime_write_kbytes),
+	ATTR_LIST(r_blocks_count),
 	ATTR_LIST(reserved_clusters),
 	ATTR_LIST(inode_readahead_blks),
 	ATTR_LIST(inode_goal),
@@ -3260,36 +3281,6 @@ int ext4_calculate_overhead(struct super_block *sb)
 	smp_wmb();
 	free_page((unsigned long) buf);
 	return 0;
-}
-
-
-static ext4_fsblk_t ext4_calculate_resv_clusters(struct super_block *sb)
-{
-	ext4_fsblk_t resv_clusters;
-
-	/*
-	 * There's no need to reserve anything when we aren't using extents.
-	 * The space estimates are exact, there are no unwritten extents,
-	 * hole punching doesn't need new metadata... This is needed especially
-	 * to keep ext2/3 backward compatibility.
-	 */
-	if (!EXT4_HAS_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_EXTENTS))
-		return 0;
-	/*
-	 * By default we reserve 2% or 4096 clusters, whichever is smaller.
-	 * This should cover the situations where we can not afford to run
-	 * out of space like for example punch hole, or converting
-	 * uninitialized extents in delalloc path. In most cases such
-	 * allocation would require 1, or 2 blocks, higher numbers are
-	 * very rare.
-	 */
-	resv_clusters = ext4_blocks_count(EXT4_SB(sb)->s_es) >>
-			EXT4_SB(sb)->s_cluster_bits;
-
-	do_div(resv_clusters, 50);
-	resv_clusters = min_t(ext4_fsblk_t, resv_clusters, 4096);
-
-	return resv_clusters;
 }
 
 
@@ -4034,10 +4025,12 @@ no_journal:
 			 "available");
 	}
 
-	err = ext4_reserve_clusters(sbi, ext4_calculate_resv_clusters(sb));
+	atomic64_set(&sbi->s_r_blocks_count, ext4_r_blocks_count(es));
+
+	err = ext4_reserve_clusters(sbi, 0);
 	if (err) {
 		ext4_msg(sb, KERN_ERR, "failed to reserve %llu clusters for "
-			 "reserved pool", ext4_calculate_resv_clusters(sb));
+			 "reserved pool", 0ULL);
 		goto failed_mount4a;
 	}
 
@@ -4913,8 +4906,8 @@ static int ext4_statfs(struct dentry *dentry, struct kstatfs *buf)
 	/* prevent underflow in case that few free space is available */
 	buf->f_bfree = EXT4_C2B(sbi, max_t(s64, bfree, 0));
 	buf->f_bavail = buf->f_bfree -
-			(ext4_r_blocks_count(es) + resv_blocks);
-	if (buf->f_bfree < (ext4_r_blocks_count(es) + resv_blocks))
+			(atomic64_read(&sbi->s_r_blocks_count) + resv_blocks);
+	if (buf->f_bfree < (atomic64_read(&sbi->s_r_blocks_count) + resv_blocks))
 		buf->f_bavail = 0;
 	buf->f_files = le32_to_cpu(es->s_inodes_count);
 	buf->f_ffree = percpu_counter_sum_positive(&sbi->s_freeinodes_counter);
