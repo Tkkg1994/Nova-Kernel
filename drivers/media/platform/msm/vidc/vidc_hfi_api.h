@@ -207,6 +207,7 @@ enum hal_property {
 	HAL_CONFIG_VENC_HIER_P_NUM_FRAMES,
 	HAL_PARAM_VENC_HIER_P_MAX_ENH_LAYERS,
 	HAL_PARAM_VENC_ENABLE_INITIAL_QP,
+	HAL_PARAM_VENC_SEARCH_RANGE,
 	HAL_PARAM_VENC_VPX_ERROR_RESILIENCE_MODE,
 	HAL_PARAM_VDEC_NON_SECURE_OUTPUT2,
 	HAL_PARAM_VENC_H264_NAL_SVC_EXT,
@@ -784,7 +785,7 @@ struct hal_buffer_requirements {
 
 enum hal_priority {/* Priority increases with number */
 	HAL_PRIORITY_LOW = 10,
-	HAL_PRIOIRTY_MEDIUM = 20,
+	HAL_PRIORITY_MEDIUM = 20,
 	HAL_PRIORITY_HIGH = 30,
 	HAL_UNUSED_PRIORITY = 0x10000000,
 };
@@ -916,6 +917,13 @@ struct hal_vpe_color_space_conversion {
 	u32 csc_matrix[HAL_MAX_MATRIX_COEFFS];
 	u32 csc_bias[HAL_MAX_BIAS_COEFFS];
 	u32 csc_limit[HAL_MAX_LIMIT_COEFFS];
+};
+
+struct hal_vc1e_perf_cfg_type {
+	struct {
+		u32 x_subsampled;
+		u32 y_subsampled;
+	} i_frame, p_frame, b_frame;
 };
 
 enum hal_video_color_space {

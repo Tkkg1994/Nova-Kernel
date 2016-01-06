@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -959,23 +959,69 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.qmenu = NULL,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY,
-		.name = "Session Priority",
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_X_RANGE,
+		.name = "I-Frame X coordinate search range",
 		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_ENABLE,
-		.maximum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
-		.default_value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
 		.step = 1,
+		.menu_skip_mask = 0,
 		.qmenu = NULL,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE,
-		.name = "Set Encoder Operating rate",
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_Y_RANGE,
+		.name = "I-Frame Y coordinate search range",
 		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = 0,
-		.maximum = 300 << 16,  /* 300 fps in Q16 format*/
-		.default_value = 0,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
 		.step = 1,
+		.menu_skip_mask = 0,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_PFRAME_X_RANGE,
+		.name = "P-Frame X coordinate search range",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
+		.step = 1,
+		.menu_skip_mask = 0,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_PFRAME_Y_RANGE,
+		.name = "P-Frame Y coordinate search range",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
+		.step = 1,
+		.menu_skip_mask = 0,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_BFRAME_X_RANGE,
+		.name = "B-Frame X coordinate search range",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
+		.step = 1,
+		.menu_skip_mask = 0,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_BFRAME_Y_RANGE,
+		.name = "B-Frame Y coordinate search range",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 4,
+		.maximum = 128,
+		.default_value = 4,
+		.step = 1,
+		.menu_skip_mask = 0,
 		.qmenu = NULL,
 	},
 	{
@@ -1013,6 +1059,26 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = 0,
 		.maximum = 5,
+		.default_value = 0,
+		.step = 1,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY,
+		.name = "Session Priority",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_ENABLE,
+		.maximum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+		.default_value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+		.step = 1,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE,
+		.name = "Set Encoder Operating rate",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = 300 << 16,  /* 300 fps in Q16 format*/
 		.default_value = 0,
 		.step = 1,
 		.qmenu = NULL,
@@ -2622,6 +2688,7 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		property_id = HAL_PARAM_VENC_HIER_P_HYBRID_MODE;
 		hyb_hierp.layers = ctrl->val;
 		pdata = &hyb_hierp;
+		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY:
 		property_id = HAL_CONFIG_REALTIME;
 		enable.enable = ctrl->val;
@@ -2655,6 +2722,7 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	struct v4l2_ext_control *control;
 	struct hfi_device *hdev;
 	struct hal_ltr_mode ltr_mode;
+	struct hal_vc1e_perf_cfg_type search_range = { {0} };
 	u32 property_id = 0;
 	void *pdata = NULL;
 	struct msm_vidc_core_capability *cap = NULL;
@@ -2720,6 +2788,36 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			quant.qpb = control[i].value;
 			property_id = HAL_PARAM_VENC_ENABLE_INITIAL_QP;
 			pdata = &quant;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_X_RANGE:
+			search_range.i_frame.x_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_Y_RANGE:
+			search_range.i_frame.y_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_PFRAME_X_RANGE:
+			search_range.p_frame.x_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_PFRAME_Y_RANGE:
+			search_range.p_frame.y_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_BFRAME_X_RANGE:
+			search_range.b_frame.x_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_BFRAME_Y_RANGE:
+			search_range.b_frame.y_subsampled = control[i].value;
+			property_id = HAL_PARAM_VENC_SEARCH_RANGE;
+			pdata = &search_range;
 			break;
 		default:
 			dprintk(VIDC_ERR, "Invalid id set: %d\n",
@@ -3026,6 +3124,7 @@ int msm_venc_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 	int rc = 0;
 	int i;
 	struct hfi_device *hdev;
+
 	if (!inst || !f) {
 		dprintk(VIDC_ERR,
 			"Invalid input, inst = %p, format = %p\n", inst, f);
@@ -3352,7 +3451,7 @@ int msm_venc_prepare_buf(struct msm_vidc_inst *inst,
 				inst->core);
 		goto exit;
 	}
-	
+
 	switch (b->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		break;
@@ -3398,7 +3497,7 @@ int msm_venc_prepare_buf(struct msm_vidc_inst *inst,
 			"Buffer type not recognized: %d\n", b->type);
 		break;
 	}
-exit:	
+exit:
 	return rc;
 }
 
