@@ -79,22 +79,6 @@ struct tzbsp_video_set_state_req {
 	u32 spare; /*reserved for future, should be zero*/
 };
 
-static inline void venus_hfi_set_state(struct venus_hfi_device *device,
-	enum venus_hfi_state state)
-{
-	mutex_lock(&device->write_lock);
-	mutex_lock(&device->read_lock);
-	device->state = state;
-	mutex_unlock(&device->write_lock);
-	mutex_unlock(&device->read_lock);
-}
-	
-static inline bool venus_hfi_core_in_valid_state(
-	struct venus_hfi_device *device)
-{
-	return device->state != VENUS_STATE_DEINIT;
-}
-
 static void venus_hfi_pm_hndlr(struct work_struct *work);
 static DECLARE_DELAYED_WORK(venus_hfi_pm_work, venus_hfi_pm_hndlr);
 
@@ -107,6 +91,22 @@ static inline int venus_hfi_prepare_enable_clks(
 	struct venus_hfi_device *device);
 static inline void venus_hfi_disable_unprepare_clks(
 	struct venus_hfi_device *device);
+
+static inline void venus_hfi_set_state(struct venus_hfi_device *device,
+		enum venus_hfi_state state)
+{
+	mutex_lock(&device->write_lock);
+	mutex_lock(&device->read_lock);
+	device->state = state;
+	mutex_unlock(&device->write_lock);
+	mutex_unlock(&device->read_lock);
+}
+
+static inline bool venus_hfi_core_in_valid_state(
+		struct venus_hfi_device *device)
+{
+	return device->state != VENUS_STATE_DEINIT;
+}
 
 static void venus_hfi_dump_packet(u8 *packet)
 {
@@ -1274,18 +1274,18 @@ static int __unset_free_ocmem(struct venus_hfi_device *device)
 
 	if (!device->res->ocmem_size)
 		return rc;
-		
+
 	mutex_lock(&device->write_lock);
 	mutex_lock(&device->read_lock);
 	rc = venus_hfi_core_in_valid_state(device);
 	mutex_unlock(&device->read_lock);
 	mutex_unlock(&device->write_lock);
-	
+
 	if (!rc) {
 		dprintk(VIDC_WARN,
 			"Core is in bad state, Skipping unset OCMEM\n");
 		goto core_in_bad_state;
-	}		
+	}
 
 	init_completion(&release_resources_done);
 	rc = __unset_ocmem(device);
@@ -2956,13 +2956,13 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	rc = venus_hfi_core_in_valid_state(device);
 	mutex_unlock(&device->read_lock);
 	mutex_unlock(&device->write_lock);
-	
+
 	if (!rc) {
-			dprintk(VIDC_WARN,
-					"Core is in bad state, Skipping power collapse\n");
-			return;
+		dprintk(VIDC_WARN,
+			"Core is in bad state, Skipping power collapse\n");
+		return;
 	}
-						
+
 	dprintk(VIDC_DBG, "Prepare for power collapse\n");
 
 	rc = venus_hfi_prepare_pc(device);
@@ -3048,7 +3048,7 @@ static void venus_hfi_process_msg_event_notify(
 		HFI_EVENT_SYS_ERROR) {
 
 		venus_hfi_set_state(device, VENUS_STATE_DEINIT);
-			
+
 		vsfr = (struct hfi_sfr_struct *)
 				device->sfr.align_virtual_addr;
 		if (vsfr) {

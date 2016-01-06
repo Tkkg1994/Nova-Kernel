@@ -185,10 +185,10 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 		goto failed_create_dir;
 	}
 	if (!debugfs_create_u32("firmware_unload_delay", S_IRUGO | S_IWUSR,
-					dir, &msm_vidc_firmware_unload_delay)) {
+			dir, &msm_vidc_firmware_unload_delay)) {
 		dprintk(VIDC_ERR,
-					"debugfs_create_file: firmware_unload_delay fail\n");
-					goto failed_create_dir;
+			"debugfs_create_file: firmware_unload_delay fail\n");
+		goto failed_create_dir;
 	}
 	return dir;
 

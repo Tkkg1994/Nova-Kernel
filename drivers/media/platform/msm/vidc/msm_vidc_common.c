@@ -2182,8 +2182,8 @@ static int msm_vidc_deinit_core(struct msm_vidc_inst *inst)
 					0 : msm_vidc_firmware_unload_delay));
 
 		dprintk(VIDC_DBG, "firmware unload delayed by %u ms\n",
-						core->state == VIDC_CORE_INVALID ?
-					0 : msm_vidc_firmware_unload_delay);
+			core->state == VIDC_CORE_INVALID ?
+			0 : msm_vidc_firmware_unload_delay);
 	}
 
 core_already_uninited:
@@ -2284,8 +2284,7 @@ static int msm_vidc_load_resources(int flipped_state,
 	int num_mbs_per_sec = 0;
 	struct msm_vidc_core *core;
 	enum load_calc_quirks quirks = LOAD_CALC_IGNORE_TURBO_LOAD |
-		LOAD_CALC_IGNORE_THUMBNAIL_LOAD |
-		LOAD_CALC_IGNORE_NON_REALTIME_LOAD;
+		LOAD_CALC_IGNORE_THUMBNAIL_LOAD | LOAD_CALC_IGNORE_NON_REALTIME_LOAD;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -3387,6 +3386,7 @@ int msm_comm_release_scratch_buffers(struct msm_vidc_inst *inst,
 	int rc = 0;
 	struct msm_vidc_core *core;
 	struct hfi_device *hdev;
+	enum hal_buffer sufficiency = HAL_BUFFER_NONE;
 	if (!inst) {
 		dprintk(VIDC_ERR,
 				"Invalid instance pointer = %p\n", inst);
@@ -4013,8 +4013,7 @@ static int msm_vidc_load_supported(struct msm_vidc_inst *inst)
 {
 	int num_mbs_per_sec = 0;
 	enum load_calc_quirks quirks = LOAD_CALC_IGNORE_TURBO_LOAD |
-		LOAD_CALC_IGNORE_THUMBNAIL_LOAD |
-		LOAD_CALC_IGNORE_NON_REALTIME_LOAD;
+		LOAD_CALC_IGNORE_THUMBNAIL_LOAD | LOAD_CALC_IGNORE_NON_REALTIME_LOAD;
 
 	if (inst->state == MSM_VIDC_OPEN_DONE) {
 		num_mbs_per_sec = msm_comm_get_load(inst->core,
