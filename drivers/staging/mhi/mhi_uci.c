@@ -429,7 +429,7 @@ static ssize_t mhi_uci_client_write(struct file *file,
 
 int mhi_uci_init(void)
 {
-	mhi_uci_ipc_log = ipc_log_context_create(MHI_UCI_IPC_LOG_PAGES, "mhi-uci");
+	mhi_uci_ipc_log = ipc_log_context_create(MHI_UCI_IPC_LOG_PAGES, "mhi-uci", 0);
 	if (mhi_uci_ipc_log == NULL) {
 		mhi_uci_log(UCI_DBG_WARNING, "Failed to create IPC logging context\n");
 	}

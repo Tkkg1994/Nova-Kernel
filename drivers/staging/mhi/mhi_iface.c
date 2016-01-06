@@ -129,7 +129,7 @@ static int __init mhi_init(void)
 	timestamps_log = (struct timestamp*)kmalloc(sizeof(struct timestamp) * NUM_ENTRIES, GFP_KERNEL);
 	if (pci_register_driver(&mhi_pcie_driver))
 		return -EIO;
-	mhi_ipc_log = ipc_log_context_create(MHI_IPC_LOG_PAGES, "mhi");
+	mhi_ipc_log = ipc_log_context_create(MHI_IPC_LOG_PAGES, "mhi", 0);
 	if (!mhi_ipc_log) {
 		mhi_log(MHI_MSG_ERROR,
 				"Failed to create IPC logging context\n");
