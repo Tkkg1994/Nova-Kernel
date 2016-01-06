@@ -175,7 +175,6 @@ static void put_cred_rcu(struct rcu_head *rcu)
 		put_group_info(cred->group_info);
 	free_uid(cred->user);
 	put_user_ns(cred->user_ns);
-
 	kmem_cache_free(cred_jar, cred);
 }
 

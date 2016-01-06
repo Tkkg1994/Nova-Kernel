@@ -564,8 +564,6 @@ out2:
 }
 #endif
 
-
-
 #ifdef CONFIG_PM_SLEEP_SMP
 static cpumask_var_t frozen_cpus;
 
