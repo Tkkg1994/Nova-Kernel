@@ -1520,7 +1520,14 @@ config ALUCARD_HOTPLUG
 	bool "Enable alucard-hotplug cpu hotplug driver"
 	default y
 	help
-	  Generic Alucard-hotplug cpu hotplug driver for ARM SOCs
+	  Generic Alucard-hotplug cpu hotplug driver for ARM SOCs.
+
+config MAKO_HOTPLUG
+	bool "Mako hotplug driver"
+	depends on HOTPLUG_CPU
+	default y
+	help
+	  Generic hotplug driver for SMP devices.
 
 config MSM_LIMITER
 	bool "MSM Frequency Limiter Driver"
