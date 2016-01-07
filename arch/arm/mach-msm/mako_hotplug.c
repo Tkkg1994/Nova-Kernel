@@ -577,3 +577,7 @@ static void __exit mako_hotplug_exit(void)
 
 late_initcall(mako_hotplug_init);
 module_exit(mako_hotplug_exit);
+
+MODULE_AUTHOR("franciscofranco <franciscofranco.1990@gmail.com>");
+MODULE_DESCRIPTION("Mako Hotplug Driver");
+MODULE_LICENSE("GPLv2");
