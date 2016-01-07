@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
 
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License version 2 and
@@ -56,8 +56,8 @@ struct avtimer_t {
 	struct class *avtimer_class;
 	struct mutex avtimer_lock;
 	int avtimer_open_cnt;
-	struct dev_avtimer_data avtimer_pdata;
 	struct delayed_work ssr_dwork;
+	struct dev_avtimer_data avtimer_pdata;
 	wait_queue_head_t adsp_resp_wait;
 	int enable_timer_resp_recieved;
 	int timer_handle;
@@ -298,9 +298,8 @@ int avcs_core_query_timer(uint64_t *avtimer_tick)
 		pr_debug("%s:In SSR, return\n", __func__);
 		return -ENETRESET;
 	}
-	avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
 	avtimer_msw = ioread32(avtimer.p_avtimer_msw);
-
+	avtimer_lsw = ioread32(avtimer.p_avtimer_lsw);
 	avtimer_tick_temp =
 		(uint64_t)((uint64_t)avtimer_msw << 32)
 			| avtimer_lsw;
@@ -308,6 +307,7 @@ int avcs_core_query_timer(uint64_t *avtimer_tick)
 	*avtimer_tick = avtimer_tick_temp;
 	pr_debug("%s:Avtimer: msw: %u, lsw: %u, tick: %llu\n", __func__,
 			avtimer_msw, avtimer_lsw, *avtimer_tick);
+
 	return 0;
 }
 EXPORT_SYMBOL(avcs_core_query_timer);
