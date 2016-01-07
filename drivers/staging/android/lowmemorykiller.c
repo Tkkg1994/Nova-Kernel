@@ -1,4 +1,4 @@
-/* drivers/misc/lowmemorykiller.c
+/* drivers/staging/android/lowmemorykiller.c
  *
  * The lowmemorykiller driver lets user-space specify a set of memory thresholds
  * where processes with a range of oom_score_adj values will get killed. Specify
@@ -46,8 +46,9 @@
 #include <linux/cpuset.h>
 #include <linux/show_mem_notifier.h>
 #include <linux/vmpressure.h>
-
 #include <linux/ratelimit.h>
+
+#include <trace/events/memkill.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/almk.h>
 
@@ -72,8 +73,6 @@ static uint32_t oom_count = 0;
 #ifdef MULTIPLE_OOM_KILLER
 #define OOM_DEPTH 4
 #endif
-
-#include <trace/events/memkill.h>
 
 #ifdef CONFIG_HIGHMEM
 #define _ZONE ZONE_HIGHMEM
