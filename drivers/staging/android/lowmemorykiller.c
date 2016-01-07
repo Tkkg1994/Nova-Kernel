@@ -73,9 +73,6 @@ static uint32_t oom_count = 0;
 #define OOM_DEPTH 4
 #endif
 
-#define CREATE_TRACE_POINTS
-#include "trace/lowmemorykiller.h"
-
 #include <trace/events/memkill.h>
 
 #ifdef CONFIG_HIGHMEM
@@ -753,10 +750,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		int i, j;
 		char zinfo[ZINFO_LENGTH];
 		char *p = zinfo;
-		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
-		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
-		long free = other_free * (long)(PAGE_SIZE / 1024);
-		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
 #if defined(CONFIG_CMA_PAGE_COUNTING)
 		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
 				"   to free %ldkB on behalf of '%s' (%d) because\n" \
@@ -767,9 +760,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     selected_oom_score_adj,
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
 			     current->comm, current->pid,
-			     cache_size, cache_limit,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
 			     min_score_adj,
-			     free,
+			     other_free * (long)(PAGE_SIZE / 1024),
 			     nr_cma_free * (long)(PAGE_SIZE / 1024),
 			     sc->priority,
 			     nr_cma_inactive_file * (long)(PAGE_SIZE / 1024),
@@ -792,9 +786,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     selected_oom_score_adj,
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
 			     current->comm, current->pid,
-			     cache_size, cache_limit,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
 			     min_score_adj,
-			     free,
+			     other_free * (long)(PAGE_SIZE / 1024),
 			     global_page_state(NR_FREE_CMA_PAGES) *
 				(long)(PAGE_SIZE / 1024),
 			     totalreserve_pages * (long)(PAGE_SIZE / 1024),
@@ -819,6 +814,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			dump_tasks(NULL, NULL);
 			show_mem_call_notifiers();
 		}
+
 		lowmem_deathpending_timeout = jiffies + HZ;
 		for (i = 0; i < MAX_NUMNODES; i++)
 			for (j = 0; j < MAX_NR_ZONES; j++)
