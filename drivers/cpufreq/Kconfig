@@ -274,6 +274,11 @@ config CPU_FREQ_DEFAULT_GOV_SMARTMAX_EPS
 	help
 	  Use the CPUFreq governor 'smartmax eps' as default
 
+config CPU_FREQ_DEFAULT_GOV_ALUCARD
+	bool "alucard"
+	select CPU_FREQ_GOV_ALUCARD
+	help
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -545,6 +550,10 @@ config CPU_FREQ_GOV_SMARTMAX_EPS
 	select CPU_FREQ_TABLE
 	help
 	  'smartmax EPS' is the extreme powersaving version of smartmax
+
+config CPU_FREQ_GOV_ALUCARD
+	tristate "'alucard' cpufreq governor"
+	depends on CPU_FREQ
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
