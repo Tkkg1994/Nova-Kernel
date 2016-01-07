@@ -25,8 +25,8 @@ extern int poweroff_charging;
 #include <linux/mutex.h>
 #include <linux/wakelock.h>
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
 #endif
 
 #if defined(CONFIG_SEC_LENTIS_PROJECT)
@@ -247,8 +247,8 @@ struct cypress_touchkey_info {
 	struct i2c_client			*client;
 	struct cypress_touchkey_platform_data	*pdata;
 	struct input_dev			*input_dev;
-#ifdef CONFIG_HAS_EARLYSUSPEND	
-	struct early_suspend			early_suspend;
+#ifdef CONFIG_STATE_NOTIFIER
+	struct notifier_block			notif;
 #endif
 	char			phys[32];
 	unsigned char			keycode[NUM_OF_KEY];

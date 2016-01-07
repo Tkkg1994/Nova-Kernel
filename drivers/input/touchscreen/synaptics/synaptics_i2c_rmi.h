@@ -24,8 +24,8 @@
 #include <linux/i2c/synaptics_rmi.h>
 #include <linux/regulator/consumer.h>
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
 #endif
 
 #ifdef CONFIG_INPUT_BOOSTER
@@ -43,7 +43,7 @@
 #define DEFAULT_DISABLE	0
 
 /* feature define */
-#define USE_OPEN_CLOSE	/* Use when CONFIG_HAS_EARLYSUSPEND is disabled */
+#define USE_OPEN_CLOSE	/* Use when CONFIG_STATE_NOTIFIER is disabled */
 #define REPORT_2D_W
 #define REDUCE_I2C_DATA_LENGTH
 #define USE_SENSOR_SLEEP
@@ -958,10 +958,10 @@ struct synaptics_rmi4_device_tree_data {
  * @rmi4_mod_info: device information
  * @regulator: pointer to associated regulator
  * @rmi4_io_ctrl_mutex: mutex for i2c i/o control
- * @early_suspend: instance to support early suspend power management
+ * @notifier_block: instance to support state suspend power management
  * @current_page: current page in sensor to acess
  * @button_0d_enabled: flag for 0d button support
- * @full_pm_cycle: flag for full power management cycle in early suspend stage
+ * @full_pm_cycle: flag for full power management cycle in state suspend stage
  * @num_of_intr_regs: number of interrupt registers
  * @f01_query_base_addr: query base address for f01
  * @f01_cmd_base_addr: command base address for f01
@@ -997,8 +997,8 @@ struct synaptics_rmi4_data {
 	struct mutex rmi4_reflash_mutex;
 	struct timer_list f51_finger_timer;
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	struct early_suspend early_suspend;
+#ifdef CONFIG_STATE_NOTIFIER
+	struct notifier_block notif;
 #endif
 	const char *firmware_name;
 

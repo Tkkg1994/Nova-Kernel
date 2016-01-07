@@ -178,8 +178,8 @@ struct mipi_samsung_driver_data {
 	int lcd_panel_cmds;
 #endif
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-	struct early_suspend early_suspend;
+#if defined(CONFIG_STATE_NOTIFIER)
+	struct notifier_block notif;
 #endif
 	char panel_name[MAX_PANEL_NAME_SIZE];
 	int panel;

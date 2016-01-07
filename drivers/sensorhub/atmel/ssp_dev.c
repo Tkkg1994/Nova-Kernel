@@ -31,9 +31,26 @@ static int prevent_irq;
 extern unsigned int system_rev;
 #endif
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-static void ssp_early_suspend(struct early_suspend *handler);
-static void ssp_late_resume(struct early_suspend *handler);
+#ifdef CONFIG_STATE_NOTIFIER
+static void ssp_state_suspend(struct notifier_block *handler);
+static void ssp_late_resume(struct notifier_block *handler);
+
+static int state_notifier_callback(struct notifier_block *this,
+				   unsigned long event, void *data)
+{
+	switch (event) {
+		case STATE_NOTIFIER_ACTIVE:
+			ssp_late_resume(this);
+			break;
+		case STATE_NOTIFIER_SUSPEND:
+			ssp_state_suspend(this);
+			break;
+		default:
+			break;
+	}
+
+	return NOTIFY_OK;
+}
 #endif
 #define NORMAL_SENSOR_STATE_K	0x3FEFF
 
@@ -547,10 +564,12 @@ static int ssp_probe(struct spi_device *spi)
 		}
 	}
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	data->early_suspend.suspend = ssp_early_suspend;
-	data->early_suspend.resume = ssp_late_resume;
-	register_early_suspend(&data->early_suspend);
+#ifdef CONFIG_STATE_NOTIFIER
+	data->notif.notifier_call = state_notifier_callback;
+	if (state_register_client(&data->notif)) {
+		pr_err("Failed to register STATE notifier callback for ssp_sensorhub module\n");
+		goto err_sysfs;
+	}
 #endif
 
 	pr_info("[SSP]: %s - probe success!\n", __func__);
@@ -622,8 +641,8 @@ static void ssp_shutdown(struct spi_device *spi)
 	ssp_enable(data, false);
 	clean_pending_list(data);
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	unregister_early_suspend(&data->early_suspend);
+#ifdef CONFIG_STATE_NOTIFIER
+	unregister_state_suspend(&data->notif);
 #endif
 
 	free_irq(data->iIrq, data);
@@ -654,11 +673,11 @@ exit:
 	kfree(data);
 }
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-static void ssp_early_suspend(struct early_suspend *handler)
+#ifdef CONFIG_STATE_NOTIFIER
+static void ssp_state_suspend(struct notifier_block *handler)
 {
 	struct ssp_data *data;
-	data = container_of(handler, struct ssp_data, early_suspend);
+	data = container_of(handler, struct ssp_data, notif);
 
 	func_dbg();
 	disable_debug_timer(data);
@@ -674,10 +693,10 @@ static void ssp_early_suspend(struct early_suspend *handler)
 #endif
 }
 
-static void ssp_late_resume(struct early_suspend *handler)
+static void ssp_late_resume(struct notifier_block *handler)
 {
 	struct ssp_data *data;
-	data = container_of(handler, struct ssp_data, early_suspend);
+	data = container_of(handler, struct ssp_data, notif);
 
 	func_dbg();
 	enable_debug_timer(data);
@@ -693,7 +712,7 @@ static void ssp_late_resume(struct early_suspend *handler)
 #endif
 }
 
-#else /* no early suspend */
+#else /* no state suspend */
 
 static int ssp_suspend(struct device *dev)
 {
@@ -740,7 +759,7 @@ static const struct dev_pm_ops ssp_pm_ops = {
 	.suspend = ssp_suspend,
 	.resume = ssp_resume
 };
-#endif /* CONFIG_HAS_EARLYSUSPEND */
+#endif /* CONFIG_STATE_NOTIFIER */
 
 static const struct spi_device_id ssp_id[] = {
 	{"ssp", 0},
@@ -759,7 +778,7 @@ static struct spi_driver ssp_driver = {
 	.shutdown = ssp_shutdown,
 	.id_table = ssp_id,
 	.driver = {
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#ifndef CONFIG_STATE_NOTIFIER
 		   .pm = &ssp_pm_ops,
 #endif
 		   .owner = THIS_MODULE,

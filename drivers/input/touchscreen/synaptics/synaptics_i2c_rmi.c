@@ -22,8 +22,8 @@
 #include <linux/input/mt.h>
 #include <linux/gpio.h>
 #include <linux/regulator/consumer.h>
-#ifdef CONFIG_HAS_EARLYSUSPEND
-#include <linux/earlysuspend.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
 #endif
 #include "synaptics_i2c_rmi.h"
 
@@ -79,16 +79,33 @@ static int synaptics_rmi4_start_device(struct synaptics_rmi4_data *rmi4_data);
 static int synaptics_rmi4_init_exp_fn(struct synaptics_rmi4_data *rmi4_data);
 static void synaptics_rmi4_remove_exp_fn(struct synaptics_rmi4_data *rmi4_data);
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_STATE_NOTIFIER
 static ssize_t synaptics_rmi4_full_pm_cycle_show(struct device *dev,
 		struct device_attribute *attr, char *buf);
 
 static ssize_t synaptics_rmi4_full_pm_cycle_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
 
-static void synaptics_rmi4_early_suspend(struct early_suspend *h);
+static void synaptics_rmi4_state_suspend(struct notifier_block *h);
 
-static void synaptics_rmi4_late_resume(struct early_suspend *h);
+static void synaptics_rmi4_late_resume(struct notifier_block *h);
+
+static int state_notifier_callback(struct notifier_block *this,
+				   unsigned long event, void *data)
+{
+	switch (event) {
+		case STATE_NOTIFIER_ACTIVE:
+			synaptics_rmi4_late_resume(this);
+			break;
+		case STATE_NOTIFIER_SUSPEND:
+			synaptics_rmi4_state_suspend(this);
+			break;
+		default:
+			break;
+	}
+
+	return NOTIFY_OK;
+}
 
 #else
 
@@ -164,10 +181,10 @@ static ssize_t synaptics_rmi4_0dbutton_show(struct device *dev,
 
 static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
-
+#ifndef CONFIG_STATE_NOTIFIER
 static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count);
-
+#endif
 static struct device_attribute attrs[] = {
 	__ATTR(regval, (S_IRUGO | S_IWUSR | S_IWGRP),
 			NULL,
@@ -175,7 +192,7 @@ static struct device_attribute attrs[] = {
 	__ATTR(global, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_global_show,
 			synaptics_rmi4_global_store),
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_STATE_NOTIFIER
 	__ATTR(full_pm_cycle, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_full_pm_cycle_show,
 			synaptics_rmi4_full_pm_cycle_store),
@@ -214,9 +231,11 @@ static struct device_attribute attrs[] = {
 	__ATTR(0dbutton, (S_IRUGO | S_IWUSR | S_IWGRP),
 			synaptics_rmi4_0dbutton_show,
 			synaptics_rmi4_0dbutton_store),
+#ifndef CONFIG_STATE_NOTIFIER
 	__ATTR(suspend, S_IWUSR | S_IWGRP,
 			synaptics_rmi4_show_error,
 			synaptics_rmi4_suspend_store),
+#endif
 };
 
 #ifdef READ_LCD_ID
@@ -407,7 +426,7 @@ static void synaptics_request_gpio(struct synaptics_rmi4_data *rmi4_data)
 	}
 }
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_STATE_NOTIFIER
 static ssize_t synaptics_rmi4_full_pm_cycle_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -880,6 +899,7 @@ static ssize_t synaptics_rmi4_0dbutton_store(struct device *dev,
 	return count;
 }
 
+#ifndef CONFIG_STATE_NOTIFIER
 static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -897,6 +917,7 @@ static ssize_t synaptics_rmi4_suspend_store(struct device *dev,
 
 	return count;
 }
+#endif
 
 /**
  * synaptics_rmi4_set_page()
@@ -4646,7 +4667,7 @@ static void msm_tkey_led_set(struct led_classdev *led_cdev,
  * as an input driver, turns on the power to the sensor, queries the
  * sensor for its supported Functions and characteristics, registers
  * the driver to the input subsystem, sets up the interrupt, handles
- * the registration of the early_suspend and late_resume functions,
+ * the registration of the state_notifier and late_resume functions,
  * and creates a work queue for detection of other expansion Function
  * modules.
  */
@@ -4849,11 +4870,12 @@ err_tsp_reboot:
 		goto err_led_reg;
 	}
 #endif
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	rmi4_data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN - 2;
-	rmi4_data->early_suspend.suspend = synaptics_rmi4_early_suspend;
-	rmi4_data->early_suspend.resume = synaptics_rmi4_late_resume;
-	register_early_suspend(&rmi4_data->early_suspend);
+#ifdef CONFIG_STATE_NOTIFIER
+	rmi4_data->notif.notifier_call = state_notifier_callback;
+	if (state_register_client(&rmi4_data->notif)) {
+		pr_err("Failed to register STATE notifier callback for synaptics_i2c_rmi module\n");
+		goto err_sysfs;
+	}
 #endif
 
 #ifdef SYNAPTICS_RMI_INFORM_CHARGER
@@ -4962,8 +4984,8 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 	struct synaptics_rmi4_device_info *rmi;
 
 	rmi = &(rmi4_data->rmi4_mod_info);
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	unregister_early_suspend(&rmi4_data->early_suspend);
+#ifdef CONFIG_STATE_NOTIFIER
+	state_unregister_client(&rmi4_data->notif);
 #endif
 #if defined(CONFIG_LEDS_CLASS) && defined(TOUCHKEY_ENABLE)
 	led_classdev_unregister(&rmi4_data->leds);
@@ -5013,7 +5035,7 @@ static int synaptics_rmi4_remove(struct i2c_client *client)
 /**
  * synaptics_rmi4_sensor_sleep()
  *
- * Called by synaptics_rmi4_early_suspend() and synaptics_rmi4_suspend().
+ * Called by synaptics_rmi4_state_suspend() and synaptics_rmi4_suspend().
  *
  * This function stops finger data acquisition and puts the sensor to sleep.
  */
@@ -5273,24 +5295,24 @@ static void synaptics_rmi4_input_close(struct input_dev *dev)
 #endif
 
 #ifdef CONFIG_PM
-#ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_STATE_NOTIFIER
 #define synaptics_rmi4_suspend NULL
 #define synaptics_rmi4_resume NULL
 
 /**
- * synaptics_rmi4_early_suspend()
+ * synaptics_rmi4_state_suspend()
  *
- * Called by the kernel during the early suspend phase when the system
+ * Called by the kernel during the state suspend phase when the system
  * enters suspend.
  *
  * This function calls synaptics_rmi4_sensor_sleep() to stop finger
  * data acquisition and put the sensor to sleep.
  */
-static void synaptics_rmi4_early_suspend(struct early_suspend *h)
+static void synaptics_rmi4_state_suspend(struct notifier_block *h)
 {
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(h, struct synaptics_rmi4_data,
-				early_suspend);
+				notif);
 
 	dev_info(&rmi4_data->i2c_client->dev, "%s\n", __func__);
 
@@ -5315,14 +5337,14 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
  * wakes up from suspend.
  *
  * This function goes through the sensor wake process if the system wakes
- * up from early suspend (without going into suspend).
+ * up from state suspend (without going into suspend).
  */
-static void synaptics_rmi4_late_resume(struct early_suspend *h)
+static void synaptics_rmi4_late_resume(struct notifier_block *h)
 {
 	int retval = 0;
 	struct synaptics_rmi4_data *rmi4_data =
 		container_of(h, struct synaptics_rmi4_data,
-				early_suspend);
+				notif);
 
 	dev_info(&rmi4_data->i2c_client->dev, "%s\n", __func__);
 
@@ -5348,7 +5370,7 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
  * enters suspend.
  *
  * This function stops finger data acquisition and puts the sensor to
- * sleep (if not already done so during the early suspend phase),
+ * sleep (if not already done so during the state suspend phase),
  * disables the interrupt, and turns off the power to the sensor.
  */
 static int synaptics_rmi4_suspend(struct device *dev)
@@ -5486,4 +5508,3 @@ MODULE_AUTHOR("Synaptics, Inc.");
 MODULE_DESCRIPTION("Synaptics RMI4 I2C Touch Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(SYNAPTICS_RMI4_DRIVER_VERSION);
-
