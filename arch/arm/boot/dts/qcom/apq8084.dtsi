@@ -28,10 +28,6 @@
 		spi0 = &spi_0;
 	};
 
-	chosen {
-		bootargs = "sched_enable_hmp=1 sched_enable_power_aware=1";
-	};
-
 	cpus {
 		#size-cells = <0>;
 		#address-cells = <1>;
