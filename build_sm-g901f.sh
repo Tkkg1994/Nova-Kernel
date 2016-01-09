@@ -10,9 +10,9 @@ BUILD_KERNEL_OUT_DIR=$BUILD_ROOT_DIR
 
 BOARD_KERNEL_BASE=0x00000000
 BOARD_KERNEL_PAGESIZE=4096
-BOARD_KERNEL_TAGS_OFFSET=0x01E00000
-BOARD_RAMDISK_OFFSET=0x02000000
-BOARD_KERNEL_CMDLINE="console=ttyHSL0,115200,n8 androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x37 ehci-hcd.park=3"
+BOARD_KERNEL_TAGS_OFFSET=0x02400000
+BOARD_RAMDISK_OFFSET=0x02600000
+BOARD_KERNEL_CMDLINE="console=null androidboot.hardware=qcom user_debug=23 msm_rtb.filter=0x3b7 dwc3_msm.cpu_to_affin=1 lpm_levels.sleep_disabled=1"
 
 KERNEL_ZIMG=$BUILD_KERNEL_OUT_DIR/arch/arm/boot/zImage
 DTC=$BUILD_KERNEL_OUT_DIR/scripts/dtc/dtc
@@ -24,6 +24,8 @@ FUNC_CLEAN_DTB()
 	else
 		echo "rm files in : "$BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/*.dtb""
 		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/*.dtb
+		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/dt.img
+		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/zImage
 	fi
 }
 
@@ -64,7 +66,7 @@ FUNC_CLEAN_DTB
 
 cp -f $BUILD_WHERE/arch/arm/configs/0Nova-Kernel_SM-G901F_defconfig $BUILD_WHERE
 
-cp -f $BUILD_WHERE/0Nova-Kernel_SM-G901F_defconfig $BUILD_WHERE/.config
+mv -f $BUILD_WHERE/0Nova-Kernel_SM-G901F_defconfig $BUILD_WHERE/.config
 
 make -j3
 
