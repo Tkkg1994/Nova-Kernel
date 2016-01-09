@@ -6692,12 +6692,15 @@ static const struct trace_print_flags pageflag_names[] = {
 	{1UL << PG_compound_lock,	"compound_lock"	},
 #endif
 #ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
-	{1UL << PG_scfslower, "scfslower"},
-	{1UL << PG_nocache,"nocache"},
+	{1UL << PG_scfslower,		"scfslower"	},
+	{1UL << PG_nocache,		"nocache"	},
 #endif
 	{1UL << PG_readahead,           "PG_readahead"  },
 #ifdef CONFIG_SDP
-	{1UL << PG_sensitive,	"sensitive"	},
+	{1UL << PG_sensitive,		"sensitive"	},
+#endif
+#ifdef CONFIG_KSM_CHECK_PAGE
+	{1UL << PG_ksm_scan0,           "PG_ksm_scan0"  },
 #endif
 };
 
