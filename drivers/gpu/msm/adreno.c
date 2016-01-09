@@ -2499,7 +2499,7 @@ static int adreno_getproperty(struct kgsl_device *device,
 
 			memset(&devinfo, 0, sizeof(devinfo));
 			devinfo.device_id = device->id+1;
-			devinfo.chipid = adreno_dev->chipid;
+			devinfo.chip_id = adreno_dev->chipid;
 			devinfo.mmu_enabled = kgsl_mmu_enabled();
 			devinfo.gpu_id = ADRENO_GPUREV(adreno_dev);
 			devinfo.gmem_gpubaseaddr = adreno_dev->gmem_base;
