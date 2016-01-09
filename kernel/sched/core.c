@@ -92,7 +92,7 @@
 
 #include <mach/sec_debug.h>
 
-#include "../../arch/arm/mach-msm/msm_watchdog.h"
+#include <soc/qcom/watchdog.h>
 
 #define DLOG_SIZE 15000
 #define MAX_CTXSW_LATENCY 1000000000
