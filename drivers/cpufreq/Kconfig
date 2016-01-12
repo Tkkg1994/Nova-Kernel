@@ -135,6 +135,7 @@ config CPU_FREQ_DEFAULT_GOV_ZZMOOVE
 
 config CPU_FREQ_DEFAULT_GOV_IMPULSE
 	bool "impulse"
+	depends on CONFIG_SCHED_FREQ_INPUT
 	select CPU_FREQ_GOV_IMPULSE
 	help
 	  Use the CPUFreq governor 'impulse' as default. This allows
@@ -262,6 +263,7 @@ config CPU_FREQ_DEFAULT_GOV_SMARTASS2
 
 config CPU_FREQ_DEFAULT_GOV_IRONACTIVE
 	bool "ironactive"
+	depends on CONFIG_SCHED_FREQ_INPUT
 	select CPU_FREQ_GOV_IRONACTIVE
 	help
 	  Use the CPUFreq governor 'ironactive' as default. This cpugovernor
@@ -388,6 +390,7 @@ config CPU_FREQ_GOV_ZZMOOVE
 
 config CPU_FREQ_GOV_IMPULSE
 	tristate "'interactive' cpufreq policy governor"
+	depends on CONFIG_SCHED_FREQ_INPUT
 	help
 	  'impulse' - This driver adds a dynamic cpufreq policy governor
 	  designed for latency-sensitive workloads.
@@ -530,6 +533,7 @@ config CPU_FREQ_GOV_SMARTASS2
 
 config CPU_FREQ_GOV_IRONACTIVE
 	tristate "'ironactive' cpufreq policy governor"
+	depends on CONFIG_SCHED_FREQ_INPUT
 	help
 	  'ironactive' - This driver adds a dynamic cpufreq policy governor
 	  designed for latency-sensitive workloads.
