@@ -4,7 +4,6 @@
  *
  * Copyright (C) 2012 Miguel Boton <mboton@gmail.com>
  *           (C) 2013, 2014 Boy Petersen <boypetersen@gmail.com>
- *.              2015 Linux 3.10 compatibility by Matthew Alex <matthewalex@outlook.com>
  *
  * This algorithm does not do any kind of sorting, as it is aimed for
  * aleatory access devices, but it does some basic merging. We try to
