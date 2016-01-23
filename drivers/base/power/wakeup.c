@@ -32,6 +32,8 @@ static bool enable_bluesleep_ws = true;
 module_param(enable_bluesleep_ws, bool, 0644);
 static bool enable_ssp_sensorhub_ws = true;
 module_param(enable_ssp_sensorhub_ws, bool, 0644);
+static bool enable_ssp_ws = true;
+module_param(enable_ssp_ws, bool, 0644);
 
 #include "power.h"
 
@@ -518,7 +520,12 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 		return;
 	}
 
-	if (!enable_ssp_sensorhub_ws && !strcmp(ws->name, "ssp_wake_lock")) {
+	if (!enable_ssp_sensorhub_ws && !strcmp(ws->name, "ssp_sensorhub_wake_lock")) {
+		pr_info("wakeup source %s activate skipped\n",ws->name);
+		return;
+	}
+
+	if (!enable_ssp_ws && !strcmp(ws->name, "ssp_wake_lock")) {
 		pr_info("wakeup source %s activate skipped\n",ws->name);
 		return;
 	}
