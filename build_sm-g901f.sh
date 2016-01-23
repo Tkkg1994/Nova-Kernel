@@ -24,8 +24,8 @@ FUNC_CLEAN_DTB()
 	else
 		echo "rm files in : "$BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/*.dtb""
 		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/*.dtb
-		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/dt.img
-		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dts/zImage
+		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/dt.img
+		rm $BUILD_KERNEL_OUT_DIR/arch/arm/boot/zImage
 	fi
 }
 
