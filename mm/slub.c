@@ -39,17 +39,6 @@
 #include <linux/security.h>
 #endif /*CONFIG_TIMA_RKP_RO_CRED*/
 
-#ifdef CONFIG_TIMA_RKP_RO_CRED
-#define check_cred_cache(s,r)			\
-do {							\
-	if ((s->name) && !strcmp(s->name,"cred_jar_ro"))	\
-		return r;		\
-} while (0)
-#else
-#define check_cred_cache(s,r)   
-#endif  /* CONFIG_TIMA_RKP_RO_CRED */
-
-
 #include <trace/events/kmem.h>
 
 #include "internal.h"
@@ -57,7 +46,6 @@ do {							\
 #ifdef CONFIG_SEC_DEBUG_DOUBLE_FREE
 #include <mach/sec_debug.h>
 #endif
-
 
 /*
  * Lock order:
@@ -571,7 +559,7 @@ static void get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
 {
 	void *p;
 	void *addr = page_address(page);
-	check_cred_cache(s, );
+
 	for (p = page->freelist; p; p = get_freepointer(s, p))
 		set_bit(slab_index(p, s, addr), map);
 }
@@ -632,8 +620,7 @@ static void set_track(struct kmem_cache *s, void *object,
 			enum track_item alloc, unsigned long addr)
 {
 	struct track *p = get_track(s, object, alloc);
-	
-	check_cred_cache(s, );
+
 	if (addr) {
 #ifdef CONFIG_STACKTRACE
 		struct stack_trace trace;
@@ -802,7 +789,6 @@ static void init_object(struct kmem_cache *s, void *object, u8 val)
 {
 	u8 *p = object;
 
-	check_cred_cache(s, );
 	if (s->flags & __OBJECT_POISON) {
 		memset(p, POISON_FREE, s->object_size - 1);
 		p[s->object_size - 1] = POISON_END;
@@ -827,7 +813,6 @@ static int check_bytes_and_report(struct kmem_cache *s, struct page *page,
 	u8 *end;
 
 	metadata_access_enable();
-	check_cred_cache(s,1);
 	fault = memchr_inv(start, value, bytes);
 	metadata_access_disable();
 	if (!fault)
@@ -918,8 +903,7 @@ static int slab_pad_check(struct kmem_cache *s, struct page *page)
 
 	if (!(s->flags & SLAB_POISON))
 		return 1;
-	
-	check_cred_cache(s,1);
+
 	start = page_address(page);
 	length = (PAGE_SIZE << compound_order(page)) - s->reserved;
 	end = start + length;
@@ -1039,7 +1023,6 @@ static int on_freelist(struct kmem_cache *s, struct page *page, void *search)
 	int max_objects;
 
 	fp = page->freelist;
-	check_cred_cache(s,0);
 	while (fp && nr <= page->objects) {
 		if (fp == search)
 			return 1;
@@ -1105,8 +1088,6 @@ static void trace(struct kmem_cache *s, struct page *page, void *object,
 static void add_full(struct kmem_cache *s,
 	struct kmem_cache_node *n, struct page *page)
 {
-	check_cred_cache(s, );
-
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
@@ -1116,9 +1097,6 @@ static void add_full(struct kmem_cache *s,
 
 static void remove_full(struct kmem_cache *s, struct kmem_cache_node *n, struct page *page)
 {
-	check_cred_cache(s, );
-
-
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
@@ -1177,7 +1155,6 @@ static noinline int alloc_debug_processing(struct kmem_cache *s,
 					struct page *page,
 					void *object, unsigned long addr)
 {
-	check_cred_cache(s,0);
 	if (!check_slab(s, page))
 		goto bad;
 
@@ -1203,7 +1180,6 @@ bad:
 		 * to avoid issues in the future. Marking all objects
 		 * as used avoids touching the remaining objects.
 		 */
-		BUG();
 		slab_fix(s, "Marking all objects used");
 		page->inuse = page->objects;
 		page->freelist = NULL;
@@ -1217,7 +1193,6 @@ static noinline struct kmem_cache_node *free_debug_processing(
 {
 	struct kmem_cache_node *n = get_node(s, page_to_nid(page));
 
-	check_cred_cache(s,NULL);
 	spin_lock_irqsave(&n->list_lock, *flags);
 	slab_lock(page);
 
@@ -1264,7 +1239,6 @@ out:
 	return n;
 
 fail:
-	BUG();
 	slab_unlock(page);
 	spin_unlock_irqrestore(&n->list_lock, *flags);
 	slab_fix(s, "Object at 0x%p not freed", object);
@@ -2572,17 +2546,6 @@ new_slab:
 	return freelist;
 }
 
-void check_freelist(void *freelist)
-{
-	unsigned long start_addr, end_addr;
-
-	start_addr = (unsigned long)PAGE_OFFSET;
-	end_addr = (unsigned long)high_memory;
-
-	if ((unsigned long)freelist < start_addr || (unsigned long)freelist >= end_addr)
-		BUG();
-}
-
 /*
  * Inlined fastpath so that allocation functions (kmalloc, kmem_cache_alloc)
  * have the fastpath folded into their functions. So no function call
@@ -2660,10 +2623,6 @@ redo:
 			goto redo;
 		}
 		prefetch_freepointer(s, next_object);
-
-		if (c->freelist != NULL)
-			check_freelist(c->freelist);
-
 		stat(s, ALLOC_FASTPATH);
 	}
 
