@@ -196,7 +196,7 @@ static struct usb_gadget_strings *midi_strings[] = {
 	NULL,
 };
 
-static struct usb_request *alloc_ep_req(struct usb_ep *ep, unsigned length)
+static struct usb_request *alloc_ep_req_midi(struct usb_ep *ep, unsigned length)
 {
 	struct usb_request *req;
 
@@ -370,7 +370,7 @@ static int f_midi_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	/* allocate a bunch of read buffers and queue them all at once. */
 	for (i = 0; i < midi->qlen && err == 0; i++) {
 		struct usb_request *req =
-			alloc_ep_req(midi->out_ep, midi->buflen);
+			alloc_ep_req_midi(midi->out_ep, midi->buflen);
 		if (req == NULL)
 			return -ENOMEM;
 
@@ -551,10 +551,10 @@ static void f_midi_transmit(struct f_midi *midi, struct usb_request *req)
 		return;
 
 	if (!req)
-		req = alloc_ep_req(ep, midi->buflen);
+		req = alloc_ep_req_midi(ep, midi->buflen);
 
 	if (!req) {
-		ERROR(midi, "gmidi_transmit: alloc_ep_request failed\n");
+		ERROR(midi, "gmidi_transmit: alloc_ep_request_midi failed\n");
 		return;
 	}
 	req->length = 0;
