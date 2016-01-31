@@ -169,9 +169,15 @@ obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_SENSORS)		+= sensors/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
+
 #motor
+ifdef CONFIG_TWRP
+obj-$(CONFIG_VIBETONZ)		+= motor_twrp/
+obj-$(CONFIG_MOTOR_DRV_MAX77828)	+= motor_twrp/
+else
 obj-$(CONFIG_VIBETONZ)		+= motor/
 obj-$(CONFIG_MOTOR_DRV_MAX77828)	+= motor/
+endif
 
 obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery/
 

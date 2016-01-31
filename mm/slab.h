@@ -1,5 +1,7 @@
 #ifndef MM_SLAB_H
 #define MM_SLAB_H
+
+#include <linux/memcontrol.h>
 /*
  * Internal slab definitions
  */

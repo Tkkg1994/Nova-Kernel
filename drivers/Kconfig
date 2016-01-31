@@ -16,6 +16,8 @@ source "drivers/pnp/Kconfig"
 
 source "drivers/motor/Kconfig"
 
+source "drivers/motor_twrp/Kconfig"
+
 source "drivers/block/Kconfig"
 
 # misc before ide - BLK_DEV_SGIIOC4 depends on SGI_IOC4
@@ -199,5 +201,9 @@ source "drivers/secfilter/Kconfig"
 source "drivers/irled/Kconfig"
 
 source "drivers/firmware/Kconfig"
+
+config TWRP
+	tristate "Driver for vibration that works with TWRP"
+	default y
 
 endmenu
