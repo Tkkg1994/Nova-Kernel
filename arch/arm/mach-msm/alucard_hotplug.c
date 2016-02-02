@@ -126,7 +126,6 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	unsigned int sum_load = 0, sum_freq = 0;
 	bool rq_avg_calc = true;
 	int online_cpus, delay, ret;
-	cpumask_var_t cpus;
 
 	if (hotplug_tuners_ins.suspended) {
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit_sleep;
@@ -135,8 +134,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit;
 
 	/* get nr online cpus */
-	cpumask_copy(cpus, cpu_online_mask);
-	online_cpus = cpumask_weight(cpus);
+	online_cpus = num_online_cpus();
 
 	if (rq_avg_calc) {
 		rq_avg = (avg_nr_running() * 100) >> FSHIFT;
@@ -149,7 +147,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 		unsigned int cur_load = 0;
 		unsigned int cur_freq = 0;
 
-		if (cpumask_test_cpu(cpu, cpus)) {
+		if (cpu_online(cpu)) {
 			pcpu_info =	&per_cpu(od_hotplug_cpuinfo, cpu);
 
 			cur_idle_time = get_cpu_idle_time(
@@ -190,7 +188,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 			offcpu = cpu;
 		}
 	}
-	if (!sum_freq)
+	if (unlikely(!sum_freq))
 		goto next_loop;
 
 	avg_freq = adjust_avg_freq(BOOT_CPU, (sum_freq / n));
