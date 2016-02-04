@@ -89,19 +89,16 @@ static unsigned int adjust_avg_freq(unsigned int cpu, unsigned int tmp_freq)
 
 	for (i = 0; (table[i].frequency != CPUFREQ_TABLE_END); i++) {
 		unsigned int freq = table[i].frequency;
-		if (freq == CPUFREQ_ENTRY_INVALID)
-			continue;
 
-		if (freq < tmp_freq) {
-			target_freq = freq;
-		} else if (freq == tmp_freq) {
-			target_freq = freq;
-			break;
-		} else {
-			if (freq - tmp_freq < tmp_freq - target_freq) {
+		if (freq != CPUFREQ_ENTRY_INVALID) {
+			if (freq < tmp_freq) {
 				target_freq = freq;
+			} else if (freq >= tmp_freq) {
+				if (freq - tmp_freq < tmp_freq - target_freq) {
+					target_freq = freq;
+				}
+				break;
 			}
-			break;
 		}
 	}
 
@@ -118,28 +115,20 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	unsigned int offcpu = 0;
 	unsigned int cpu = 0;
 	unsigned int rq_avg = 0;
-	unsigned int min_freq = MAX_FREQ_LIMIT;
+	unsigned int min_freq = 2880000;
 	unsigned int avg_freq = 0;
 	unsigned int min_load = 100;
 	unsigned int avg_load = 0;
 	unsigned int n = 0;
 	unsigned int sum_load = 0, sum_freq = 0;
 	bool rq_avg_calc = true;
-	int online_cpus, delay, ret;
+	int online_cpus = 0, delay;
 
 	if (hotplug_tuners_ins.suspended) {
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit_sleep;
 		rq_avg_calc = false;
 	} else
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit;
-
-	/* get nr online cpus */
-	online_cpus = num_online_cpus();
-
-	if (rq_avg_calc) {
-		rq_avg = (avg_nr_running() * 100) >> FSHIFT;
-		/*printk(KERN_ERR "online_cpus[%u], rq_avg[%u]\n", online_cpus, rq_avg);*/
-	}
 
 	for_each_cpu(cpu, cpu_possible_mask) {
 		u64 cur_wall_time, cur_idle_time;
@@ -195,27 +184,26 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 
 	if (avg_freq) {
 		avg_load = (sum_load / n);
+		/* get nr online cpus */
+		online_cpus = num_online_cpus();
+		if (rq_avg_calc) {
+			rq_avg = (avg_nr_running() * 100) >> FSHIFT;
+			/*pr_info("online_cpus[%u], rq_avg[%u]\n", online_cpus, rq_avg);*/
+		}
 		cpu = (online_cpus - 1);
 		pcpu_parm = &per_cpu(od_hotplug_cpuparm, cpu);
 		if (downcpu > 0	&& 
 			 online_cpus > upmaxcoreslimit) {
-				ret = cpu_down(downcpu);
-				if (!ret) {
-					pcpu_parm->cur_up_rate = 1;
-					pcpu_parm->cur_down_rate = 1;
-				}
+				cpu_down(downcpu);
+				pcpu_parm->cur_up_rate = 1;
+				pcpu_parm->cur_down_rate = 1;
 		} else if (online_cpus < min_cpus_online
 					&& offcpu < upmaxcoreslimit) {
-				if (!cpu_online(offcpu)) {
-					ret = cpu_up(offcpu);
-					if (!ret) {
-						pcpu_parm->cur_up_rate = 1;
-						pcpu_parm->cur_down_rate = 1;
-					}
-				}
+					cpu_up(offcpu);
+					pcpu_parm->cur_up_rate = 1;
+					pcpu_parm->cur_down_rate = 1;
 		} else if (offcpu > 0
 			&& offcpu < upmaxcoreslimit
-			&& (!cpu_online(offcpu))
 			&& online_cpus < upmaxcoreslimit
 			&& avg_load >= pcpu_parm->up_load
 			&& avg_freq >= pcpu_parm->up_freq
@@ -231,11 +219,9 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 						avg_load, rq_avg,
 						pcpu_parm->cur_up_rate);
 	#endif
-					ret = cpu_up(offcpu);
-					if (!ret) {
-						pcpu_parm->cur_up_rate = 1;
-						pcpu_parm->cur_down_rate = 1;
-					}
+					cpu_up(offcpu);
+					pcpu_parm->cur_up_rate = 1;
+					pcpu_parm->cur_down_rate = 1;
 				} else {
 					if (pcpu_parm->cur_up_rate < pcpu_parm->up_rate)
 						++pcpu_parm->cur_up_rate;
@@ -260,11 +246,9 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 							pcpu_parm->
 							cur_down_rate);
 #endif
-						ret = cpu_down(downcpu);
-						if (!ret) {
-							pcpu_parm->cur_up_rate = 1;
-							pcpu_parm->cur_down_rate = 1;
-						}
+						cpu_down(downcpu);
+						pcpu_parm->cur_up_rate = 1;
+						pcpu_parm->cur_down_rate = 1;
 					} else {
 						if (pcpu_parm->cur_down_rate < pcpu_parm->down_rate)
 							++pcpu_parm->cur_down_rate;
