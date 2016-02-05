@@ -24,10 +24,6 @@
 
 #define MAX_EVENTS 30
 
-#ifdef CONFIG_LAZYPLUG
-extern void lazyplug_enter_lazy(bool enter);
-#endif
-
 static int get_poll_flags(void *instance)
 {
 	struct msm_vidc_inst *inst = instance;
@@ -1371,10 +1367,6 @@ void *msm_vidc_open(int core_id, int session_type)
 
 	setup_event_queue(inst, &core->vdev[session_type].vdev);
 
-#ifdef CONFIG_LAZYPLUG
-	lazyplug_enter_lazy(true);
-#endif
-
 	return inst;
 fail_init:
 	vb2_queue_release(&inst->bufq[OUTPUT_PORT].vb2_bufq);
@@ -1499,10 +1491,6 @@ int msm_vidc_close(void *instance)
 	pr_info(VIDC_DBG_TAG "Closed video instance: %p\n",
 			VIDC_MSG_PRIO2STRING(VIDC_INFO), inst);
 	kfree(inst);
-
-#ifdef CONFIG_LAZYPLUG
-	lazyplug_enter_lazy(false);
-#endif
 
 	return 0;
 }

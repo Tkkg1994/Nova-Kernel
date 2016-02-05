@@ -22,7 +22,6 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/fb.h>
-#include <soc/qcom/cpufreq.h>
 #include <linux/cpufreq.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
@@ -202,7 +201,7 @@ static __ref void max_screenoff(bool screenoff)
 		cancel_delayed_work_sync(&dyn_work);
 		
 		for_each_possible_cpu(cpu) {
-			msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, freq);
+//			msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, freq);
 			
 			if (cpu && num_online_cpus() > max_cores_screenoff)
 				cpu_down(cpu);
@@ -215,7 +214,7 @@ static __ref void max_screenoff(bool screenoff)
 		up_all();
 		
 		for_each_possible_cpu(cpu) {
-			msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, freq);
+//			msm_cpufreq_set_freq_limits(cpu, MSM_CPUFREQ_NO_LIMIT, freq);
 		}
 		cpufreq_update_policy(cpu);
 		
