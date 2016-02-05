@@ -228,7 +228,7 @@ static DEFINE_RAW_SPINLOCK(logbuf_lock);
 #ifdef CONFIG_PRINTK
 
 #ifdef CONFIG_SEC_DEBUG
-static void sec_log_add(const struct log *msg);
+static void sec_log_add(const struct printk_log *msg);
 #endif
 
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
@@ -367,11 +367,11 @@ void oops_printk_start(void)
 	raw_spin_unlock_irq(&logbuf_lock);
 }
 
-static void log_oops_store(struct log *msg)
+static void log_oops_store(struct printk_log *msg)
 {
 	u32 free;
 	const int eom_len = strlen(log_oops_end);
-	const size_t eom_size = sizeof(struct log) + eom_len;
+	const size_t eom_size = sizeof(struct printk_log) + eom_len;
 	char buf[eom_size + LOG_ALIGN];
 	u32 pad_len;
 	u64 ts_nsec;
@@ -382,7 +382,7 @@ static void log_oops_store(struct log *msg)
 		pad_len = (-eom_size) & (LOG_ALIGN - 1);
 		if ((free - msg->len) < (eom_size + pad_len)) {
 			ts_nsec = msg->ts_nsec;
-			msg = (struct log *)buf;
+			msg = (struct printk_log *)buf;
 			memcpy(log_text(msg), log_oops_end, eom_len);
 			msg->len = eom_size + pad_len;
 			msg->text_len = eom_len;
@@ -406,7 +406,7 @@ static void log_oops_store(struct log *msg)
 	}
 }
 #else
-static void log_oops_store(struct log *msg)
+static void log_oops_store(struct printk_log *msg)
 {
 }
 #endif
@@ -458,7 +458,7 @@ static void log_store(int facility, int level,
 		 * to signify a wrap around.
 		 */
 		memset(log_buf + log_next_idx, 0, sizeof(struct printk_log));
-		LOG_MAGIC((struct log *)(log_buf + log_next_idx));
+		LOG_MAGIC((struct printk_log *)(log_buf + log_next_idx));
 		log_next_idx = 0;
 	}
 
@@ -1225,7 +1225,7 @@ static int syslog_print_oops_buf_all(char __user *buf, int size, bool clear,
 	seq = log_oops_first_seq;
 	next_seq = log_oops_last_seq;
 	while (len >= 0 && len < size && seq < next_seq) {
-		struct log *msg = log_from_idx(idx, false);
+		struct printk_log *msg = log_from_idx(idx, false);
 		int textlen;
 
 		textlen = msg_print_text(msg, prev, true, text,
@@ -1376,7 +1376,7 @@ static int syslog_print_all(char __user *buf, int size, bool clear)
 		idx = start_idx;
 		prev = 0;
 		while (seq < log_next_seq) {
-			struct log *msg = log_from_idx(idx, true);
+			struct printk_log *msg = log_from_idx(idx, true);
 
 			len += msg_print_text(msg, prev, true, NULL, 0);
 			prev = msg->flags;
@@ -2023,7 +2023,7 @@ static inline void emit_sec_log_char(char c)
 	}
 }
 
-static void sec_log_add(const struct log *msg)
+static void sec_log_add(const struct printk_log *msg)
 {
 	static char sTemp[1024];
 	static unsigned char prev_flag=0;
