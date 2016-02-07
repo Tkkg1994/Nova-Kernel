@@ -1549,6 +1549,19 @@ config BLU_PLUG
 	help
 	  The Dynamic hotplug driver automatically online/offline CPUs proportional to system load.
 
+config THUNDERPLUG_CONTROL
+	bool "Enable plugging down/up of cores based on load per core"
+	help
+	  This driver hotplugs cpu cores based on per-core load
+
+config USES_MALI_MP2_GPU
+	bool "Enable hotplugging feature for Mali GPUs"
+	depends on THUNDERPLUG_CONTROL
+	default n
+	help
+	  This option enables hotplugging features inside thunderplug 
+	  for Mali 400MP2 GPUs.
+
 config FORCE_FAST_CHARGE
 	bool "Force fast charging (AC/USB) by Yank555.lu"
 	default n
