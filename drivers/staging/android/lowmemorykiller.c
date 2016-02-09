@@ -117,7 +117,7 @@ static int vm_pressure_adaptive_start = 85;
 #define VM_PRESSURE_ADAPTIVE_STOP	95
 
 /* User knob to enable/disable adaptive lmk feature */
-static int enable_adaptive_lmk = 1;
+static int enable_adaptive_lmk = 0;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
 	S_IRUGO | S_IWUSR);
 
