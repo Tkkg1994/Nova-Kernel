@@ -30,6 +30,11 @@
 #include <linux/tick.h>
 #include <trace/events/power.h>
 
+#ifdef CONFIG_MSM_LIMITER
+#include <linux/msm_thermal.h>
+#include <soc/qcom/limiter.h>
+#endif
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -495,10 +500,22 @@ show_one(cpu_load, load_at_max);
 static int cpufreq_set_policy(struct cpufreq_policy *policy,
 				struct cpufreq_policy *new_policy);
 
+static bool cpufreq_update_allowed(int mpd)
+{
+#ifdef CONFIG_MSM_LIMITER
+	if (mpd == 0 && limit.mpd_enabled == 0)
+#else
+	if (mpd == 0)
+#endif
+		return false;
+
+	return true;
+}
+
 /**
  * cpufreq_per_cpu_attr_write() / store_##file_name() - sysfs write access
  */
-#define store_one(file_name, object)			\
+#define store_one(file_name, object)					\
 static ssize_t store_##file_name					\
 (struct cpufreq_policy *policy, const char *buf, size_t count)		\
 {									\
@@ -506,7 +523,7 @@ static ssize_t store_##file_name					\
 	struct cpufreq_policy new_policy;				\
 	int mpd = strcmp(current->comm, "mpdecision");			\
 									\
-	if (mpd == 0)							\
+	if (!cpufreq_update_allowed(mpd))				\
 		return ret;						\
 									\
 	ret = cpufreq_get_policy(&new_policy, policy->cpu);		\
@@ -527,7 +544,7 @@ static ssize_t store_##file_name					\
 	policy->user_policy.min = new_policy.min;			\
 	policy->user_policy.max = new_policy.max;			\
 									\
-	ret = cpufreq_set_policy(policy, &new_policy);		\
+	ret = cpufreq_set_policy(policy, &new_policy);			\
 									\
 	return ret ? ret : count;					\
 }
@@ -2357,10 +2374,12 @@ int cpufreq_set_freq(unsigned int max_freq, unsigned int min_freq,
 		if (max_freq && max_freq >= policy->min) {
 			policy->user_policy.max = max_freq;
 			policy->max = max_freq;
+			msm_thermal_set_frequency(cpu, max_freq, true);
 		}
 		if (min_freq && min_freq <= policy->max) {
 			policy->user_policy.min = min_freq;
 			policy->min = min_freq;
+			msm_thermal_set_frequency(cpu, min_freq, false);
 		}
 		up_write(&policy->rwsem);
 
