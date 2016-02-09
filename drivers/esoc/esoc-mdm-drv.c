@@ -27,9 +27,6 @@ enum {
 	 PEER_CRASH,
 };
 
-/* wait one second more than MDM2AP status check */
-#define MDM_BOOT_TIMEOUT (121*HZ)
-
 struct mdm_drv {
 	unsigned mode;
 	struct esoc_eng cmd_eng;
@@ -144,7 +141,6 @@ static int mdm_subsys_shutdown(const struct subsys_desc *crashed_subsys,
 static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 {
 	int ret;
-	int t;
 	struct esoc_clink *esoc_clink =
 				container_of(crashed_subsys, struct esoc_clink,
 								subsys);
@@ -153,12 +149,7 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 
 	if (!esoc_req_eng_enabled(esoc_clink)) {
 		dev_dbg(&esoc_clink->dev, "Wait for req eng registration\n");
-		t = wait_for_completion_timeout(&mdm_drv->req_eng_wait,
-		                                MDM_BOOT_TIMEOUT);
-		if (!t) {
-			dev_err(&esoc_clink->dev, "Req eng timeout\n");
-			return -EIO;
-		}
+		wait_for_completion(&mdm_drv->req_eng_wait);
 	}
 	if (mdm_drv->mode == PWR_OFF) {
 		ret = clink_ops->cmd_exe(ESOC_PWR_ON, esoc_clink);
@@ -180,7 +171,7 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 		}
 	}
 #if 0
-	t = wait_for_completion_timeout(&mdm_drv->boot_done, MDM_BOOT_TIMEOUT);
+	wait_for_completion(&mdm_drv->boot_done);
 #else
 	if (!wait_for_completion_timeout(&mdm_drv->boot_done,
 		msecs_to_jiffies(60000))) {
@@ -188,7 +179,7 @@ static int mdm_subsys_powerup(const struct subsys_desc *crashed_subsys)
 		BUG_ON(1);
 	}
 #endif
-	if (!t || mdm_drv->boot_fail) {
+	if (mdm_drv->boot_fail) {
 		dev_err(&esoc_clink->dev, "booting failed\n");
 		return -EIO;
 	}
