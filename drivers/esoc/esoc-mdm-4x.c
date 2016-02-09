@@ -844,9 +844,9 @@ static int mdm9x25_setup_hw(struct mdm_ctrl *mdm,
 
 	mdm->dev = &pdev->dev;
 	esoc = devm_kzalloc(mdm->dev, sizeof(*esoc), GFP_KERNEL);
-	if (!esoc) {
+	if (IS_ERR(esoc)) {
 		dev_err(mdm->dev, "cannot allocate esoc device\n");
-		return -ENOMEM;
+		return PTR_ERR(esoc);
 	}
 	mdm->mdm_queue = alloc_workqueue("mdm_queue", 0, 0);
 	if (!mdm->mdm_queue) {
@@ -899,9 +899,9 @@ static int mdm9x35_setup_hw(struct mdm_ctrl *mdm,
 	mdm->dev = &pdev->dev;
 	node = pdev->dev.of_node;
 	esoc = devm_kzalloc(mdm->dev, sizeof(*esoc), GFP_KERNEL);
-	if (!esoc) {
+	if (IS_ERR(esoc)) {
 		dev_err(mdm->dev, "cannot allocate esoc device\n");
-		return -ENOMEM;
+		return PTR_ERR(esoc);
 	}
 	mdm->mdm_queue = alloc_workqueue("mdm_queue", 0, 0);
 	if (!mdm->mdm_queue) {
@@ -1012,8 +1012,8 @@ static int mdm_probe(struct platform_device *pdev)
 		return PTR_ERR(match);
 	mdm_ops = match->data;
 	mdm = devm_kzalloc(&pdev->dev, sizeof(*mdm), GFP_KERNEL);
-	if (!mdm)
-		return -ENOMEM;
+	if (IS_ERR(mdm))
+		return PTR_ERR(mdm);
 
 	entry = devm_kzalloc(&pdev->dev, sizeof(*entry), GFP_KERNEL);
 	if (!entry)
