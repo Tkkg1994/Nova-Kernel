@@ -300,6 +300,27 @@ config CPU_FREQ_DEFAULT_GOV_CAFACTIVE
 	  loading your cpufreq low-level hardware driver, using the
 	  'cafactive' governor for latency-sensitive workloads.
 
+config CPU_FREQ_DEFAULT_GOV_ELECTROACTIVE
+	bool "electroactive"
+	select CPU_FREQ_GOV_ELECTROACTIVE
+        select CPU_FREQ_GOV_PERFORMANCE
+	help
+	  Use the CPUFreq governor 'electroactive' as default. This allows
+	  you to get a full dynamic cpu frequency capable system by simply
+	  loading your cpufreq low-level hardware driver, using the
+	  'electroactive' governor for latency-sensitive workloads.
+
+
+config CPU_FREQ_DEFAULT_GOV_ELECTRODEMAND
+	bool "electrodemand"
+	select CPU_FREQ_GOV_ELECTRODEMAND
+        select CPU_FREQ_GOV_PERFORMANCE
+	help
+	  Use the CPUFreq governor 'electrodemand' as default. This allows
+	  you to get a full dynamic cpu frequency capable system by simply
+	  loading your cpufreq low-level hardware driver, using the
+	  'electrodemand' governor for latency-sensitive workloads.
+
 endchoice
 
 config CPU_FREQ_GOV_PERFORMANCE
@@ -604,6 +625,26 @@ config CPU_FREQ_GOV_CAFACTIVE
 	  module will be called cpufreq_cafactive.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_ELECTROACTIVE
+	tristate "'electroactive' cpufreq policy governor"
+        select CPU_FREQ_TABLE
+	help
+	  'electroactive' - A tweaked "hybrid" based smart and smooth optimized
+           governor designed for optimization in transition and a balance between
+           performance and power.
+	
+	   If in doubt, say N.
+
+config CPU_FREQ_GOV_ELECTRODEMAND
+	tristate "'electrodemand' cpufreq policy governor"
+        depends on CPU_FREQ
+	help
+	  'electrodemand' - A tweaked "ondemand" based smart and smooth optimized
+           governor designed for optimization in transition and a balance between
+           performance and power.
+	
+	   If in doubt, say N.
 
 config CPU_BOOST
 	tristate "Event base short term CPU freq boost"
