@@ -20,11 +20,11 @@
 #define KGSL_3D0_IRQ		"kgsl_3d0_irq"
 
 #ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
-extern int graphics_boost;
+extern int graphics_boost_elementalx;
 #endif
 
 #ifdef CONFIG_CPU_FREQ_GOV_ELECTROACTIVE
-extern int graphics_boost;
+extern int graphics_boost_electroactive;
 #endif
 
 enum kgsl_iommu_context_id {

@@ -166,7 +166,7 @@ static void ex_check_cpu(int cpu, unsigned int load)
 	avg_load = (ex_data.prev_load + load) >> 1;
 
 	if (ex_tuners->gboost) {
-		if (ex_data.g_count < 500 && graphics_boost < 3)
+		if (ex_data.g_count < 500 && graphics_boost_elementalx < 3)
 			++ex_data.g_count;
 		else if (ex_data.g_count > 1)
 			--ex_data.g_count;
@@ -175,7 +175,7 @@ static void ex_check_cpu(int cpu, unsigned int load)
 	//gboost mode
 	if (ex_tuners->gboost && ex_data.g_count > 300) {
 				
-		if (avg_load > 40 + (graphics_boost * 10)) {
+		if (avg_load > 40 + (graphics_boost_elementalx * 10)) {
 			freq_next = max_freq;
 		} else {
 			freq_next = max_freq * avg_load / 100;
