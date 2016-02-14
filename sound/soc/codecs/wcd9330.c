@@ -3973,10 +3973,6 @@ static int tomtom_codec_enable_anc(struct snd_soc_dapm_widget *w,
 		break;
 	}
 	return 0;
-err:
-	if (!hwdep_cal)
-		release_firmware(fw);
-	return ret;
 }
 
 static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
@@ -5074,7 +5070,6 @@ static void tomtom_shutdown(struct snd_pcm_substream *substream,
 		 substream->name, substream->stream);
 }
 
-
 int tomtom_mclk_enable(struct snd_soc_codec *codec, int mclk_enable, bool dapm)
 {
 	struct tomtom_priv *tomtom = snd_soc_codec_get_drvdata(codec);
@@ -6165,6 +6160,7 @@ static int __tomtom_codec_enable_slimtx(struct snd_soc_codec *codec,
 		int event, struct wcd9xxx_codec_dai_data *dai_data)
 {
 	struct wcd9xxx *core;
+	struct snd_soc_dapm_widget *w;
 	int ret = 0;
 
 	core = dev_get_drvdata(codec->dev->parent);

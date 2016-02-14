@@ -321,6 +321,7 @@ struct wcd9xxx_mbhc_cb {
 	void (*hph_auto_pulldown_ctrl) (struct snd_soc_codec *, bool);
 	struct firmware_cal * (*get_hwdep_fw_cal) (struct snd_soc_codec *,
 				enum wcd_cal_type);
+
 };
 
 struct wcd9xxx_mbhc {
@@ -346,9 +347,9 @@ struct wcd9xxx_mbhc {
 	/* Work to perform MBHC Firmware Read */
 	struct delayed_work mbhc_firmware_dwork;
 	const struct firmware *mbhc_fw;
-	struct firmware_cal *mbhc_cal;
 
 	struct delayed_work mbhc_insert_dwork;
+	struct firmware_cal *mbhc_cal;
 
 	u8 current_plug;
 	struct work_struct correct_plug_swch;

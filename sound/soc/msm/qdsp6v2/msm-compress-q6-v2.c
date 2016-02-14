@@ -854,7 +854,8 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	prtd->cstream = cstream;
 	pdata->cstream[rtd->dai_link->be_id] = cstream;
 	pdata->audio_effects[rtd->dai_link->be_id] =
-		 kzalloc(sizeof(struct msm_compr_audio_effects), GFP_KERNEL);
+		kzalloc(sizeof(struct msm_compr_audio_effects), GFP_KERNEL);
+
 	if (!pdata->audio_effects[rtd->dai_link->be_id]) {
 		pr_err("%s: Could not allocate memory for effects\n", __func__);
 		pdata->cstream[rtd->dai_link->be_id] = NULL;

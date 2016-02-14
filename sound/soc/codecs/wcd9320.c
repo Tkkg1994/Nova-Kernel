@@ -434,8 +434,6 @@ struct taiko_priv {
 	u32 anc_slot;
 	bool anc_func;
 
-	/* cal info for codec */
-	struct fw_info *fw_data;
 	/*track taiko interface type*/
 	u8 intf_type;
 
@@ -475,6 +473,8 @@ struct taiko_priv {
 	 */
 	struct list_head reg_save_restore;
 	struct pm_qos_request pm_qos_req;
+	/* cal info for codec */
+	struct fw_info *fw_data;
 
 	/* UHQA (class AB) mode */
 	u8 uhqa_mode;
@@ -3462,8 +3462,6 @@ static int taiko_codec_enable_vdd_spkr(struct snd_soc_dapm_widget *w,
 
 	pr_debug("%s: %d %s\n", __func__, event, w->name);
 
-	WARN_ONCE(!priv->spkdrv_reg, "SPKDRV supply %s isn't defined\n",
-		  WCD9XXX_VDD_SPKDRV_NAME);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		if (priv->spkdrv_reg) {
@@ -3757,6 +3755,7 @@ static int taiko_codec_enable_anc(struct snd_soc_dapm_widget *w,
 			dev_dbg(codec->dev, "%s: using request_firmware calibration\n",
 				__func__);
 		}
+
 		if (cal_size < sizeof(struct wcd9xxx_anc_header)) {
 			dev_err(codec->dev, "Not enough data\n");
 			ret = -ENOMEM;
@@ -3830,6 +3829,7 @@ err:
 	if (!hwdep_cal)
 		release_firmware(fw);
 	return ret;
+
 }
 
 static int taiko_hph_pa_event(struct snd_soc_dapm_widget *w,
@@ -7198,6 +7198,7 @@ struct firmware_cal *taiko_get_hwdep_fw_cal(struct snd_soc_codec *codec,
 {
 	struct taiko_priv *taiko;
 	struct firmware_cal *hwdep_cal;
+
 	if (!codec) {
 		pr_err("%s: NULL codec pointer\n", __func__);
 		return NULL;
@@ -7206,12 +7207,13 @@ struct firmware_cal *taiko_get_hwdep_fw_cal(struct snd_soc_codec *codec,
 	hwdep_cal = wcdcal_get_fw_cal(taiko->fw_data, type);
 	if (!hwdep_cal) {
 		dev_err(codec->dev, "%s: cal not sent by %d\n",
-				__func__, type);
+				 __func__, type);
 		return NULL;
 	} else {
 		return hwdep_cal;
 	}
 }
+
 int taiko_hs_detect(struct snd_soc_codec *codec,
 		    struct wcd9xxx_mbhc_config *mbhc_cfg)
 {
@@ -7776,11 +7778,11 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		dev_err(codec->dev, "Failed to allocate fw_data\n");
 		goto err_init;
 	}
-	set_bit(WCD9XXX_MAD_CAL, taiko->fw_data->cal_bit);
 	set_bit(WCD9XXX_ANC_CAL, taiko->fw_data->cal_bit);
+	set_bit(WCD9XXX_MAD_CAL, taiko->fw_data->cal_bit);
 	set_bit(WCD9XXX_MBHC_CAL, taiko->fw_data->cal_bit);
 	ret = wcd_cal_create_hwdep(taiko->fw_data,
-				WCD9XXX_CODEC_HWDEP_NODE, codec);
+					WCD9XXX_CODEC_HWDEP_NODE, codec);
 	if (ret < 0) {
 		dev_err(codec->dev, "%s hwdep failed %d\n", __func__, ret);
 		goto err_hwdep;
@@ -7797,6 +7799,7 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 		goto err_hwdep;
 	}
 #endif
+
 	taiko->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++) {
 		taiko->comp_enabled[i] = 0;

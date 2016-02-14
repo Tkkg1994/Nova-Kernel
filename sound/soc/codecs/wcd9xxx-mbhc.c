@@ -951,6 +951,7 @@ static void wcd9xxx_report_plug(struct wcd9xxx_mbhc *mbhc, int insertion,
 								mbhc->codec,
 								false);
 		}
+
 		/* Report insertion */
 		if (jack_type == SND_JACK_HEADPHONE) {
 			mbhc->current_plug = PLUG_TYPE_HEADPHONE;
@@ -1001,7 +1002,8 @@ static void wcd9xxx_report_plug(struct wcd9xxx_mbhc *mbhc, int insertion,
 		if (((mbhc->current_plug == PLUG_TYPE_HEADSET) ||
 		     (mbhc->current_plug == PLUG_TYPE_ANC_HEADPHONE)) &&
 		    ((mbhc->event_state & (1 << MBHC_EVENT_PA_HPHL |
-			1 << MBHC_EVENT_PA_HPHR | 1 << MBHC_EVENT_PRE_TX_1_3_ON))))
+			1 << MBHC_EVENT_PA_HPHR |
+			1 << MBHC_EVENT_PRE_TX_1_3_ON))))
 			__wcd9xxx_switch_micbias(mbhc, 1, false,
 						 false);
 		wcd9xxx_clr_and_turnon_hph_padac(mbhc);
@@ -4422,7 +4424,7 @@ static void wcd9xxx_mbhc_fw_read(struct work_struct *work)
 		pr_info("%s: using hwdep cal\n", __func__);
 	if (ret != 0 && !fw_data) {
 		pr_err("%s: Cannot load MBHC firmware use default cal\n",
-				__func__);
+			__func__);
 		use_default_cal = true;
 	}
 	if (!use_default_cal) {
@@ -4438,7 +4440,7 @@ static void wcd9xxx_mbhc_fw_read(struct work_struct *work)
 		}
 		if (wcd9xxx_mbhc_fw_validate(data, size) == false) {
 			pr_err("%s: Invalid MBHC cal data size use default cal\n",
-			       __func__);
+				__func__);
 			if (!fw_data)
 				release_firmware(fw);
 		} else {
@@ -4452,6 +4454,7 @@ static void wcd9xxx_mbhc_fw_read(struct work_struct *work)
 				mbhc->mbhc_fw = fw;
 			}
 		}
+
 	}
 
 	(void) wcd9xxx_init_and_calibrate(mbhc);
@@ -4641,8 +4644,8 @@ int wcd9xxx_mbhc_start(struct wcd9xxx_mbhc *mbhc,
 		mbhc->mbhc_cb->enable_clock_gate(mbhc->codec, true);
 
 	if (!mbhc->mbhc_cfg->read_fw_bin ||
-	    (mbhc->mbhc_cfg->read_fw_bin && mbhc->mbhc_fw) ||
-	    (mbhc->mbhc_cfg->read_fw_bin && mbhc->mbhc_cal)) {
+		(mbhc->mbhc_cfg->read_fw_bin && mbhc->mbhc_fw) ||
+		(mbhc->mbhc_cfg->read_fw_bin && mbhc->mbhc_cal)) {
 		rc = wcd9xxx_init_and_calibrate(mbhc);
 	} else {
 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)

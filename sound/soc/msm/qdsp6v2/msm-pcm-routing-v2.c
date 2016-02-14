@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/module.h>
@@ -293,7 +294,7 @@ static struct msm_pcm_routing_fdai_data
 #ifdef CONFIG_JACK_AUDIO	
 	/* MULTIMEDIA10 */
 	{{0, INVALID_SESSION, {NULL, NULL} },
-	{0, INVALID_SESSION, {NULL, NULL} } },
+	 {0, INVALID_SESSION, {NULL, NULL} } },
 #endif	
 };
 

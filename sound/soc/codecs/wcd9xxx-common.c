@@ -1446,7 +1446,7 @@ void wcd9xxx_clsh_fsm(struct snd_soc_codec *codec,
 						__func__, new_state);
 			}
 		} else if (!(cdc_clsh_d->state & WCD9XXX_CLSH_STATE_LO)) {
-				wcd9xxx_clsh_enable_post_pa(codec, cdc_clsh_d);
+			wcd9xxx_clsh_enable_post_pa(codec, cdc_clsh_d);
 		}
 
 		break;
