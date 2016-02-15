@@ -123,7 +123,7 @@
 	};
 
 	kexec_hardboot-hole {
-		compatible = "qcom,msm-contig-mem";
+		compatible = "qcom,msm-mem-hole";
 		qcom,memblock-reserve = <0x3e9df000 0x1000>;
 	};
 
