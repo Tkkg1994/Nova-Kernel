@@ -1,5 +1,5 @@
 /*
- *  drivers/cpufreq/cpufreq_ondemandx.c
+ *  drivers/cpufreq/cpufreq_ondemand_x.c
  *
  *  Copyright (C)  2001 Russell King
  *            (C)  2003 Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>.
@@ -35,15 +35,15 @@
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(10)
 #define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
 
-#define DEF_FREQUENCY_UP_THRESHOLD		(80)
-#define ANY_CPU_DEF_FREQUENCY_UP_THRESHOLD	(80)
-#define MULTI_CORE_DEF_FREQUENCY_UP_THRESHOLD	(80)
+#define DEF_FREQUENCY_UP_THRESHOLD		(70)
+#define ANY_CPU_DEF_FREQUENCY_UP_THRESHOLD	(70)
+#define MULTI_CORE_DEF_FREQUENCY_UP_THRESHOLD	(70)
 #define MICRO_FREQUENCY_UP_THRESHOLD		(95)
 
 #define DEF_MIDDLE_GRID_STEP			(14)
 #define DEF_HIGH_GRID_STEP			(20)
-#define DEF_MIDDLE_GRID_LOAD			(65)
-#define DEF_HIGH_GRID_LOAD			(89)
+#define DEF_MIDDLE_GRID_LOAD			(55)
+#define DEF_HIGH_GRID_LOAD			(79)
 
 #define DEF_SAMPLING_DOWN_FACTOR		(1)
 #define DEF_SAMPLING_RATE			(20000)
@@ -172,7 +172,7 @@ static ssize_t show_sampling_rate_min(struct kobject *kobj,
 
 define_one_global_ro(sampling_rate_min);
 
-/* cpufreq_ondemandx Governor Tunables */
+/* cpufreq_ondemand_x Governor Tunables */
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)              \
@@ -469,7 +469,7 @@ static struct attribute *dbs_attributes[] = {
 
 static struct attribute_group dbs_attr_group = {
 	.attrs = dbs_attributes,
-	.name = "ondemandx",
+	.name = "ondemand_x",
 };
 
 /************************** sysfs end ************************/
@@ -523,7 +523,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		j_dbs_info = &per_cpu(od_cpu_dbs_info, j);
 
 		/*
-		 * For the purpose of ondemandx, waiting for disk IO is an
+		 * For the purpose of ondemand_x, waiting for disk IO is an
 		 * indication that you're performance critical, and not that
 		 * the system is actually idle. So subtract the iowait time
 		 * from the cpu idle time.
@@ -840,11 +840,11 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 	return 0;
 }
 
-#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMANX
+#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND_X
 static
 #endif
-struct cpufreq_governor cpufreq_gov_ondemandx = {
-	.name					= "ondemandx",
+struct cpufreq_governor cpufreq_gov_ondemand_x = {
+	.name					= "ondemand_x",
 	.governor				= cpufreq_governor_dbs,
 	.max_transition_latency	= TRANSITION_LATENCY_LIMIT,
 	.owner					= THIS_MODULE,
@@ -875,9 +875,9 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
-	dbs_wq = alloc_workqueue("ondemandx_dbs_wq", WQ_HIGHPRI, 0);
+	dbs_wq = alloc_workqueue("ondemand_x_dbs_wq", WQ_HIGHPRI, 0);
 	if (!dbs_wq) {
-		printk(KERN_ERR "Failed to create ondemandx_dbs_wq workqueue\n");
+		printk(KERN_ERR "Failed to create ondemand_x_dbs_wq workqueue\n");
 		return -EFAULT;
 	}
 	for_each_possible_cpu(i) {
@@ -887,14 +887,14 @@ static int __init cpufreq_gov_dbs_init(void)
 		init_waitqueue_head(&this_dbs_info->sync_wq);
 	}
 
-	return cpufreq_register_governor(&cpufreq_gov_ondemandx);
+	return cpufreq_register_governor(&cpufreq_gov_ondemand_x);
 }
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
 	unsigned int i;
 
-	cpufreq_unregister_governor(&cpufreq_gov_ondemandx);
+	cpufreq_unregister_governor(&cpufreq_gov_ondemand_x);
 	for_each_possible_cpu(i) {
 		struct cpu_dbs_info_s *this_dbs_info =
 			&per_cpu(od_cpu_dbs_info, i);
@@ -905,11 +905,11 @@ static void __exit cpufreq_gov_dbs_exit(void)
 
 MODULE_AUTHOR("Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>");
 MODULE_AUTHOR("Alexey Starikovskiy <alexey.y.starikovskiy@intel.com>");
-MODULE_DESCRIPTION("'cpufreq_ondemandx' - A dynamic cpufreq governor for "
+MODULE_DESCRIPTION("'cpufreq_ondemand_x' - A dynamic cpufreq governor for "
 	"Low Latency Frequency Transition capable processors");
 MODULE_LICENSE("GPL");
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMANX
+#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND_X
 fs_initcall(cpufreq_gov_dbs_init);
 #else
 module_init(cpufreq_gov_dbs_init);
