@@ -1285,16 +1285,13 @@ out:
 
 static int pagemap_open(struct inode *inode, struct file *file)
 {
-<<<<<<< HEAD
 	/* do not disclose physical addresses to unprivileged
 	   userspace (closes a rowhammer attack vector) */
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
-=======
 	pr_warn_once("Bits 55-60 of /proc/PID/pagemap entries are about "
 			"to stop being page-shift some time soon. See the "
 			"linux/Documentation/vm/pagemap.txt for details.\n");
->>>>>>> 541c237... pagemap: prepare to reuse constant bits with page-shift
 	return 0;
 }
 
