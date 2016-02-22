@@ -102,6 +102,14 @@
 			reg = <0x0 0x0f800000 0x0 0x800000>;
 			label = "external_image_mem";
 		};
+
+		wdog_cpuctx_mem: wdog_cpuctx_region@0 {
+			linux,reserve-contiguous-region;
+			linux,reserve-region;
+			linux,remove-completely;
+			reg = <0x0 0x0 0x0 0x4000>;
+			label = "wdog_cpuctx_mem";
+		};
 	};
 
 	usb-notifier {
@@ -5282,7 +5290,7 @@
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
 		reg-names = "wdt-base";
-		qcom,memblock-reserve = <0x0 0x4000>; /*reserved 16kb for WA for Secure Storage TZ app */
+		linux,contiguous-region = <&wdog_cpuctx_mem>;
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <10000>;
