@@ -51,7 +51,7 @@ struct hotplug_cpuparm {
 };
 
 
-static DEFINE_PER_CPU(struct hotplug_cpuinfo, od_hotplug_cpuinfo);
+static DEFINE_PER_CPU_SHARED_ALIGNED(struct hotplug_cpuinfo, od_hotplug_cpuinfo);
 static DEFINE_PER_CPU(struct hotplug_cpuparm, od_hotplug_cpuparm);
 
 static struct notifier_block notif;
@@ -123,6 +123,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	unsigned int sum_load = 0, sum_freq = 0;
 	bool rq_avg_calc = true;
 	int online_cpus = 0, delay;
+	cpumask_var_t cpus;
 
 	if (hotplug_tuners_ins.suspended) {
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit_sleep;
@@ -130,13 +131,16 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	} else
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit;
 
-	for_each_cpu(cpu, cpu_possible_mask) {
+	/* copy nr online cpus */
+	cpumask_copy(cpus, cpu_online_mask);
+	for_each_possible_cpu(cpu) {
 		u64 cur_wall_time, cur_idle_time;
 		unsigned int wall_time, idle_time;
 		unsigned int cur_load = 0;
 		unsigned int cur_freq = 0;
 
-		if (cpu_online(cpu)) {
+		if (cpumask_test_cpu(cpu, cpus)
+			 && cpu_online(cpu)) {
 			pcpu_info =	&per_cpu(od_hotplug_cpuinfo, cpu);
 
 			cur_idle_time = get_cpu_idle_time(
@@ -173,7 +177,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 					downcpu = cpu;
 				}
 			}
-		} else if (offcpu == 0) {
+		} else if (!offcpu) {
 			offcpu = cpu;
 		}
 	}
@@ -263,11 +267,11 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 
 next_loop:
 	delay = msecs_to_jiffies(hotplug_tuners_ins.hotplug_sampling_rate);
-	if (num_online_cpus() > 1) {
-		delay -= jiffies % delay;
-		/* We want hotplug governor to do sampling just one jiffy later on cpu governor sampling */
-		delay++;
-	}
+	/*
+	 * We want hotplug governor to do sampling
+	 * just one jiffy later on cpu governor sampling
+	*/
+	delay = delay - (jiffies % delay) + 1;
 
 	queue_delayed_work_on(BOOT_CPU, alucard_hp_wq,
 				&alucard_hotplug_work,
