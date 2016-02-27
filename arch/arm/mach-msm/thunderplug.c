@@ -22,36 +22,40 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
-#include <linux/earlysuspend.h>
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+static struct notifier_block thunder_state_notif;
+#endif
 #include "thunderplug.h"
 
-#define DEBUG                        0
+#define DEBUG				0
 
-#define THUNDERPLUG                  "thunderplug"
+#define THUNDERPLUG			"thunderplug"
 
 #ifdef CONFIG_SCHED_HMP
-#define DRIVER_VERSION                5
+#define DRIVER_VERSION			5
+#define DRIVER_SUBVER			1
 #else
-#define DRIVER_VERSION                3
-#define DRIVER_SUBVER                 0
+#define DRIVER_VERSION			3
+#define DRIVER_SUBVER			0
 #endif
 
-#define DEFAULT_CPU_LOAD_THRESHOLD   (65)
-#define MIN_CPU_LOAD_THRESHOLD       (10)
+#define DEFAULT_CPU_LOAD_THRESHOLD	(65)
+#define MIN_CPU_LOAD_THRESHOLD		(10)
 
 #ifdef CONFIG_USES_MALI_MP2_GPU
-#define GPU_HOTPLUG_ENABLED             (0)
-#define DEFAULT_MIN_GPU_LOAD_THRESHOLD  (65)
+#define GPU_HOTPLUG_ENABLED		(0)
+#define DEFAULT_MIN_GPU_LOAD_THRESHOLD	(65)
 #endif
 
-#define HOTPLUG_ENABLED              (0)
-#define DEFAULT_HOTPLUG_STYLE         HOTPLUG_SCHED
-#define DEFAULT_SCHED_MODE            BALANCED
+#define HOTPLUG_ENABLED			(0)
+#define DEFAULT_HOTPLUG_STYLE		HOTPLUG_SCHED
+#define DEFAULT_SCHED_MODE		BALANCED
 
-#define DEF_SAMPLING_MS	             (500)
-#define MIN_SAMLING_MS               (50)
-#define MIN_CPU_UP_TIME              (750)
-#define TOUCH_BOOST_ENABLED          (0)
+#define DEF_SAMPLING_MS			(500)
+#define MIN_SAMLING_MS			(50)
+#define MIN_CPU_UP_TIME			(750)
+#define TOUCH_BOOST_ENABLED		(0)
 
 static bool isSuspended = false;
 
@@ -535,7 +539,7 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 #endif
 
 #ifdef CONFIG_SCHED_HMP
-    if(tplug_hp_style == 1 && !isSuspended)
+	if(tplug_hp_style == 1 && !isSuspended)
 #else
 	if(tplug_hp_enabled != 0 && !isSuspended)
 #endif
@@ -550,12 +554,13 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 
 }
 
-static void tplug_es_suspend_work(struct early_suspend *p) {
+#ifdef CONFIG_STATE_NOTIFIER
+static void tplug_es_suspend_work(struct notifier_block *p) {
 	isSuspended = true;
 	pr_info("thunderplug : suspend called\n");
 }
 
-static void tplug_es_resume_work(struct early_suspend *p) {
+static void tplug_es_resume_work(struct notifier_block *p) {
 	isSuspended = false;
 #ifdef CONFIG_SCHED_HMP
 	if(tplug_hp_style==1)
@@ -570,11 +575,23 @@ static void tplug_es_resume_work(struct early_suspend *p) {
 	pr_info("thunderplug : resume called\n");
 }
 
-static struct early_suspend tplug_early_suspend_handler = 
-	{
-		.suspend = tplug_es_suspend_work,
-		.resume = tplug_es_resume_work,
-	};
+static int state_notifier_callback(struct notifier_block *this,
+				unsigned long event, void *data)
+{
+	switch (event) {
+		case STATE_NOTIFIER_ACTIVE:
+			tplug_es_resume_work();
+			break;
+		case STATE_NOTIFIER_SUSPEND:
+			tplug_es_suspend_work();
+			break;
+		default:
+			break;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
 
 /* Thunderplug load balancer */
 #ifdef CONFIG_SCHED_HMP
@@ -686,7 +703,7 @@ static ssize_t __ref thunderplug_hp_enabled_store(struct kobject *kobj, struct k
 #ifdef CONFIG_USES_MALI_MP2_GPU
 static ssize_t thunderplug_gpu_hp_enabled_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
-    return sprintf(buf, "%d", gpu_hotplug_enabled);
+	return sprintf(buf, "%d", gpu_hotplug_enabled);
 }
 
 static ssize_t __ref thunderplug_gpu_hp_enabled_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
@@ -797,7 +814,12 @@ static int __init thunderplug_init(void)
         int ret = 0;
         int sysfs_result;
         printk(KERN_DEBUG "[%s]\n",__func__);
-		register_early_suspend(&tplug_early_suspend_handler);
+#ifdef CONFIG_STATE_NOTIFIER
+		thunder_state_notif.notifier_call = state_notifier_callback;
+		if (state_register_client(&thunder_state_notif))
+			pr_err("%s: Failed to register State notifier callback\n",
+				__func__);
+#endif
 
         thunderplug_kobj = kobject_create_and_add("thunderplug", kernel_kobj);
 
