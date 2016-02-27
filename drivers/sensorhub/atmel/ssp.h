@@ -25,8 +25,8 @@
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
 #include <linux/gpio.h>
-#ifdef CONFIG_STATE_NOTIFIER
-#include <linux/state_notifier.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
 #endif
 #include <linux/wakelock.h>
 #include <linux/miscdevice.h>
@@ -40,8 +40,8 @@
 #include <linux/spi/spi.h>
 #include <linux/battery/sec_battery.h>
 
-#ifdef CONFIG_STATE_NOTIFIER
-#undef CONFIG_STATE_NOTIFIER
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#undef CONFIG_HAS_EARLYSUSPEND
 #endif
 
 #ifdef CONFIG_SENSORS_SSP_SENSORHUB
@@ -549,8 +549,8 @@ struct ssp_data {
 	void (*report_sensor_data[SENSOR_MAX])(struct ssp_data *,
 		struct sensor_value *);
 
-#ifdef CONFIG_STATE_NOTIFIER
-	struct notifier_block notif;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	struct early_suspend early_suspend;
 #endif
 
 #ifdef CONFIG_SENSORS_SSP_SENSORHUB
