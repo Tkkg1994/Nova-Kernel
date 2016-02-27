@@ -29,7 +29,6 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
  * 02110-1301, USA.
  *
 */
-
 #include "ss_dsi_panel_common.h"
 #include "../mdss_debug.h"
 

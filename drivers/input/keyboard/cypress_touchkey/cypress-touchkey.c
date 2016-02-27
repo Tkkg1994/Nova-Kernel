@@ -36,9 +36,6 @@
 #include <linux/of_gpio.h>
 #include <linux/firmware.h>
 #include <linux/uaccess.h>
-#ifdef CONFIG_STATE_NOTIFIER
-#include <linux/state_notifier.h>
-#endif
 
 #include "issp_extern.h"
 #include <linux/mfd/pm8xxx/pm8921.h>
@@ -48,26 +45,9 @@ static int cypress_input_open(struct input_dev *dev);
 static void cypress_input_close(struct input_dev *dev);
 #endif
 
-#ifdef CONFIG_STATE_NOTIFIER
-static void cypress_touchkey_state_suspend(struct notifier_block *h);
-static void cypress_touchkey_late_resume(struct notifier_block *h);
-
-static int state_notifier_callback(struct notifier_block *this,
-				   unsigned long event, void *data)
-{
-	switch (event) {
-		case STATE_NOTIFIER_ACTIVE:
-			cypress_touchkey_late_resume(this);
-			break;
-		case STATE_NOTIFIER_SUSPEND:
-			cypress_touchkey_state_suspend(this);
-			break;
-		default:
-			break;
-	}
-
-	return NOTIFY_OK;
-}
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void cypress_touchkey_early_suspend(struct early_suspend *h);
+static void cypress_touchkey_late_resume(struct early_suspend *h);
 #endif
 
 #ifdef TK_INFORM_CHARGER
@@ -2451,13 +2431,12 @@ static int cypress_touchkey_probe(struct i2c_client *client,
 		goto err_req_irq;
 	}
 
-#ifdef CONFIG_STATE_NOTIFIER
-	info->notif.notifier_call = state_notifier_callback;
-	if (state_register_client(&info->notif)) {
-		pr_err("Failed to register STATE notifier callback for cypress-touchkey module\n");
-		goto err_req_irq;
-	}
-#endif
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	info->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+	info->early_suspend.suspend = cypress_touchkey_early_suspend;
+	info->early_suspend.resume = cypress_touchkey_late_resume;
+	register_early_suspend(&info->early_suspend);
+#endif /* CONFIG_HAS_EARLYSUSPEND */
 
 #ifdef CONFIG_GLOVE_TOUCH
 	mutex_init(&info->tkey_glove_lock);
@@ -2587,7 +2566,7 @@ static int cypress_touchkey_remove(struct i2c_client *client)
 	return 0;
 }
 
-#if defined(CONFIG_PM) || defined(CONFIG_STATE_NOTIFIER)
+#if defined(CONFIG_PM) || defined(CONFIG_HAS_EARLYSUSPEND)
 static int cypress_touchkey_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -2720,18 +2699,18 @@ out:
 }
 #endif
 
-#ifdef CONFIG_STATE_NOTIFIER
-static void cypress_touchkey_state_suspend(struct notifier_block *h)
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void cypress_touchkey_early_suspend(struct early_suspend *h)
 {
 	struct cypress_touchkey_info *info;
-	info = container_of(h, struct cypress_touchkey_info, notif);
+	info = container_of(h, struct cypress_touchkey_info, early_suspend);
 	cypress_touchkey_suspend(&info->client->dev);
 }
 
-static void cypress_touchkey_late_resume(struct notifier_block *h)
+static void cypress_touchkey_late_resume(struct early_suspend *h)
 {
 	struct cypress_touchkey_info *info;
-	info = container_of(h, struct cypress_touchkey_info, notif);
+	info = container_of(h, struct cypress_touchkey_info, early_suspend);
 	cypress_touchkey_resume(&info->client->dev);
 }
 #endif
@@ -2770,7 +2749,7 @@ static void cypress_input_close(struct input_dev *dev)
 }
 #endif
 
-#if defined(CONFIG_PM) && !defined(CONFIG_STATE_NOTIFIER) && !defined(USE_OPEN_CLOSE)
+#if defined(CONFIG_PM) && !defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_OPEN_CLOSE)
 static const struct dev_pm_ops cypress_touchkey_pm_ops = {
 	.suspend	= cypress_touchkey_suspend,
 	.resume		= cypress_touchkey_resume,
@@ -2784,7 +2763,7 @@ struct i2c_driver cypress_touchkey_driver = {
 		.name = "cypress_touchkey",
 		.owner = THIS_MODULE,
 		.of_match_table = cypress_match_table,
-#if defined(CONFIG_PM) && !defined(CONFIG_STATE_NOTIFIER) && !defined(USE_OPEN_CLOSE)
+#if defined(CONFIG_PM) && !defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_OPEN_CLOSE)
 		.pm	= &cypress_touchkey_pm_ops,
 #endif
 		   },

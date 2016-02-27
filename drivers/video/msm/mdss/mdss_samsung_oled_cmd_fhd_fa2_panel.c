@@ -25,6 +25,9 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
+#ifdef CONFIG_STATE_NOTIFIER
+#include <linux/state_notifier.h>
+#endif
 
 #include "mdss_dsi.h"
 #include "mdss_samsung_oled_cmd_fhd_fa2_panel.h"
@@ -2120,6 +2123,9 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+#ifdef CONFIG_STATE_NOTIFIER
+	state_resume();
+#endif
 	pr_info("%s : ++\n", __func__);
 
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
@@ -2252,6 +2258,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+#ifdef CONFIG_STATE_NOTIFIER
+	state_suspend();
+#endif
 	pr_info("%s : ++\n",__func__);
 
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
