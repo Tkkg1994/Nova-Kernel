@@ -1504,6 +1504,14 @@ config BLU_PLUG
 	help
 	  The Dynamic hotplug driver automatically online/offline CPUs proportional to system load.
 
+config AUTOSMP
+	bool "Multi-core automatic hotplug support"
+	depends on SMP && HOTPLUG_CPU
+	default n
+	help
+	  Automatically hotplugs the multiple cpu cores on and off
+	  based on cpu load and suspend state
+
 config THUNDERPLUG_CONTROL
 	bool "Enable plugging down/up of cores based on load per core"
 	help
