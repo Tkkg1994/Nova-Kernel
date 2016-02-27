@@ -26,19 +26,15 @@
 #include <linux/state_notifier.h>
 static struct notifier_block thunder_state_notif;
 #endif
+
 #include "thunderplug.h"
 
 #define DEBUG				0
 
 #define THUNDERPLUG			"thunderplug"
 
-#ifdef CONFIG_SCHED_HMP
 #define DRIVER_VERSION			5
-#define DRIVER_SUBVER			1
-#else
-#define DRIVER_VERSION			3
-#define DRIVER_SUBVER			0
-#endif
+#define DRIVER_SUBVER			2
 
 #define DEFAULT_CPU_LOAD_THRESHOLD	(65)
 #define MIN_CPU_LOAD_THRESHOLD		(10)
@@ -66,11 +62,8 @@ static int stop_boost = 0;
 
 struct cpufreq_policy old_policy[NR_CPUS];
 
-#ifdef CONFIG_SCHED_HMP
 static int tplug_hp_style = DEFAULT_HOTPLUG_STYLE;
-#else
 static int tplug_hp_enabled = HOTPLUG_ENABLED;
-#endif
 static int tplug_sched_mode = DEFAULT_SCHED_MODE;
 static int touch_boost_enabled = TOUCH_BOOST_ENABLED;
 
@@ -158,13 +151,10 @@ static void __ref tplug_boost_work_fn(struct work_struct *work)
 {
 	struct cpufreq_policy policy;
 	int cpu, ret;
-	for(cpu = 1; cpu < NR_CPUS; cpu++) {
-#ifdef CONFIG_SCHED_HMP
-	if(tplug_hp_style == 1)
-#else
-	if(tplug_hp_enabled == 1)
-#endif
-		if(cpu_is_offline(cpu))
+	for (cpu = 1; cpu < NR_CPUS; cpu++) {
+
+	if ((tplug_hp_style == 1) || (tplug_hp_enabled == 1))
+		if (cpu_is_offline(cpu))
 			cpu_up(cpu);
 		ret = cpufreq_get_policy(&policy, cpu);
 		if (ret)
@@ -195,13 +185,8 @@ static void tplug_input_event(struct input_handle *handle, unsigned int type,
 				pr_info("%s: starting boost\n", THUNDERPLUG);
 		}
 	}
-#ifdef CONFIG_SCHED_HMP
 	if ((type == EV_KEY) && (code == BTN_TOUCH) && (value == 1)
 		&& touch_boost_enabled == 1)
-#else
-	if ((type == EV_KEY) && (code == BTN_TOUCH) && (value == 1)
-		&& touch_boost_enabled == 1)
-#endif
 	{
 		if(DEBUG)
 			pr_info("%s : touch boost\n", THUNDERPLUG);
@@ -286,29 +271,28 @@ static ssize_t __ref thunderplug_endurance_store(struct kobject *kobj, struct ko
 {
 	int val;
 	sscanf(buf, "%d", &val);
-#ifdef CONFIG_SCHED_HMP
-	if(tplug_hp_style==1) {
-#else
-	if(tplug_hp_enabled) {
-#endif
-	switch(val) {
-		case 0:
-		case 1:
-		case 2:
-			if(endurance_level!=val &&
-			   !(endurance_level > 1 && NR_CPUS < 4)) {
-			endurance_level = val;
-			offline_cpus();
-			cpus_online_all();
-		}
-		break;
-	default:
-		pr_info("%s: invalid endurance level\n", THUNDERPLUG);
-		break;
+
+	if ((tplug_hp_style==1) || (tplug_hp_enabled)) {
+
+		switch(val) {
+			case 0:
+			case 1:
+			case 2:
+				if(endurance_level!=val &&
+					!(endurance_level > 1 && NR_CPUS < 4)) {
+					endurance_level = val;
+					offline_cpus();
+					cpus_online_all();
+				}
+				break;
+			default:
+				pr_info("%s: invalid endurance level\n", THUNDERPLUG);
+				break;
+			}
 	}
-	}
+
 	else
-	   pr_info("%s: per-core hotplug style is disabled, ignoring endurance mode values\n", THUNDERPLUG);
+		pr_info("%s: per-core hotplug style is disabled, ignoring endurance mode values\n", THUNDERPLUG);
 
 	return count;
 }
@@ -468,11 +452,7 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 		}
 	}
 
-#ifdef CONFIG_SCHED_HMP
-	if(tplug_hp_style == 1 && !isSuspended)
-#else
-	if(tplug_hp_enabled != 0 && !isSuspended)
-#endif
+	if ((tplug_hp_style == 1 && !isSuspended) || (tplug_hp_enabled != 0 && !isSuspended))
 		queue_delayed_work_on(0, tplug_wq, &tplug_work,
 			msecs_to_jiffies(sampling_time));
 	else {
@@ -492,11 +472,7 @@ static void tplug_es_suspend_work(struct notifier_block *p) {
 
 static void tplug_es_resume_work(struct notifier_block *p) {
 	isSuspended = false;
-#ifdef CONFIG_SCHED_HMP
-	if(tplug_hp_style==1)
-#else
-	if(tplug_hp_enabled)
-#endif
+	if ((tplug_hp_style==1) || (tplug_hp_enabled))
 	queue_delayed_work_on(0, tplug_wq, &tplug_work,
 					msecs_to_jiffies(sampling_time));
 	else
@@ -524,7 +500,6 @@ static int state_notifier_callback(struct notifier_block *this,
 #endif
 
 /* Thunderplug load balancer */
-#ifdef CONFIG_SCHED_HMP
 
 static void set_sched_profile(int mode) {
 	switch(mode) {
@@ -601,7 +576,6 @@ static struct kobj_attribute thunderplug_mode_attribute =
                0666,
                thunderplug_sched_mode_show, thunderplug_sched_mode_store);
 
-#else
 static ssize_t thunderplug_hp_enabled_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d", tplug_hp_enabled);
@@ -609,9 +583,9 @@ static ssize_t thunderplug_hp_enabled_show(struct kobject *kobj, struct kobj_att
 
 static ssize_t __ref thunderplug_hp_enabled_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
 {
-	int val;
+	int val, last_val;
 	sscanf(buf, "%d", &val);
-	int last_val = tplug_hp_enabled;
+	last_val = tplug_hp_enabled;
 	switch(val)
 	{
 		case 0:
@@ -635,7 +609,6 @@ static struct kobj_attribute thunderplug_hp_enabled_attribute =
                0666,
                thunderplug_hp_enabled_show, thunderplug_hp_enabled_store);
 
-#endif
 
 static ssize_t thunderplug_ver_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
@@ -679,12 +652,9 @@ static struct attribute *thunderplug_attrs[] =
         &thunderplug_endurance_attribute.attr,
         &thunderplug_sampling_attribute.attr,
         &thunderplug_load_attribute.attr,
-#ifdef CONFIG_SCHED_HMP
         &thunderplug_mode_attribute.attr,
         &thunderplug_hp_style_attribute.attr,
-#else
         &thunderplug_hp_enabled_attribute.attr,
-#endif
         &thunderplug_tb_enabled_attribute.attr,
         NULL,
     };
