@@ -24,4 +24,3 @@
 #define HOTPLUG_SCHED 2
 
 extern int sched_set_boost(int enable);
-
