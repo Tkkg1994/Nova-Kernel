@@ -73,3 +73,6 @@ make -j3
 /Kernel_Folder/Toolchain_5.3_a15/bin/arm-cortex_a15-linux-gnueabihf-strip --strip-unneeded $BUILD_WHERE/drivers/staging/qcacld-2.0/wlan.ko
 
 FUNC_BUILD_DTIMAGE_TARGET
+
+mv $BUILD_WHERE/arch/arm/boot/zImage $BUILD_WHERE/arch/arm/boot/boot.img-zImage
+mv $BUILD_WHERE/arch/arm/boot/dt.img $BUILD_WHERE/arch/arm/boot/boot.img-dtb
