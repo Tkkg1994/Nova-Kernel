@@ -563,7 +563,7 @@ static void mdm_notify(enum esoc_notify notify, struct esoc_clink *esoc)
 		break;
 	case ESOC_DIAG_DISABLE:
 		dev_info(mdm->dev, "Send diag_disable noti\n");
-		ret = sysmon_send_diag_disable_noti(mdm->sysmon_subsys_id);
+		ret = sysmon_send_diag_disable_noti(&esoc->subsys);
 		if (ret < 0)
 			dev_err(mdm->dev, "sending diag_disable noti is failed, ret = %d\n", ret);
 		else

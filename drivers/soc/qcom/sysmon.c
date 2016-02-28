@@ -214,8 +214,8 @@ out:
 }
 
 /**
- * sysmon_send_diag() - send noti about diag to a subsystem.
- * @dest_ss:	ID of subsystem to send to.
+ * sysmon_send_diag() - send noti about diag command to a subsystem.
+ * @dest_desc:	Subsystem descriptor of the subsystem to send to
  *
  * Returns 0 for success, -EINVAL for an invalid destination, -ENODEV if
  * the SMD transport channel is not open, -ETIMEDOUT if the destination
@@ -224,19 +224,25 @@ out:
  *
  * If CONFIG_MSM_SYSMON_COMM is not defined, always return success (0).
  */
-int sysmon_send_diag_disable_noti(enum subsys_id dest_ss)
+int sysmon_send_diag_disable_noti(struct subsys_desc *dest_desc)
 {
-	struct sysmon_subsys *ss = &subsys[dest_ss];
+	struct sysmon_subsys *tmp, *ss = NULL;
 	const char tx_buf[] = "system:diag_channel_disabled";
 	const char expect[] = "system:ack";
 	size_t prefix_len = ARRAY_SIZE(expect) - 1;
 	int ret;
 
+	mutex_lock(&sysmon_list_lock);
+	list_for_each_entry(tmp, &sysmon_list, list)
+		if (tmp->pid == dest_desc->sysmon_pid)
+			ss = tmp;
+	mutex_unlock(&sysmon_list_lock);
+
+	if (ss == NULL)
+		return -EINVAL;
+
 	if (ss->dev == NULL)
 		return -ENODEV;
-
-	if (dest_ss < 0 || dest_ss >= SYSMON_NUM_SS)
-		return -EINVAL;
 
 	mutex_lock(&ss->lock);
 	ret = sysmon_send_msg(ss, tx_buf, ARRAY_SIZE(tx_buf));

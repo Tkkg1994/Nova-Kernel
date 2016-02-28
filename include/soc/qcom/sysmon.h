@@ -41,7 +41,7 @@ int sysmon_send_event(struct subsys_desc *dest_desc,
 			enum subsys_notif_type notif);
 int sysmon_get_reason(struct subsys_desc *dest_desc, char *buf, size_t len);
 int sysmon_send_shutdown(struct subsys_desc *dest_desc);
-int sysmon_send_diag_disable_noti(enum subsys_id dest_ss);
+int sysmon_send_diag_disable_noti(struct subsys_desc *dest_desc);
 #else
 static inline int sysmon_send_event(struct subsys_desc *dest_desc,
 					struct subsys_desc *event_desc,
@@ -55,6 +55,10 @@ static inline int sysmon_get_reason(struct subsys_desc *dest_desc,
 	return 0;
 }
 static inline int sysmon_send_shutdown(struct subsys_desc *dest_desc)
+{
+	return 0;
+}
+static inline int sysmon_send_diag_disable_noti(struct subsys_desc *dest_desc)
 {
 	return 0;
 }
