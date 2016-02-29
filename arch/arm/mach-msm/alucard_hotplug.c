@@ -27,6 +27,8 @@
 #include <linux/state_notifier.h>
 #endif
 
+#define MAX_FREQ_LIMIT 2880000
+#define MIN_FREQ_LIMIT	268800
 /*
  * alucard_hotplug_mutex protects hotplug start/stop phase.
  */
@@ -131,7 +133,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	unsigned int offcpu = NR_CPUS;
 	unsigned int cpu = 0;
 	unsigned int rq_avg = 0;
-	unsigned int min_freq = 2880000;
+	unsigned int min_freq = MAX_FREQ_LIMIT;
 	unsigned int avg_freq = 0;
 	unsigned int min_load = 100;
 	unsigned int avg_load = 0;
