@@ -120,8 +120,6 @@ static void reset_last_cur_cpu_rate(void)
 	pcpu_parm->cur_down_rate = 1;
 }
 
-#define MIN_FREQ_LIMIT 300000
-
 static void __ref hotplug_work_fn(struct work_struct *work)
 {
 	struct hotplug_cpuparm *pcpu_parm = NULL;
@@ -143,6 +141,7 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	int online_cpus = 0, delay;
 	unsigned int sampling_rate =
 		hotplug_tuners_ins.hotplug_sampling_rate;
+	struct cpufreq_policy policy;
 
 	if (hotplug_tuners_ins.suspended) {
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit_sleep;
@@ -188,11 +187,12 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 
 		cur_load = 100 * (wall_time - idle_time) / wall_time;
 
-		/* get the cpu current frequency */
+		/* get the cpu current/min/max frequency */
 		cur_freq = cpufreq_quick_get(cpu);
+		cpufreq_get_policy(&policy, cpu);
 
-		if (cur_freq >= MIN_FREQ_LIMIT
-			 && cur_freq <= MAX_FREQ_LIMIT) {
+		if (cur_freq >= policy.min
+			 && cur_freq <= policy.max) {
 			n++;
 			sum_load += cur_load;
 			sum_freq += cur_freq;
