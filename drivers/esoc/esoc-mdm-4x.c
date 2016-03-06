@@ -330,7 +330,6 @@ static int mdm_cmd_exe(enum esoc_cmd cmd, struct esoc_clink *esoc)
 		mdm_disable_irqs(mdm);
 		mdm->debug = 0;
 		mdm->ready = false;
-		mdm->trig_cnt = 0;
 		graceful_shutdown = true;
 
 		ret = sysmon_send_shutdown(&esoc->subsys);
@@ -363,7 +362,6 @@ force_poff:
 			mdm_disable_irqs(mdm);
 			mdm->debug = 0;
 			mdm->ready = false;
-			mdm->trig_cnt = 0;
 
 			dev_err(mdm->dev, "Graceful shutdown fail, ret = %d\n",
 				esoc->subsys.sysmon_shutdown_ret);
