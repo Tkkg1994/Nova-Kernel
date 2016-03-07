@@ -88,8 +88,8 @@ enum {
 
 #define TOMTOM_MAD_MASTER_SLIM_TX 140
 #define TOMTOM_HPH_PA_SETTLE_COMP_ON 5000
-#define TOMTOM_HPH_PA_RAMP_DELAY 30000
 #define TOMTOM_HPH_PA_SETTLE_COMP_OFF 25000
+#define TOMTOM_HPH_PA_RAMP_DELAY 30000
 
 #define DAPM_MICBIAS2_EXTERNAL_STANDALONE "MIC BIAS2 External Standalone"
 
@@ -3989,6 +3989,10 @@ static int tomtom_codec_enable_anc(struct snd_soc_dapm_widget *w,
 		break;
 	}
 	return 0;
+err:
+	if (!hwdep_cal)
+		release_firmware(fw);
+	return ret;
 }
 
 static int tomtom_hphl_dac_event(struct snd_soc_dapm_widget *w,
@@ -4104,10 +4108,6 @@ static int tomtom_hphr_dac_event(struct snd_soc_dapm_widget *w,
 		break;
 	}
 	return 0;
-err:
-	if (!hwdep_cal)
-		release_firmware(fw);
-	return ret;
 }
 
 static int tomtom_hph_pa_event(struct snd_soc_dapm_widget *w,
