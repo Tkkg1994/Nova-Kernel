@@ -605,6 +605,12 @@ extern struct cpufreq_governor cpufreq_gov_despair;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_HELLSACTIVE)
 extern struct cpufreq_governor cpufreq_gov_hellsactive;
 #define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_hellsactive)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVE_X)
+extern struct cpufreq_governor cpufreq_gov_interactive_x;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_interactive_x)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE_X)
+extern struct cpufreq_governor cpufreq_gov_conservative_x;
+#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_conservative_x)
 #endif
 
 /*********************************************************************
