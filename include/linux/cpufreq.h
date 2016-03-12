@@ -602,6 +602,9 @@ extern struct cpufreq_governor cpufreq_gov_intellidemand;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_DESPAIR)
 extern struct cpufreq_governor cpufreq_gov_despair;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_despair)
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_HELLSACTIVE)
+extern struct cpufreq_governor cpufreq_gov_hellsactive;
+#define CPUFREQ_DEFAULT_GOVERNOR        (&cpufreq_gov_hellsactive)
 #endif
 
 /*********************************************************************
