@@ -348,11 +348,13 @@ config CPU_FREQ_DEFAULT_GOV_INTELLIDEMAND
 
 config CPU_FREQ_DEFAULT_GOV_DESPAIR
 	bool "despair"
+	depends on TOUCHBOOST
 	select CPU_FREQ_GOV_DESPAIR
 	help
 
 config CPU_FREQ_DEFAULT_GOV_HELLSACTIVE
 	bool "hellsactive"
+	depends on TOUCHBOOST
 	select CPU_FREQ_GOV_HELLSACTIVE
 	help
 	  Use the CPUFreq governor 'hellsactive' as default. This allows
@@ -362,6 +364,7 @@ config CPU_FREQ_DEFAULT_GOV_HELLSACTIVE
 
 config CPU_FREQ_DEFAULT_GOV_INTERACTIVE_X
 	bool "interactive_x"
+	depends on TOUCHBOOST
 	select CPU_FREQ_GOV_INTERACTIVE_X
 	help
 	  Use the CPUFreq governor 'interactive_x' as default. This allows
@@ -371,6 +374,7 @@ config CPU_FREQ_DEFAULT_GOV_INTERACTIVE_X
 
 config CPU_FREQ_DEFAULT_GOV_CONSERVATIVE_X
 	bool "conservative_x"
+	depends on TOUCHBOOST
 	select CPU_FREQ_GOV_CONSERVATIVE_X
 	select CPU_FREQ_GOV_PERFORMANCE
 	help
@@ -753,9 +757,11 @@ config CPU_FREQ_GOV_INTELLIDEMAND
 config CPU_FREQ_GOV_DESPAIR
 	tristate "'despair' cpufreq governor"
 	depends on CPU_FREQ
+	depends on TOUCHBOOST
 
 config CPU_FREQ_GOV_HELLSACTIVE
 	tristate "'hellsactive' cpufreq policy governor"
+	depends on TOUCHBOOST
 	help
 	  'hellsactive' - This driver adds a dynamic cpufreq policy governor
 	  designed for latency-sensitive workloads.
@@ -773,6 +779,7 @@ config CPU_FREQ_GOV_HELLSACTIVE
 
 config CPU_FREQ_GOV_INTERACTIVE_X
 	tristate "'interactive_x' cpufreq policy governor"
+	depends on TOUCHBOOST
 	help
 	  'interactive_x' - This driver adds a dynamic cpufreq policy governor
 	  designed for latency-sensitive workloads.
@@ -791,6 +798,7 @@ config CPU_FREQ_GOV_INTERACTIVE_X
 config CPU_FREQ_GOV_CONSERVATIVE_X
 	tristate "'conservative_x' cpufreq governor"
 	depends on CPU_FREQ
+	depends on TOUCHBOOST
 	select CPU_FREQ_GOV_COMMON
 	help
 	  'conservative_x' - this driver is rather similar to the 'ondemand'
