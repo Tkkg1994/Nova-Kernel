@@ -139,6 +139,7 @@ static unsigned int max_freq_hysteresis;
 static bool io_is_busy;
 
 #define DOWN_LOW_LOAD_THRESHOLD 5
+unsigned int down_low_load_threshold = DOWN_LOW_LOAD_THRESHOLD;
 
 /* Round to starting jiffy of next evaluation window */
 static u64 round_to_nw_start(u64 jif)
@@ -1116,6 +1117,28 @@ static ssize_t store_input_boost_freq(struct kobject *kobj,
 static struct global_attr input_boost_freq_attr = __ATTR(input_boost_freq, 0644,
                 show_input_boost_freq, store_input_boost_freq);
 
+static ssize_t show_down_low_load_threshold(struct kobject *kobj,
+                        struct attribute *attr, char *buf)
+{
+        return sprintf(buf, "%u\n", down_low_load_threshold);
+}
+
+static ssize_t store_down_low_load_threshold(struct kobject *kobj,
+                        struct attribute *attr, const char *buf, size_t count)
+{
+        int ret;
+        unsigned long val;
+
+        ret = kstrtoul(buf, 0, &val);
+        if (ret < 0)
+                return ret;
+        down_low_load_threshold = val;
+        return count;
+}
+
+static struct global_attr down_low_load_threshold_attr = __ATTR(down_low_load_threshold, 0644,
+                show_down_low_load_threshold, store_down_low_load_threshold);
+
 static struct attribute *interactive_x_attributes[] = {
 	&target_loads_attr.attr,
 	&above_hispeed_delay_attr.attr,
@@ -1131,6 +1154,7 @@ static struct attribute *interactive_x_attributes[] = {
 	&max_freq_hysteresis_attr.attr,
 	&align_windows_attr.attr,
 	&input_boost_freq_attr.attr,
+	&down_low_load_threshold_attr.attr,
 	NULL,
 };
 
