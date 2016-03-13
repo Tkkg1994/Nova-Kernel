@@ -49,7 +49,7 @@
 #define THERM_SECURE_BITE_CMD 8
 #define CORE_MAX_FREQ 2880000
 
-unsigned int temp_threshold = 60;
+unsigned int temp_threshold = 85;
 module_param(temp_threshold, int, 0755);
 
 static struct msm_thermal_data msm_thermal_info;
