@@ -812,13 +812,8 @@ rcu_torture_fakewriter(void *arg)
 {
 	DEFINE_TORTURE_RANDOM(rand);
 
-<<<<<<< HEAD
-	VERBOSE_PRINTK_STRING("rcu_torture_fakewriter task started");
-	set_user_nice(current, MAX_NICE);
-=======
 	VERBOSE_TOROUT_STRING("rcu_torture_fakewriter task started");
-	set_user_nice(current, 19);
->>>>>>> 5ccf60f... rcutorture: Rename PRINTK to TOROUT
+	set_user_nice(current, MAX_NICE);
 
 	do {
 		schedule_timeout_uninterruptible(1 + torture_random(&rand)%10);
@@ -933,13 +928,8 @@ rcu_torture_reader(void *arg)
 	struct timer_list t;
 	unsigned long long ts;
 
-<<<<<<< HEAD
-	VERBOSE_PRINTK_STRING("rcu_torture_reader task started");
-	set_user_nice(current, MAX_NICE);
-=======
 	VERBOSE_TOROUT_STRING("rcu_torture_reader task started");
-	set_user_nice(current, 19);
->>>>>>> 5ccf60f... rcutorture: Rename PRINTK to TOROUT
+	set_user_nice(current, MAX_NICE);
 	if (irqreader && cur_ops->irq_capable)
 		setup_timer_on_stack(&t, rcu_torture_timer, 0);
 
@@ -1303,13 +1293,8 @@ rcu_torture_shutdown(void *arg)
 	long delta;
 	unsigned long jiffies_snap;
 
-<<<<<<< HEAD
-	VERBOSE_PRINTK_STRING("rcu_torture_shutdown task started");
-	jiffies_snap = jiffies;
-=======
 	VERBOSE_TOROUT_STRING("rcu_torture_shutdown task started");
-	jiffies_snap = ACCESS_ONCE(jiffies);
->>>>>>> 5ccf60f... rcutorture: Rename PRINTK to TOROUT
+	jiffies_snap = jiffies;
 	while (ULONG_CMP_LT(jiffies_snap, shutdown_time) &&
 	       !kthread_should_stop()) {
 		delta = shutdown_time - jiffies_snap;
@@ -1540,13 +1525,8 @@ static int rcu_torture_barrier_cbs(void *arg)
 	struct rcu_head rcu;
 
 	init_rcu_head_on_stack(&rcu);
-<<<<<<< HEAD
-	VERBOSE_PRINTK_STRING("rcu_torture_barrier_cbs task started");
-	set_user_nice(current, MAX_NICE);
-=======
 	VERBOSE_TOROUT_STRING("rcu_torture_barrier_cbs task started");
-	set_user_nice(current, 19);
->>>>>>> 5ccf60f... rcutorture: Rename PRINTK to TOROUT
+	set_user_nice(current, MAX_NICE);
 	do {
 		wait_event(barrier_cbs_wq[myid],
 			   (newphase =
