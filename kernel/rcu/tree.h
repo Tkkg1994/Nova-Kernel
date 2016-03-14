@@ -455,13 +455,10 @@ struct rcu_state {
 						/*  activity in jiffies. */
 	unsigned long jiffies_stall;		/* Time at which to check */
 						/*  for CPU stalls. */
-<<<<<<< HEAD
-	unsigned long n_force_qs_gpstart;	/* Snapshot of n_force_qs at */
-						/*  GP start. */
-=======
 	unsigned long jiffies_resched;		/* Time at which to resched */
 						/*  a reluctant CPU. */
->>>>>>> 6193c76... rcu: Kick CPU halfway to RCU CPU stall warning
+	unsigned long n_force_qs_gpstart;	/* Snapshot of n_force_qs at */
+						/*  GP start. */
 	unsigned long gp_max;			/* Maximum GP duration in */
 						/*  jiffies. */
 	const char *name;			/* Name of structure. */
