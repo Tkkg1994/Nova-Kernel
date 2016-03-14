@@ -1183,7 +1183,6 @@ static void check_cpu_stall(struct rcu_state *rsp, struct rcu_data *rdp)
 	unsigned long gps;
 	unsigned long j;
 	unsigned long js;
-	unsigned long gpnum;
 	struct rcu_node *rnp;
 
 	if (rcu_cpu_stall_suppress || !rcu_gp_in_progress(rsp))
