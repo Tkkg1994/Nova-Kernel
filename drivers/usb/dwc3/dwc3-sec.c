@@ -187,7 +187,7 @@ static int sec_cable_notifier(struct notifier_block *nb,
 	cable->cable_state = stat;
 	pr_info("sec_cable_notifier: state %lu\n", stat);
 
-	queue_work(system_nrt_wq, &cable->work);
+	queue_work(system_power_efficient_wq, &cable->work);
 
 	return NOTIFY_DONE;
 }

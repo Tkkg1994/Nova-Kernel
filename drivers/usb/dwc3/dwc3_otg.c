@@ -346,13 +346,13 @@ static int dwc3_otg_set_peripheral(struct usb_otg *otg,
 		dev_dbg(otg->phy->dev, "%s: set gadget %s\n",
 					__func__, gadget->name);
 		otg->gadget = gadget;
-		queue_delayed_work(system_nrt_wq, &dotg->sm_work, 0);
+		queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, 0);
 	} else {
 		if (otg->phy->state == OTG_STATE_B_PERIPHERAL) {
 			dwc3_otg_start_peripheral(otg, 0);
 			otg->gadget = NULL;
 			otg->phy->state = OTG_STATE_UNDEFINED;
-			queue_delayed_work(system_nrt_wq, &dotg->sm_work, 0);
+			queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, 0);
 		} else {
 			otg->gadget = NULL;
 		}
@@ -377,7 +377,7 @@ static void dwc3_ext_chg_det_done(struct usb_otg *otg, struct dwc3_charger *chg)
 	 * STOP chg_det as part of !BSV handling would reset the chg_det flags
 	 */
 	if (test_bit(B_SESS_VLD, &dotg->inputs))
-		queue_delayed_work(system_nrt_wq, &dotg->sm_work, 0);
+		queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, 0);
 }
 
 /**
@@ -461,7 +461,7 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 		if (!init) {
 			init = true;
 			if (!work_busy(&dotg->sm_work.work))
-				queue_delayed_work(system_nrt_wq,
+				queue_delayed_work(system_power_efficient_wq,
 							&dotg->sm_work, 0);
 
 			complete(&dotg->dwc3_xcvr_vbus_init);
@@ -469,7 +469,7 @@ static void dwc3_ext_event_notify(struct usb_otg *otg,
 			return;
 		}
 
-		queue_delayed_work(system_nrt_wq, &dotg->sm_work, 0);
+		queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, 0);
 	}
 }
 
@@ -621,7 +621,7 @@ static irqreturn_t dwc3_otg_interrupt(int irq, void *_dotg)
 			handled_irqs |= DWC3_OEVTEN_OTGBDEVVBUSCHNGEVNT;
 		}
 
-		queue_delayed_work(system_nrt_wq, &dotg->sm_work, 0);
+		queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, 0);
 
 		ret = IRQ_HANDLED;
 
@@ -901,7 +901,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			usb_otg_state_string(phy->state));
 
 	if (work)
-		queue_delayed_work(system_nrt_wq, &dotg->sm_work, delay);
+		queue_delayed_work(system_power_efficient_wq, &dotg->sm_work, delay);
 }
 
 
