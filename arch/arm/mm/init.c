@@ -796,8 +796,8 @@ void free_initmem(void)
 	poison_init_mem((char *)__arch_info_begin,
 		__init_end - (char *)__arch_info_begin);
 	reclaimed_initmem = free_reserved_area(
-				PAGE_ALIGN((unsigned long)&__arch_info_begin),
-				((unsigned long)&__init_end)&PAGE_MASK, 0,
+				(void *)__arch_info_begin,
+				(void *)__init_end, 0,
 				"unused kernel");
 	totalram_pages += reclaimed_initmem;
 #else
@@ -857,3 +857,4 @@ void set_kernel_text_ro(void)
 	set_memory_ro(start, (end - start) >> PAGE_SHIFT);
 }
 #endif
+
