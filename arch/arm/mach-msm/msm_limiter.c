@@ -1,7 +1,7 @@
 /*
  * MSM CPU Frequency Limiter Driver
  *
- * Copyright (c) 2013-2014, Dorimanx <yuri@bynet.co.il>
+ * Copyright (c) 2013-2016, Dorimanx <yuri@bynet.co.il>
  * Copyright (c) 2013-2016, Pranav Vashi <neobuddy89@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -11,8 +11,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/kobject.h>
-#include <linux/sysfs.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/state_notifier.h>
