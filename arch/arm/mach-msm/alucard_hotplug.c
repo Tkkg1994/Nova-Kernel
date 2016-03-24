@@ -141,7 +141,6 @@ static void __ref hotplug_work_fn(struct work_struct *work)
 	bool rq_avg_calc = true;
 	int online_cpus = 0, delay;
 	unsigned int sampling_rate = 0;
-	struct cpufreq_policy policy;
 
 	if (hotplug_tuners_ins.suspended) {
 		upmaxcoreslimit = hotplug_tuners_ins.maxcoreslimit_sleep;
